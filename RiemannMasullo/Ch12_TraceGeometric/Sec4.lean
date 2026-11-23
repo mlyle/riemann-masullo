@@ -668,6 +668,69 @@ theorem sLocalTraceEta_zero_neg_one (f : BruhatCompactSupport Iₛ) (ξ : Hₛ) 
     rintro ⟨u, hu⟩
     exact not_isUnit_zero (hu ▸ u.isUnit)
 
+/-- Compactly supported data which agree locally with Schwartz–Bruhat functions
+are globally Schwartz–Bruhat. A finite cover of the support suffices: glue a
+new local representative by subtracting the old one and multiplying the
+difference by a compactly supported cutoff equal to one on the new patch. -/
+private theorem sLocalTraceCutoffKernel_skew_integrable_glue
+    {G : Type*} [CommGroup G] [TopologicalSpace G] [IsTopologicalGroup G] [T2Space G]
+    [LocallyCompactSpace G] (g : G → ℂ) (hc : HasCompactSupport g)
+    (hl : ∀ x, ∃ φ : SchwartzBruhat G, φ.val =ᶠ[𝓝 x] g) :
+    ∃ φ : SchwartzBruhat G, φ.val = g := by
+  classical
+  have patches (x : G) : ∃ u φ : SchwartzBruhat G, HasCompactSupport u.val ∧
+      (∀ y, u y ≠ 0 → φ y = g y) ∧ ∀ᶠ y in 𝓝 x, u y = 1 := by
+    obtain ⟨φ, hφ⟩ := hl x
+    obtain ⟨U, hU, hopen, hx⟩ := mem_nhds_iff.mp hφ
+    obtain ⟨u, huc, hus, hu⟩ := schwartzBruhat_exists_local_unit hopen hx
+    exact ⟨u, φ, huc, fun y hy ↦ hU (hus (subset_tsupport _ hy)), hu⟩
+  choose u φ huc hu hu1 using patches
+  let W (i : G) := interior {y | u i y = 1}
+  have hW (x : G) : x ∈ W x := mem_interior_iff_mem_nhds.mpr (hu1 x)
+  obtain ⟨t, ht⟩ := hc.elim_finite_subcover W (fun _ ↦ isOpen_interior)
+    (fun x _ ↦ mem_iUnion.mpr ⟨x, hW x⟩)
+  have glue (s : Finset G) : ∃ v : SchwartzBruhat G, (∀ y, g y = 0 → v y = 0) ∧
+      ∀ i ∈ s, ∀ y, u i y = 1 → v y = g y := by
+    induction s using Finset.induction_on with
+    | empty => exact ⟨0, fun _ _ ↦ rfl, by simp⟩
+    | insert i s _ ih =>
+      obtain ⟨v, hz, hv⟩ := ih
+      obtain ⟨M, hM⟩ := schwartzBruhat_compactMultiplier (u i) (huc i)
+      let w := v + M (φ i - v)
+      have hw (y : G) : w y = v y + u i y * (φ i y - v y) := by
+        change v y + M (φ i - v) y = _
+        rw [hM]
+        rfl
+      refine ⟨w, ?_, ?_⟩
+      · intro y hy
+        rw [hw, hz y hy]
+        by_cases h : u i y = 0
+        · simp [h]
+        · simp [hu i y h, hy]
+      · intro j hj y hjy
+        rw [hw]
+        rcases Finset.mem_insert.mp hj with rfl | hj
+        · rw [hjy, hu j y (hjy.trans_ne one_ne_zero), one_mul]
+          ring
+        · rw [hv j hj y hjy]
+          by_cases h : u i y = 0
+          · simp [h]
+          · simp [hu i y h]
+  obtain ⟨v, hz, hv⟩ := glue t
+  refine ⟨v, funext fun y ↦ ?_⟩
+  by_cases hy : y ∈ tsupport g
+  · obtain ⟨i, hi, hyi⟩ := mem_iUnion₂.mp (ht hy)
+    exact hv i hi y (interior_subset hyi)
+  · exact (hz y (image_eq_zero_of_notMem_tsupport hy)).trans (image_eq_zero_of_notMem_tsupport hy).symm
+
+/-- Near each invertible point, the inverse-square-root weighted, inverted
+S-idele test agrees with an additive Schwartz–Bruhat function. Only values in a
+neighborhood in the unit group occur here; compact support handles the boundary. -/
+private theorem sLocalTraceCutoffKernel_skew_integrable_local (f : BruhatCompactSupport Iₛ) (q : Iₛ) :
+    ∃ φ : testₛ, (fun p : Iₛ ↦ testAt(φ, p.val)) =ᶠ[𝓝 q]
+      fun p ↦ f.val p⁻¹ / (Real.sqrt (normS(p)) : ℂ) := by
+  sorry
+
 /-- The frequency translate of the Fourier transform of the lifted test is
 integrable, so a bounded measurable frequency symbol times it is integrable.
 This is the first obligation of `sLocalTraceCutoffKernel_skew`. -/
@@ -675,7 +738,57 @@ private theorem sLocalTraceCutoffKernel_skew_integrable (f : BruhatCompactSuppor
     (ρ' : Aₛ → ℂ) (_hρ' : Measurable ρ') (_hBound : ∃ C : ℝ, ∀ u, ‖ρ' u‖ ≤ C)
     (ξ : Hₛ) (x : Iₛ) :
     Integrable (fun u ↦ ρ' u * fourierₛ (sLocalTraceEta f ξ) (x.val * u)) νₛ := by
-  sorry
+  let G := Multiplicative Aₛ
+  let μ : Measure G := νₛ
+  have hG := sAdele_fourierMeasure (F := F) (S := S)
+  let : T2Space Aₛ := hG.1
+  let : T2Space G := hG.1
+  let : LocallyCompactSpace G := hG.2.1
+  let : BorelSpace G := hG.2.2.1
+  let : μ.IsHaarMeasure := hG.2.2.2.1
+  let g (q : Iₛ) := f.val q⁻¹ / (Real.sqrt (normS(q)) : ℂ)
+  have hg : HasCompactSupport g := by
+    simp only [g, div_eq_mul_inv]
+    exact (f.property.2.comp_homeomorph (Homeomorph.inv Iₛ)).mul_right
+  let e (q : Iₛ) : G := Multiplicative.ofAdd q.val
+  let (v : S) : ProperSpace (v.val.adicCompletion F) := properSpace_adicCompletion v.val
+  have he : Topology.IsOpenEmbedding e := IsOpenUnits.isOpenEmbedding_unitsVal
+    (M := ((w : InfinitePlace F) → w.Completion) × ((v : S) → v.val.adicCompletion F))
+  let E := Function.extend e g (fun _ ↦ 0)
+  have hloc (y : G) : ∃ φ : testₛ, φ.val =ᶠ[𝓝 y] E := by
+    by_cases hy : y ∈ range e
+    · obtain ⟨q, rfl⟩ := hy
+      obtain ⟨φ, hφ⟩ := sLocalTraceCutoffKernel_skew_integrable_local f q
+      refine ⟨φ, ?_⟩
+      rw [← he.map_nhds_eq q]
+      exact hφ.mono fun p hp ↦ hp.trans (he.injective.extend_apply g (fun _ ↦ 0) p).symm
+    · have h : y ∉ tsupport E := fun hy' ↦
+        hy (image_subset_range _ _ (hg.tsupport_extend_zero_subset he.continuous hy'))
+      exact ⟨0, (notMem_tsupport_iff_eventuallyEq.mp h).symm⟩
+  obtain ⟨φ, hφv⟩ := sLocalTraceCutoffKernel_skew_integrable_glue E
+    (hg.extend_zero he.continuous) hloc
+  have hφ (y : Aₛ) : testAt(φ, y) = Function.extend (Units.val : Iₛ → Aₛ) g (fun _ ↦ 0) y :=
+    congrFun hφv (Multiplicative.ofAdd y)
+  let η := schwartzBruhatTranslate (Multiplicative.ofAdd (-1 : Aₛ)) (schwartzBruhatUnitTranslate ξ.val φ)
+  have hη : (fun z : Aₛ ↦ testAt(η, z)) = sLocalTraceEta f ξ := by
+    funext z
+    change testAt(φ, (ξ.val⁻¹).val * (-(-1) + z)) = _
+    rw [neg_neg, hφ]
+    unfold sLocalTraceEta
+    by_cases h : (1 + z) ∈ range (Units.val : Iₛ → Aₛ)
+    · obtain ⟨q, hq⟩ := h
+      rw [← hq, ← Units.val_mul, Units.val_injective.extend_apply, Units.val_injective.extend_apply]
+    · have hm : (ξ.val⁻¹).val * (1 + z) ∉ range (Units.val : Iₛ → Aₛ) := by
+        rintro ⟨q, hq⟩
+        exact h ⟨ξ.val * q, by rw [Units.val_mul, hq, ← mul_assoc, Units.mul_inv, one_mul]⟩
+      rw [Function.extend_apply' _ _ _ hm, Function.extend_apply' _ _ _ h]
+  let ψ := schwartzBruhatUnitTranslate x⁻¹ (sAdeleSchwartzFourier η)
+  have hi : Integrable (fun u ↦ fourierₛ (sLocalTraceEta f ξ) (x.val * u)) νₛ := by
+    have hψ := SchwartzBruhat.integrable μ ψ
+    change Integrable (fun u ↦ fourierₛ (fun z ↦ testAt(η, z)) (x⁻¹⁻¹.val * u)) νₛ at hψ
+    simpa only [inv_inv, hη] using hψ
+  obtain ⟨C, hC⟩ := _hBound
+  exact hi.bdd_mul _hρ'.aestronglyMeasurable (ae_of_all _ hC)
 
 /-- Push a unit-group integral into the ambient measure and cancel its density
 on the image. The target integrand vanishes away from that image. -/
