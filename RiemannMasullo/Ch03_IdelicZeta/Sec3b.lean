@@ -779,6 +779,9 @@ private theorem sLocalIdelicZFunction_heightBound (f : ℬ(Aₛ)) (χ : Pontryag
   rw [harg]
   exact hy (σ - e) hσ'
 
+/-- The S-local zeta function decays faster than each inverse power of height on closed positive strips. -/
+alias sLocalIdelicZFunction_rapid_decay_on_positive_strip := sLocalIdelicZFunction_heightBound
+
 /-- Paper: Lemma 3.3.1.7(1), p. 135. On every bounded strip in the positive
 half-plane the zeta function is uniformly Schwartz in height. -/
 theorem sLocalIdelicZFunction_schwartzOnStrip (f : ℬ(SAdeleRing F S)) (χ : PontryaginDual Jₛ)
@@ -929,6 +932,9 @@ private theorem differentiable_inv_sLocalHeckeL (χ : PontryaginDual Jₛ) :
       ((differentiable_neg).const_cpow (Or.inl hq)))
   · simp_rw [inv_one]
     exact differentiable_const _
+
+/-- The reciprocal partial Euler product is differentiable along every unitary norm-twist chart. -/
+alias sLocalHeckeL_inv_differentiable := differentiable_inv_sLocalHeckeL
 
 /-- Paper: Equation (3.3.1.26), p. 135. In the positive half-plane the
 normalized function is the convergent zeta integral divided by the Euler product. -/
@@ -4946,6 +4952,9 @@ private theorem sLocalFinite_charts (χ : PontryaginDual Jₛ) (v : S) :
   exact (congrArg (fun u : Jₛ ↦ chartₛ(χ) z u) (show (i g)⁻¹ = i g⁻¹ from (map_inv i g).symm)).trans
     (DFunLike.congr_fun (hchart z) g⁻¹)
 
+/-- A finite-place restriction of a unitary norm-twist chart and its dual is a local chart and its dual. -/
+alias sLocalFiniteRestriction_exists_normTwistChart := sLocalFinite_charts
+
 /-- Paper: Lemma 3.3.1.7(3)(b), p. 136. The S-local epsilon factor is entire. -/
 theorem sLocalEpsilonFactor_entire (χ : PontryaginDual Jₛ) :
     AnalyticOnNhd ℂ (fun s ↦ sLocalEpsilonFactor (chartₛ(χ) s)) univ := by
@@ -4980,6 +4989,9 @@ private theorem orientedCoord_eq (h : Bool) (z : ℂ) :
     (z.re : ℂ)+orientedCoord h Complex.I*(z.im:ℂ) = orientedCoord h z := by
   conv_rhs => rw [← Complex.re_add_im z]
   cases h <;> simp [orientedCoord,mul_comm]
+
+/-- Duality sends a unitary norm-twist chart to the inverse unitary chart at the reflected parameter. -/
+alias sLocalNormTwistChart_dual := sLocal_dual_chart
 
 private def modelGaussian {E : Type*} [SeminormedAddCommGroup E] (b : ℝ) (z : E) : ℂ :=
   Real.exp (-b * ‖z‖^2)

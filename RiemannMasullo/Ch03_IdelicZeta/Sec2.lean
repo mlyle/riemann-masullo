@@ -4732,6 +4732,9 @@ private theorem heckeGamma_reflection_bound (χ : U[F]) (a b : ℝ) :
       rw [Finset.prod_mul_distrib, ← Real.rpow_sum_of_pos hpos, ← Finset.sum_mul,
         ← Nat.cast_sum, InfinitePlace.sum_mult_eq]
 
+/-- The reflected Hecke gamma ratio has polynomial growth on every closed vertical strip. -/
+alias heckeGammaFactor_reflection_bound_on_strip := heckeGamma_reflection_bound
+
 /-- Paper: Equation (3.2.1.10), p. 124. On a fixed closed vertical strip with
 nonnegative real part, the reflection multiplier satisfies the stated power bound
 as the absolute imaginary part tends to infinity. -/
