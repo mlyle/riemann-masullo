@@ -1220,6 +1220,64 @@ private theorem spectralNuclearity_trace_descends (a : ℝ) (N : ℕ) (φ : 𝒟
 -- the rescaled biorthogonal vectors. Discreteness does not control zero counts,
 -- enumeration order, or separation. It also does not imply N(z)! = O(|Im z|).
 
+/-- The entire Schwartz–Bergman space is nuclear through the Fourier–Mellin equivalence. -/
+private theorem spectralJet_sb_nuclear :
+    IsNuclearTVS.{0} (SchwartzBergman (univ : Set ℝ)) := by
+  let : PolynormableSpace ℂ (SchwartzBergman (univ : Set ℝ)) :=
+    (schwartzBergman_frechet univ isOpen_univ ordConnected_univ univ_nonempty).choose_spec.1
+  exact nuclear_of_equiv
+    (positiveRealFourierMellin univ isOpen_univ ordConnected_univ univ_nonempty)
+    (positiveRealExponentialDecay_nuclear univ ordConnected_univ univ_nonempty)
+
+/-- In the actual retained quotient all nuclear presentations give the same trace. -/
+private theorem spectralJet_unique_presentation_sum (a : ℝ) (N : ℕ) (d : jets(χ, τ, hτ) → StrongDual ℂ (Q(a))) :
+    let Q := Q(a)
+    let K := ⨅ i : {i : jets(χ, τ, hτ) // i.2.val < N}, (d i.val).toLinearMap.ker
+    let E := Q ⧸ K
+    letI : UniformSpace E := IsTopologicalAddGroup.rightUniformSpace E
+    ∀ T : E →L[ℂ] E, Nonempty (NuclearPresentation T) → ∃! t : ℂ, ∀ r : NuclearPresentation T,
+      Summable (fun n ↦ ‖r.coeff n * r.functional n (r.vector n).val‖) ∧
+      HasSum (fun n ↦ r.coeff n * r.functional n (r.vector n).val) t := by
+  intro Q K E T hr
+  let D := D(a)
+  let : UniformSpace E := IsTopologicalAddGroup.rightUniformSpace E
+  let : IsClosed (D : Set B) := schwartzBergmanDivisible_isClosed _
+  have hB : IsNuclearTVS.{0} B := spectralJet_sb_nuclear
+  let : T2Space B := hB.1
+  let : PolynormableSpace ℂ B := hB.2.1
+  let : T2Space Q := inferInstanceAs (T2Space (B ⧸ D))
+  have hQ : IsNuclearTVS.{0} Q := isNuclearTVS_quotient hB D
+  let : PolynormableSpace ℂ Q := hQ.2.1
+  let : IsClosed (K : Set Q) := by
+    change IsClosed (↑(⨅ i : {i : jets(χ, τ, hτ) // i.2.val < N}, (d i.val).toLinearMap.ker) : Set Q)
+    rw [Submodule.coe_iInf]
+    exact isClosed_iInter (fun i ↦ (d i.val).isClosed_ker)
+  let : T2Space E := inferInstanceAs (T2Space (Q ⧸ K))
+  have hE : IsNuclearTVS.{0} E := isNuclearTVS_quotient hQ K
+  let : PolynormableSpace ℂ E := hE.2.1
+  let : IsUniformAddGroup E := isUniformAddGroup_of_addCommGroup
+  have hAP := dense_finiteRank_of_isNuclearTVS E hE
+  exact exists_nuclearTrace_hasSum hAP T ((isNuclearOperator_iff_nonempty_presentation T).mpr hr)
+
+open Classical in
+/-- Paper: Theorem 7.4.1.1(2), pp. 366–367. One rapidly decreasing presentation
+of the descended operator whose scalar series sums to the explicit zero formula. -/
+private theorem spectralNuclearity_trace_presentation (a : ℝ) (N : ℕ) (hN : 0 < N) (φ : 𝒟)
+    (d : jets(χ, τ, hτ) → StrongDual ℂ (Q(a)))
+    (hd : ∀ i f, d i ((D(a)).mkQ f) = iteratedDeriv i.2.val f.val (i.1.val - (a : ℂ))) :
+    let K := ⨅ i : {i : jets(χ, τ, hτ) // i.2.val < N}, (d i.val).toLinearMap.ker
+    let E := Q(a) ⧸ K
+    letI : UniformSpace E := IsTopologicalAddGroup.rightUniformSpace E
+    let term := fun z : zeros(χ, τ, hτ) ↦
+      ((min N (multiplicity(χ, τ, hτ, z)) : ℕ) : ℂ) * nuclearityTestMellin χ φ (z.val - (a : ℂ))
+    ∀ (A : B →L[ℂ] B) (Aq : Q(a) →L[ℂ] Q(a)) (T : E →L[ℂ] E),
+      (∀ f s, (A f).val s = nuclearityTestMellin χ φ s * f.val s) →
+      (∀ f, Aq ((D(a)).mkQ f) = (D(a)).mkQ (A f)) →
+      (∀ x, T (K.mkQ x) = K.mkQ (Aq x)) →
+      ∃ r : NuclearPresentation T, (∀ k : ℕ, ∃ C : ℝ, ∀ n : ℕ,
+        ‖r.coeff n‖ * ((n : ℝ) + 1)^k ≤ C) ∧
+        HasSum (fun n ↦ r.coeff n * r.functional n (r.vector n).val) (∑' z, term z) := by sorry
+
 open Classical in
 /-- Paper: Theorem 7.4.1.1(2), pp. 366–367. The Mellin action on the quotient
 by the first `N` jets is strongly nuclear, and every nuclear presentation has the
@@ -1237,7 +1295,15 @@ theorem spectralNuclearity_trace_of_jet_action (a : ℝ) (N : ℕ) (hN : 0 < N) 
       (∀ f, Aq ((D(a)).mkQ f) = (D(a)).mkQ (A f)) →
       (∀ x, T (K.mkQ x) = K.mkQ (Aq x)) →
       IsStronglyNuclearOperator T ∧ ∀ r : NuclearPresentation T,
-        HasSum (fun n ↦ r.coeff n * r.functional n (r.vector n).val) (∑' z, term z) := by sorry
+        HasSum (fun n ↦ r.coeff n * r.functional n (r.vector n).val) (∑' z, term z) := by
+  intro K E term A Aq T hA hAq hT
+  obtain ⟨r, hfast, htrace⟩ :=
+    spectralNuclearity_trace_presentation χ τ hτ a N hN φ d hd A Aq T hA hAq hT
+  refine ⟨⟨r, hfast⟩, ?_⟩
+  obtain ⟨v, hv, _⟩ := spectralJet_unique_presentation_sum χ τ hτ a N d T ⟨r⟩
+  have he := (hv r).2.unique htrace
+  intro t
+  exact he ▸ (hv t).2
 
 open Classical in
 /-- Paper: Theorem 7.4.1.1(2), pp. 366–367.
