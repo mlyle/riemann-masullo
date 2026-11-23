@@ -4,6 +4,8 @@ The geometric identity on p. 520 assumes a reciprocal-weight projective kernel r
 
 ## Radial result
 
+For each unitary Hecke character, `exists_projected_hecke_convolution` proves that ordinary additive convolution by every smooth compact radial test is nuclear after projection onto the admitted Mellin jets. The operator acts on the actual exponentially weighted radial Sobolev space.
+
 For a unitary Hecke character, half-width `α ≥ 0` and Sobolev exponent `s > 1`, `exists_projected_hecke_resolvent` proves trace class for `R.adjoint.comp P` on the radial weighted Hilbert space. Here `P` is the orthogonal complement projection of the joint kernel of precisely the admitted Mellin jets of the completed Hecke function in the closed strip centered at $1/2$. Interior zeros retain their full multiplicities. At a boundary point the derivative order `k` must also satisfy `2k + 1 < s`. The operator `R` has Mellin symbol $1/(c^2-z^2)$, with $c=α+s+3$.
 
 The proof keeps all zeros with ordinate at most $2^n$ in absolute value. A bounded holomorphic multiplier vanishes to the required orders at the remaining zeros. After the resolvent the cutoff error in operator norm is $O(4^{-n})$. The rank of each cutoff is bounded by the number of surviving jets, including multiplicities. Jensen's weighted zero count from #6438 then gives summability of the singular values. The proof uses no lower bound on the distance between distinct Hecke zeros.
@@ -18,7 +20,9 @@ $$
 (c^2-q)H_κg-2pH_{κ'}g-H_{κ''}g .
 $$
 
-The remaining steps are the bounded-operator identification of the weighted adjoint of the actual convolution with this radial formula and transport of the scalar projection to its idèle-class character component. For an infinite family of angular characters, one must also sum the component nuclear norms.
+The bounded operator `exists_scalar_weighted_convolution` represents ordinary convolution on every vector. Its Hilbert adjoint acts on compact tests by convolution with the reflected conjugate kernel, weighted by the ratio of source and output densities. The two far-source pieces each factor through $R$. On the remaining compact source set, finite propagation also bounds the output support. Two square-integrable masks and absolute Fourier inversion give a nuclear integral operator there. Adding the three pieces proves trace class for convolution after the fixed-character projection.
+
+The passage to the full idèle-class group requires transport of the scalar operator and its spectral projection to each relevant character component. For an infinite family of angular characters, it also requires summable component nuclear norms.
 
 ## Relation to the manuscript
 

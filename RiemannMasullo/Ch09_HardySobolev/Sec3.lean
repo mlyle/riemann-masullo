@@ -3579,6 +3579,25 @@ private theorem masked_fourier_kernel (η : Measure (PontryaginDual G)) (ν : Me
     rw [htr]
     simp only [hdiag, integral_mul_const, hφ 1, map_one, Circle.coe_one, mul_one]
 
+include μ in
+/-- Two square-integrable masks of a smooth compactly supported group
+convolution kernel give a nuclear integral operator on any sigma-finite
+measure. Its kernel and diagonal use that same measure. -/
+theorem masked_bruhat_convolution_nuclear (hm : IsModulation m) (hms : Surjective m)
+    {φ : G → ℂ} (hc : HasCompactSupport φ) (hs : IsBruhatSmooth φ)
+    (ν : Measure G) [SigmaFinite ν] {l r : G → ℂ} (hl : MemLp l 2 ν) (hr : MemLp r 2 ν) :
+    ∃ (T : Lp ℂ 2 ν →L[ℂ] Lp ℂ 2 ν) (hn : IsNuclearOperator T),
+      (∀ u, ∀ᵐ x ∂ν, T u x = ∫ y, l x * φ (x * y⁻¹) * star (r y) * u y ∂ν) ∧
+      hilbertTrace ⟨T, hn⟩ = φ 1 * ∫ y, star (r y) * l y ∂ν := by
+  let : BorelSpace (PontryaginDual G) := ⟨rfl⟩
+  let : SecondCountableTopology Circle := inferInstanceAs (SecondCountableTopology (Metric.sphere (0 : ℂ) 1))
+  let : SecondCountableTopology (PontryaginDual G) :=
+    (ContinuousMonoidHom.isEmbedding_toContinuousMap G Circle).secondCountableTopology
+  obtain ⟨η,hη,-⟩ := lcaPlancherelMeasure_existsUnique μ
+  let : η.IsHaarMeasure := hη.1
+  obtain ⟨f,hf,hφ⟩ := smooth_kernel_fourier_integral μ m hm hms hc hs η hη
+  exact masked_fourier_kernel η ν hf hφ hl hr
+
 end FourierKernels
 
 variable (a b s : ℝ) (hab : a ≤ b) (hs : 0 ≤ s)
