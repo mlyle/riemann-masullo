@@ -74,17 +74,27 @@ private instance : dualRadialHaar.IsHaarMeasure := by
     ⟨fun t ↦ (measurePreserving_add_left (volume : Measure ℝ) t.toAdd).map_eq⟩
   constructor
 
+/-- Product Haar in a split logarithmic chart, with Lebesgue normalization
+on the real factor. -/
+theorem split_log_chart_isHaarMeasure {K G : Type*} [CommGroup K] [TopologicalSpace K]
+    [IsTopologicalGroup K] [MeasurableSpace K] [BorelSpace K] [SecondCountableTopology K]
+    [CommGroup G] [TopologicalSpace G] [IsTopologicalGroup G] [MeasurableSpace G] [BorelSpace G]
+    (μ : Measure K) [μ.IsHaarMeasure] (e : K × Multiplicative ℝ ≃ₜ* G) :
+    ((μ.prod (volume : Measure ℝ)).map e).IsHaarMeasure :=
+  e.isHaarMeasure_map (μ.prod dualRadialHaar)
+
 /-- On any split dual the global Schwartz estimate sums weighted ordinary
 Fourier mass across every angular fiber. Each character-independent real
 frequency on the discrete angular group can be included with any multiplicity. -/
-theorem summable_angular_fourier_fibers {G X : Type*}
+theorem angular_fourier_fiber_moments {G X : Type*}
     [CommGroup G] [TopologicalSpace G] [IsTopologicalGroup G] [T2Space G] [LocallyCompactSpace G]
     [MeasurableSpace G] [BorelSpace G] (μ : Measure G) [μ.IsHaarMeasure] [μ.Regular]
     [CommGroup X] [TopologicalSpace X] [DiscreteTopology X] [Countable X]
     (e : X × Multiplicative ℝ ≃ₜ* PontryaginDual G)
-    (ρs : List (X →ₜ* Multiplicative ℝ)) (f : SchwartzBruhat G) :
-    Summable fun ξ : X ↦ (ρs.map (fun ρ ↦ 1+((ρ ξ).toAdd)^2)).prod *
-      ∫ u : ℝ, (1+u^2)*‖lcaFourier μ f (e (ξ,Multiplicative.ofAdd u))‖ := by
+    (j : ℕ) (ρs : List (X →ₜ* Multiplicative ℝ)) (f : SchwartzBruhat G) :
+    (∀ ξ : X, Integrable (fun u : ℝ ↦ (1+u^2)^j*‖lcaFourier μ f (e (ξ,Multiplicative.ofAdd u))‖)) ∧
+      Summable (fun ξ : X ↦ (ρs.map (fun ρ ↦ 1+((ρ ξ).toAdd)^2)).prod *
+        ∫ u : ℝ, (1+u^2)^j*‖lcaFourier μ f (e (ξ,Multiplicative.ofAdd u))‖) := by
   let R := Multiplicative ℝ
   let : MeasurableSpace X := borel X
   let : BorelSpace X := ⟨rfl⟩
@@ -96,25 +106,44 @@ theorem summable_angular_fourier_fibers {G X : Type*}
   let : ν.IsHaarMeasure := e.isHaarMeasure_map η
   let r := (ContinuousMonoidHom.fst X R).comp (e.symm : PontryaginDual G →ₜ* X × Multiplicative ℝ)
   let n := (ContinuousMonoidHom.snd X R).comp (e.symm : PontryaginDual G →ₜ* X × Multiplicative ℝ)
-  let A := n :: ρs.map (fun ρ ↦ ρ.comp r)
+  let A := List.replicate j n ++ ρs.map (fun ρ ↦ ρ.comp r)
   let W := fun ξ : X ↦ (ρs.map (fun ρ ↦ 1+((ρ ξ).toAdd)^2)).prod
-  have hW (ξ : X) : 0 ≤ W ξ :=
-    List.prod_nonneg (fun x hx ↦ by obtain ⟨_,_,rfl⟩ := List.mem_map.mp hx; positivity)
+  have hW (ξ : X) : 0 < W ξ :=
+    List.prod_pos (fun x hx ↦ by obtain ⟨_,_,rfl⟩ := List.mem_map.mp hx; positivity)
   have h := integrable_fourier_frequency_weights μ ν A f
   have hcomp := e.toHomeomorph.toMeasurableEquiv.measurableEmbedding.integrable_map_iff.mp h
-  have hp : Integrable (fun p : X × R ↦ W p.1 * ((1+p.2.toAdd^2)*‖lcaFourier μ f (e p)‖)) η := by
+  have hp : Integrable (fun p : X × R ↦ W p.1 * ((1+p.2.toAdd^2)^j*‖lcaFourier μ f (e p)‖)) η := by
     apply hcomp.congr
     refine .of_forall fun p ↦ ?_
-    simp only [Function.comp_apply,A,List.map_cons,List.prod_cons,List.map_map]
-    change (1+((e.symm (e p)).2.toAdd)^2) *
+    simp only [Function.comp_apply,A,List.map_append,List.map_replicate,List.prod_append,List.prod_replicate,List.map_map]
+    change (1+((e.symm (e p)).2.toAdd)^2)^j *
       (ρs.map (fun ρ ↦ 1+((ρ (e.symm (e p)).1).toAdd)^2)).prod * ‖lcaFourier μ f (e p)‖ = _
     rw [e.symm_apply_apply]
     ring
+  constructor
+  · intro ξ
+    have hrow := Measure.ae_count_iff.mp (integrable_prod_iff hp.1 |>.mp hp).1 ξ
+    change Integrable (fun u : ℝ ↦ W ξ*((1+u^2)^j*‖lcaFourier μ f (e (ξ,Multiplicative.ofAdd u))‖)) at hrow
+    apply (hrow.const_mul (W ξ)⁻¹).congr
+    exact .of_forall fun u ↦ by dsimp; rw [← mul_assoc,inv_mul_cancel₀ (hW ξ).ne',one_mul]
   have hi := integrable_count_iff.mp hp.integral_prod_left
   apply hi.congr
   intro ξ
-  change ‖∫ u : ℝ, W ξ * ((1+u^2)*‖lcaFourier μ f (e (ξ,Multiplicative.ofAdd u))‖)‖ = _
-  rw [integral_const_mul,Real.norm_eq_abs,abs_of_nonneg (mul_nonneg (hW ξ)
+  change ‖∫ u : ℝ, W ξ * ((1+u^2)^j*‖lcaFourier μ f (e (ξ,Multiplicative.ofAdd u))‖)‖ = _
+  rw [integral_const_mul,Real.norm_eq_abs,abs_of_nonneg (mul_nonneg (hW ξ).le
     (integral_nonneg fun u ↦ mul_nonneg (by positivity) (norm_nonneg _)))]
+
+/-- On any split dual the global Schwartz estimate sums weighted ordinary
+Fourier mass across every angular fiber. Each character-independent real
+frequency on the discrete angular group can be included with any multiplicity. -/
+theorem summable_angular_fourier_fibers {G X : Type*}
+    [CommGroup G] [TopologicalSpace G] [IsTopologicalGroup G] [T2Space G] [LocallyCompactSpace G]
+    [MeasurableSpace G] [BorelSpace G] (μ : Measure G) [μ.IsHaarMeasure] [μ.Regular]
+    [CommGroup X] [TopologicalSpace X] [DiscreteTopology X] [Countable X]
+    (e : X × Multiplicative ℝ ≃ₜ* PontryaginDual G)
+    (ρs : List (X →ₜ* Multiplicative ℝ)) (f : SchwartzBruhat G) :
+    Summable fun ξ : X ↦ (ρs.map (fun ρ ↦ 1+((ρ ξ).toAdd)^2)).prod *
+      ∫ u : ℝ, (1+u^2)*‖lcaFourier μ f (e (ξ,Multiplicative.ofAdd u))‖ := by
+  simpa only [pow_one] using (angular_fourier_fiber_moments μ e 1 ρs f).2
 
 end RiemannMasullo.StripNuclearity

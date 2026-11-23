@@ -61,4 +61,38 @@ theorem integral_norm_iteratedDeriv_le_fourier_moment {J : Set ℝ} (hJ : IsComp
     _ ≤ ∫ _ in J, C := setIntegral_mono (hint j).norm.integrableOn hC hcost
     _ = _ := by rw [setIntegral_const]; exact (mul_assoc _ _ _).symm
 
+private theorem norm_le_quadratic (u : ℝ) : |u| ≤ 1+u^2 := by
+  nlinarith [sq_nonneg (|u|-1/2),sq_abs u]
+
+/-- Absolute polynomial moments of the ordinary Fourier transform control smoothness and
+all physical derivatives for a continuous function supported in a fixed compact set. -/
+theorem smooth_physical_cost_of_fourier_moments {J : Set ℝ} (hJ : IsCompact J)
+    (p : ℝ → ℂ) (hp : Continuous p) (hs : tsupport p ⊆ J)
+    (hm : ∀ j : ℕ, Integrable (fun u : ℝ ↦ (1+u^2)^j * ‖𝓕 p u‖)) :
+    ContDiff ℝ ∞ p ∧ ∀ j : ℕ, (∫ t : ℝ, ‖iteratedDeriv j p t‖) ≤
+      volume.real J * (2*Real.pi)^j * ∫ u : ℝ, (1+u^2)^j * ‖𝓕 p u‖ := by
+  have hi : Integrable p := hp.integrable_of_hasCompactSupport (hJ.of_isClosed_subset isClosed_closure hs)
+  have hFc : Continuous (𝓕 p) :=
+    VectorFourier.fourierIntegral_continuous Real.continuous_fourierChar (innerSL ℝ).continuous₂ hi
+  have hFi : Integrable (𝓕 p) := by
+    apply (integrable_norm_iff hFc.aestronglyMeasurable).mp
+    simpa using hm 0
+  have hle (u : ℝ) (j : ℕ) : |u|^j * ‖𝓕 p u‖ ≤ (1+u^2)^j * ‖𝓕 p u‖ :=
+    mul_le_mul_of_nonneg_right (pow_le_pow_left₀ (abs_nonneg u) (norm_le_quadratic u) j) (norm_nonneg _)
+  have habs (j : ℕ) : Integrable (fun u : ℝ ↦ |u|^j * ‖𝓕 p u‖) := by
+    apply (hm j).mono' ((continuous_abs.pow j).mul hFc.norm).aestronglyMeasurable
+    exact .of_forall fun u ↦ by
+      change ‖|u|^j * ‖𝓕 p u‖‖ ≤ _
+      rw [Real.norm_of_nonneg (mul_nonneg (pow_nonneg (abs_nonneg _) _) (norm_nonneg _))]
+      exact hle u j
+  have hFF : ContDiff ℝ ∞ (𝓕 (𝓕 p)) :=
+    Real.contDiff_fourier (N := ⊤) fun j _ ↦ by simpa only [Real.norm_eq_abs] using habs j
+  have hinv : (fun t : ℝ ↦ 𝓕 (𝓕 p) (-t)) = p := by
+    funext t
+    rw [← Real.fourierInv_eq_fourier_neg,hp.fourierInv_fourier_eq hi hFi]
+  have hsmooth : ContDiff ℝ ∞ p := hinv ▸ hFF.comp contDiff_neg
+  refine ⟨hsmooth,fun j ↦ (integral_norm_iteratedDeriv_le_fourier_moment hJ p hsmooth hs j).trans ?_⟩
+  apply mul_le_mul_of_nonneg_left (integral_mono (habs j) (hm j) fun u ↦ hle u j)
+  positivity
+
 end RiemannMasullo.StripNuclearity

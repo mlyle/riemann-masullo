@@ -78,6 +78,19 @@ where $N_\chi$ counts completed zeros of ordinate $|\Im\rho|\le T$ with full mul
 
 These estimates give absolute trace-norm summability over the angular lattice. More generally it suffices that $\sum_\xi M_2(p_\xi)(1+W_\xi)^2<\infty$. Any polynomial growth of $W_{\chi_\ell}$ in lattice frequency suffices, since the profiles decay to arbitrary polynomial order. The Fourier expansion on the compact Lie quotient converges uniformly and the components have a common compact radial support. Weighted Young's inequality therefore sends finite sums to $A_\varphi$ in operator norm. The trace-norm sum of the projected operators consequently represents $A_\varphi P$. The Lean certificate includes the uniform Hecke resolvent, normalized character choice, joint Fourier weights, the consequence of dyadic counting for divisor mass, and trace-norm summation under operator-norm convergence. The full arbitrary-field application still needs the exact idèle-class identifications and operator synthesis, the quantitative physical convolution bound, and conductor-uniform arithmetic for the project's completed function. [AngularCount.lean](AngularCount.lean), [TraceNormSum.lean](TraceNormSum.lean)
 
+## Uniform physical profile costs
+
+For the canonical norm section and every $\varphi\in C_c^\infty(C_F)$, one compact real set $J$ supports all the positive-character profiles $p_\xi$. Every $p_\xi$ is smooth. For every $j\ge0$ and finite list of continuous real homomorphisms $r_i$ on the compact dual, Lean proves
+
+$$
+\sum_{\xi\in\widehat{C_F^1}} \bigg(\prod_i (1+r_i(\xi)^2)\bigg)
+\int_{\mathbb R}|p_\xi^{(j)}(t)|\,dt < \infty.
+$$
+
+The compact Haar measure can have any normalization. The proof disintegrates the joint absolute Fourier moments with the counting measure on the angular factor, applies ordinary one-dimensional inversion and differentiates on the Fourier side. It bounds the physical integral using the common support $J$. This works independently of any enumeration or growth count for the compact dual. It also applies directly to repeated archimedean frequencies after identifying them as real homomorphisms of that dual. [IdeleAngularProfiles.lean](IdeleAngularProfiles.lean), [AngularProfileCosts.lean](AngularProfileCosts.lean), [RadialFourierCost.lean](RadialFourierCost.lean)
+
+The middle localization can also be treated on the full idèle-class group. A compact interval in the logarithmic norm has compact preimage; translating this interval by the radial support of the test still gives a compact interval. The two resulting square-integrable masks on the whole group fit the existing masked-convolution theorem. This leaves the two tail factors for the angular estimates. [Chapter 9, §3](../../Ch09_HardySobolev/Sec3.lean)
+
 ## Comparison with pp. 519–520
 
 Theorem 12.5.1.1 on p. 519 assumes $\varphi$ vanishes on all of $C_F^1$, and its sum uses the interior of the strip. The introductory paragraph on the same page asks only for $\varphi(1)=0$. On p. 520 a finite set of places contains the ramification of one character and gives finite-unit invariance of $\varphi$ away from those places. The torus in a general compact angular Lie quotient can still support infinitely many characters. Equation (12.5.1.4) invokes Definition 10.4.3.7 and Theorem 10.4.2.8. The calculation here gives a route to the ambient projective-kernel input for the repaired closed-strip diagonal at one width. The paper's exterior-zero cancellation for all widths and the arbitrary rectangular enumerations in #5224 are separate questions.
