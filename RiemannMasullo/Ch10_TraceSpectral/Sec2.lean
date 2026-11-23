@@ -2512,15 +2512,475 @@ theorem spectralStripJet_commonKernel (χ : PontryaginDual C₁ → PontryaginDu
   obtain ⟨f, hf⟩ := spectralStripJet_approximation χ _hχ hα hs y hy ε hε
   exact ⟨_, ⟨Submodule.Quotient.mk f, rfl⟩, (dist_eq_norm _ _).trans_lt hf⟩
 
+namespace StripInterpolation
+
+/-- Removing some of a finite-order zero within the entire Schwartz–Bergman space
+preserves the orders at every other point. -/
+private theorem divide_at_point {f : ℂ → ℂ} (hf : f ∈ schwartzBergmanSubmodule univ)
+    (w : ℂ) {n k : ℕ} (horder : analyticOrderAt f w = n) (hk : k ≤ n) :
+    ∃ q : ℂ → ℂ, q ∈ schwartzBergmanSubmodule univ ∧ analyticOrderAt q w = k ∧
+      ∀ v ≠ w, analyticOrderAt q v = analyticOrderAt f v := by
+  classical
+  have hd : Differentiable ℂ f := differentiableOn_univ.mp (by simpa using hf.2.1)
+  obtain ⟨g, hg, hgw, hnear⟩ := (hd.analyticAt w).analyticOrderAt_eq_natCast.mp horder
+  let d := n - k
+  have hnk : d + k = n := Nat.sub_add_cancel hk
+  let q (z : ℂ) := if z = w then (z - w)^k * g z else f z / (z - w)^d
+  have hlocal : q =ᶠ[𝓝 w] fun z ↦ (z - w)^k * g z := by
+    filter_upwards [hnear] with z he
+    by_cases hz : z = w
+    · simp [q, hz]
+    · simp only [q, ite_eq_right hz]
+      rw [div_eq_iff (pow_ne_zero _ (sub_ne_zero.mpr hz)), he, ← hnk, pow_add]
+      simp only [smul_eq_mul]
+      ring
+  have ha : AnalyticAt ℂ q w :=
+    ((analyticAt_id.sub analyticAt_const).pow k |>.mul hg).congr hlocal.symm
+  have hother {v : ℂ} (hv : v ≠ w) :
+      q =ᶠ[𝓝 v] fun z ↦ f z / (z - w)^d := by
+    filter_upwards [eventually_ne_nhds hv] with z hz using ite_eq_right hz
+  have hdq : Differentiable ℂ q := by
+    intro z
+    by_cases hz : z = w
+    · simpa [hz] using ha.differentiableAt
+    · have hh : DifferentiableAt ℂ (fun u : ℂ ↦ f u / (u - w)^d) z :=
+        (hd z).div ((differentiableAt_id.sub_const w).pow d) (pow_ne_zero d (sub_ne_zero.mpr hz))
+      exact hh.congr_of_eventuallyEq (hother hz)
+  refine ⟨q, ⟨by simp, by simpa using hdq.differentiableOn (s := univ), ?_⟩,
+    ha.analyticOrderAt_eq_natCast.mpr ⟨g, hg, hgw, hlocal⟩, ?_⟩
+  · intro a b hab hI N
+    obtain ⟨B, hB⟩ := hf.2.2 a b hab hI N
+    have hc : Continuous (fun z : ℂ ↦ ‖z^N * q z‖) :=
+      ((continuous_id.pow N).mul hdq.continuous).norm
+    obtain ⟨C, hC⟩ := (isCompact_closedBall w 1).bddAbove_image hc.continuousOn
+    refine ⟨max C B, ?_⟩
+    rintro _ ⟨z, hz, rfl⟩
+    by_cases hdist : z ∈ Metric.closedBall w 1
+    · exact (hC ⟨z, hdist, rfl⟩).trans (le_max_left _ _)
+    · have hnorm : 1 < ‖z - w‖ := by simpa [Metric.mem_closedBall, dist_eq_norm] using hdist
+      have hne : z ≠ w := by rintro rfl; norm_num at hnorm
+      change ‖z^N * q z‖ ≤ max C B
+      rw [show q z = f z / (z - w)^d from ite_eq_right hne, ← mul_div_assoc, norm_div, norm_pow]
+      exact (div_le_self (norm_nonneg _) (one_le_pow₀ hnorm.le)).trans
+        ((hB ⟨z, hz, rfl⟩).trans (le_max_right _ _))
+  · intro v hv
+    have hmul : f =ᶠ[𝓝 v] fun z ↦ (z - w)^d * q z := by
+      filter_upwards [hother hv, eventually_ne_nhds hv] with z hq hz
+      rw [hq]
+      field_simp
+    have hor : analyticOrderAt (fun z : ℂ ↦ (z - w)^d) v = 0 :=
+      (AnalyticAt.analyticOrderAt_eq_zero (by fun_prop)).mpr (pow_ne_zero _ (sub_ne_zero.mpr hv))
+    rw [analyticOrderAt_congr hmul, analyticOrderAt_fun_mul (by fun_prop) (hdq.analyticAt v), hor, zero_add]
+
+/-- Gaussian damping converts an entire function bounded on closed vertical substrips
+to an entire Schwartz–Bergman function without changing any vanishing orders. -/
+private theorem gaussian_of_strip_bound {f : ℂ → ℂ} (hd : Differentiable ℂ f)
+    (hb : ∀ a b : ℝ, a ≤ b → ∃ C : ℝ, ∀ z : ℂ, z.re ∈ Icc a b → ‖f z‖ ≤ C) :
+    (fun z ↦ Complex.exp (z^2) * f z) ∈ schwartzBergmanSubmodule univ ∧
+    ∀ z, analyticOrderAt (fun u ↦ Complex.exp (u^2) * f u) z = analyticOrderAt f z := by
+  let e (z : ℂ) := Complex.exp (z^2)
+  have ha : Differentiable ℂ e := by dsimp [e]; fun_prop
+  have he : e ∈ schwartzBergmanSubmodule univ := by
+    simpa [e] using gaussian_mem_schwartzBergmanSubmodule univ isOpen_univ
+  refine ⟨⟨by simp, (ha.mul hd).differentiableOn, ?_⟩, ?_⟩
+  · intro a b hab hI N
+    obtain ⟨A, hA⟩ := he.2.2 a b hab hI N
+    obtain ⟨C, hC⟩ := hb a b hab
+    refine ⟨max A 0 * max C 0, ?_⟩
+    rintro _ ⟨z, hz, rfl⟩
+    change ‖z^N * (e z * f z)‖ ≤ _
+    rw [← mul_assoc, norm_mul]
+    exact mul_le_mul ((hA ⟨z, hz, rfl⟩).trans (le_max_left _ _))
+      ((hC z hz).trans (le_max_left _ _)) (norm_nonneg _) (le_max_right _ _)
+  · intro z
+    have h0 := (ha.analyticAt z).analyticOrderAt_eq_zero.mpr (Complex.exp_ne_zero _)
+    change analyticOrderAt (fun u ↦ e u * f u) z = _
+    rw [analyticOrderAt_fun_mul (ha.analyticAt z) (hd.analyticAt z), h0, zero_add]
+
+/-- A two-sided Laplace integral absolutely convergent at both real endpoints is
+bounded uniformly across that closed complex substrip. -/
+private theorem laplace_strip_bound {X : Type*} [MeasurableSpace X] (μ : Measure X)
+    (u : X → ℂ) (l : X → ℝ) (h : ∀ t : ℝ,
+      Integrable (fun x ↦ u x * Complex.exp ((t : ℂ) * (l x : ℂ))) μ) (a b : ℝ) :
+    ∃ C : ℝ, ∀ z : ℂ, z.re ∈ Icc a b →
+      ‖∫ x, u x * Complex.exp (z * (l x : ℂ)) ∂μ‖ ≤ C := by
+  let M (r : ℝ) (x : X) := ‖u x * Complex.exp ((r : ℂ) * (l x : ℂ))‖
+  refine ⟨∫ x, M a x + M b x ∂μ, fun z hz ↦
+    norm_integral_le_of_norm_le ((h a).norm.add (h b).norm) (ae_of_all _ fun x ↦ ?_)⟩
+  have he (v : ℂ) : ‖u x * Complex.exp (v * (l x : ℂ))‖ =
+      ‖u x‖ * Real.exp (v.re * l x) := by simp [Complex.norm_exp, Complex.mul_re]
+  by_cases hxl : 0 ≤ l x
+  · apply (le_add_of_nonneg_left (a := M b x) (norm_nonneg _)).trans'
+    dsimp only [M]
+    rw [he, he, Complex.ofReal_re]
+    exact mul_le_mul_of_nonneg_left (Real.exp_le_exp.mpr (mul_le_mul_of_nonneg_right hz.2 hxl)) (norm_nonneg _)
+  · apply (le_add_of_nonneg_right (a := M a x) (norm_nonneg _)).trans'
+    dsimp only [M]
+    rw [he, he, Complex.ofReal_re]
+    exact mul_le_mul_of_nonneg_left
+      (Real.exp_le_exp.mpr (mul_le_mul_of_nonpos_right hz.1 (le_of_not_ge hxl))) (norm_nonneg _)
+
+/-- A triangular collection in a linear subspace interpolates all the coordinates
+of one finite jet. -/
+private theorem finite_interpolation {n : ℕ} (S : Submodule ℂ (Fin n → ℂ))
+    (hpivot : ∀ j : Fin n, ∃ v ∈ S, (∀ i < j, v i = 0) ∧ v j ≠ 0)
+    (c : Fin n → ℂ) : c ∈ S := by
+  have he (k : ℕ) (hk : k ≤ n) : ∃ v ∈ S, ∀ i : Fin n, (i : ℕ) < k → v i = c i := by
+    induction k with
+    | zero => exact ⟨0, S.zero_mem, by simp⟩
+    | succ k ih =>
+      obtain ⟨v, hv, hvi⟩ := ih (by omega)
+      let j : Fin n := ⟨k, by omega⟩
+      obtain ⟨u, hu, hu0, huj⟩ := hpivot j
+      let d := (c j - v j) / u j
+      refine ⟨v + d • u, S.add_mem hv (S.smul_mem d hu), ?_⟩
+      intro i hi
+      by_cases hik : (i : ℕ) < k
+      · simp only [Pi.add_apply, Pi.smul_apply, smul_eq_mul, hu0 i hik, mul_zero, add_zero, hvi i hik]
+      · have hij : i = j := Fin.ext (by change (i : ℕ) = k; omega)
+        subst i
+        change v j + (c j - v j) / u j * u j = c j
+        rw [div_mul_cancel₀ _ huj]
+        ring
+  obtain ⟨v, hv, hvc⟩ := he n le_rfl
+  exact (funext fun i ↦ hvc i i.isLt) ▸ hv
+
+/-- Exact order at one zero and the required vanishing at other zeros produce an
+entire Schwartz–Bergman transform with arbitrary prescribed finite jet at that point. -/
+private theorem interpolate_transform {f : ℂ → ℂ} (hd : Differentiable ℂ f)
+    (hb : ∀ a b : ℝ, a ≤ b → ∃ C : ℝ, ∀ z : ℂ, z.re ∈ Icc a b → ‖f z‖ ≤ C)
+    (w : ℂ) (n : ℕ) (horder : analyticOrderAt f w = n) (c : Fin n → ℂ) :
+    ∃ H : schwartzBergmanSubmodule univ,
+      (∀ i : Fin n, iteratedDeriv i.val H.val w = c i) ∧
+      ∀ v ≠ w, ∀ m : ℕ, (∀ k < m, iteratedDeriv k f v = 0) →
+        ∀ k < m, iteratedDeriv k H.val v = 0 := by
+  let B := schwartzBergmanSubmodule univ
+  have han (H : B) : Differentiable ℂ H.val := differentiableOn_univ.mp (by simpa using H.property.2.1)
+  let ev (z : ℂ) (i : ℕ) : B →ₗ[ℂ] ℂ := {
+    toFun H := iteratedDeriv i H.val z
+    map_add' u v := iteratedDeriv_fun_add ((han u).analyticAt z).contDiffAt ((han v).analyticAt z).contDiffAt
+    map_smul' c u := iteratedDeriv_fun_const_smul_field c u.val }
+  let index := {p : ℂ × ℕ × ℕ //
+    p.1 ≠ w ∧ p.2.2 < p.2.1 ∧ (∀ k < p.2.1, iteratedDeriv k f p.1 = 0)}
+  let V : Submodule ℂ B := ⨅ p : index, (ev p.val.1 p.val.2.2).ker
+  let A : B →ₗ[ℂ] (Fin n → ℂ) := LinearMap.pi fun i ↦ ev w i.val
+  have hV (v : B) : v ∈ V ↔ ∀ p : index, iteratedDeriv p.val.2.2 v.val p.val.1 = 0 := by
+    simp only [V, Submodule.mem_iInf, LinearMap.mem_ker, ev, LinearMap.coe_mk, AddHom.coe_mk]
+  let g (z : ℂ) := Complex.exp (z^2) * f z
+  obtain ⟨hg, hgo⟩ := gaussian_of_strip_bound hd hb
+  have hs := finite_interpolation (V.map A) (fun (i : Fin n) ↦ ?_) c
+  · obtain ⟨H, hH, hc⟩ := hs
+    refine ⟨H, fun i ↦ congrFun hc i, fun v hv m hm k hk ↦ ?_⟩
+    exact (hV H).mp hH ⟨(v, m, k), hv, hk, hm⟩
+  · obtain ⟨q, hq, hw, haway⟩ := divide_at_point (f := g) hg w ((hgo w).trans horder) i.isLt.le
+    let Q : B := ⟨q, hq⟩
+    have hpivot := (analyticOrderAt_eq_nat_iff_iteratedDeriv_eq_zero ((han Q).analyticAt w)).mp hw
+    refine ⟨A Q, ⟨Q, (hV Q).mpr ?_, rfl⟩, fun j hj ↦ hpivot.1 j hj, hpivot.2⟩
+    intro ⟨⟨v, m, k⟩, hv, hk, hm⟩
+    have ho := (natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero (hd.analyticAt v)).mpr hm
+    rw [← hgo v, ← haway v hv] at ho
+    exact (natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero ((han Q).analyticAt v)).mp ho k hk
+/-- Starting from a biorthogonal family, the other biorthogonal families are
+exactly its translations by one common-kernel vector per index. -/
+private theorem density_iff {J E : Type*} [AddCommGroup E] [Module ℂ E]
+    (L : J → E →ₗ[ℂ] ℂ) (D : (J → E) → Prop) (v : J → E)
+    (hv : ∀ i, L i (v i) = 1) (hz : ∀ i j, i ≠ j → L j (v i) = 0) :
+    (∃ y : J → E, (∀ i, L i (y i) = 1) ∧
+        (∀ i j, i ≠ j → L j (y i) = 0) ∧ D y) ↔
+      ∃ r : J → E, (∀ i j, L j (r i) = 0) ∧ D (fun i ↦ v i + r i) := by
+  constructor
+  · rintro ⟨y, hone, hzero, hy⟩
+    refine ⟨fun i ↦ y i - v i, fun i j ↦ ?_, ?_⟩
+    · rw [map_sub]
+      by_cases e : i = j
+      · subst j
+        simp [hone, hv]
+      · simp [hzero i j e, hz i j e]
+    · have he (i : J) : v i + (y i - v i) = y i := by abel
+      simpa only [he] using hy
+  · rintro ⟨r, hr, hy⟩
+    refine ⟨fun i ↦ v i + r i, fun i ↦ ?_, fun i j hij ↦ ?_, hy⟩
+    · simp [hv, hr]
+    · simp [hz i j hij, hr]
+
+end StripInterpolation
+
+section StripProfileInterpolation
+
+/-- An integral supported on a nontrivial compact character vanishes by Haar invariance. -/
+private theorem stripProfile_orthogonality {G : Type*} [CommGroup G] [TopologicalSpace G]
+    [MeasurableSpace G] [MeasurableMul₂ G] (μ : Measure G) [μ.IsMulLeftInvariant]
+    (χ η : PontryaginDual G) (g : G) (hg : χ g ≠ η g)
+    (q : G → ℂ) (hq : ∀ x, q (g * x) = q x) :
+    (∫ x, ((χ x : ℂ)⁻¹ * (η x : ℂ)) * q x ∂μ) = 0 := by
+  let v (x : G) := (χ x : ℂ)⁻¹ * (η x : ℂ)
+  have hmul (x : G) : v (g * x) = v g * v x := by
+    dsimp [v]
+    rw [map_mul, map_mul, Circle.coe_mul, Circle.coe_mul, mul_inv_rev]
+    ring
+  have hne : v g ≠ 1 := by
+    intro he
+    apply hg
+    apply Subtype.ext
+    exact (inv_mul_eq_one₀ (Circle.coe_ne_zero _)).mp he
+  let A := ∫ x, v x * q x ∂μ
+  have h : A = v g * A :=
+    (integral_mul_left_eq_self (μ := μ) (fun x ↦ v x * q x) g).symm.trans <| by
+      rw [← integral_const_mul]
+      refine integral_congr_ae (.of_forall fun x ↦ ?_)
+      change v (g * x) * q (g * x) = v g * (v x * q x)
+      rw [hmul, hq, mul_assoc]
+  change A = 0
+  exact (mul_eq_zero.mp (by linear_combination -h : (v g - 1) * A = 0)).resolve_left (sub_ne_zero.mpr hne)
+
+/-- The physical strip jet is the chosen compact character times an exponential polynomial. -/
+private theorem stripProfile_jet (χ : PontryaginDual C𝔽) (b t : ℝ) (k : ℕ) (x : C𝔽) :
+    spectralZeroJet χ b t k x = (χ x : ℂ) * Complex.exp (shift(b, t) * (logNorm x : ℂ)) *
+      (logNorm x : ℂ)^k := by
+  let η : QuasiCharacter C𝔽 := (⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp χ
+  exact congrArg (fun u : ℂ ↦ u * (logNorm x : ℂ)^k) (quasiCharacterNormTwist_eq_exp m𝔽 η _ _)
+
+/-- Every scalar two-sided exponential-decay profile lifts to the ambient strip
+Sobolev space in the inverse base-character component. -/
+private theorem stripProfile_sobolev (χ : PontryaginDual C𝔽) {α s : ℝ} (hα : 0 ≤ α) (hs : 0 ≤ s)
+    (p : PositiveRealExponentialDecay univ) :
+    ∃ y : W(-α, α, s), (y : C𝔽 → ℂ) =ᵐ[μ𝔽] fun x ↦ (χ x : ℂ)⁻¹ * p.val (logNorm x) := by
+  let ν := canonicalModulatedHaar m𝔽 hm𝔽
+  let : ν.IsHaarMeasure := (existsUnique_canonicalModulatedHaar m𝔽 hm𝔽).exists.choose_spec.1
+  let P := scalarIntervalSobolev_dense (-α) α s (stripI(hα)) hs univ isOpen_univ
+    ordConnected_univ (subset_univ _)
+  let f := P.choose p
+  let E := globalThetaAmbient_equiv_canonical (F := F) hm𝔽 (-α) α s
+  let R := sobolev_character_pull m𝔽 hm𝔽 hms𝔽 _ (continuous_intervalSobolevDensity' (-α) α s)
+    (intervalSobolevDensity_pos (-α) α s) (fun x ↦ (χ⁻¹ x : ℂ)) (continuous_subtype_val.comp χ⁻¹.continuous)
+    (fun _ ↦ Circle.norm_coe _)
+  let y := E.choose.symm (R.choose f)
+  refine ⟨y, (E.choose_spec y).1.symm.trans ?_⟩
+  have he : E.choose y = R.choose f := E.choose.apply_symm_apply _
+  rw [he]
+  apply (Measure.absolutelyContinuous_isHaarMeasure μ𝔽 ν).ae_eq
+  apply (R.choose_spec f).trans
+  have hf : (f : ℝ → ℂ) =ᵐ[volume] p.val := P.choose_spec.2.2 p
+  have hh := (sobolev_log_preserving m𝔽 hm𝔽 hms𝔽).quasiMeasurePreserving.ae_eq_comp hf
+  filter_upwards [hh] with x hx
+  change (((χ x)⁻¹ : Circle) : ℂ) * f (logNorm x) = (χ x : ℂ)⁻¹ * p.val (logNorm x)
+  rw [Circle.coe_inv, show f (logNorm x) = p.val (logNorm x) from hx]
+
+/-- Canonical log-Haar coordinates identify all the moments of the inverse Mellin
+profile with the complex derivatives of its prescribed entire transform. -/
+private theorem stripProfile_log_moment (ν : Measure C𝔽) [ν.IsHaarMeasure]
+    (hl : MeasurePreserving logNorm ν volume) (p : PositiveRealExponentialDecay univ) (k : ℕ) (z : ℂ) :
+    (∫ x : C𝔽, (((logNorm x : ℂ)^k) * p.val (logNorm x)) * Complex.exp (z * (logNorm x : ℂ)) ∂μ𝔽) =
+      ((Measure.haarScalarFactor μ𝔽 ν : ℝ) : ℂ) *
+        iteratedDeriv k (mellin (fun t ↦ p.val (Real.log t))) z := by
+  rw [scalarDecay_mellin_deriv isOpen_univ p k (mem_univ _),
+    mellin_logProfile (fun t : ℝ ↦ (t : ℂ)^k * p.val t)]
+  conv_lhs => rw [Measure.isMulLeftInvariant_eq_smul μ𝔽 ν, integral_smul_nnreal_measure]
+  rw [NNReal.smul_def, Complex.real_smul]
+  congr 1
+  have hp : Continuous p.val := by
+    refine (logExponentialDecayTwist univ ⟨0, mem_univ _⟩ p).continuous.congr fun t ↦ ?_
+    simpa using logExponentialDecayTwist_apply univ ⟨0, mem_univ _⟩ p t
+  let q (t : ℝ) := (t : ℂ)^k * p.val t * Complex.exp (z * (t : ℂ))
+  have hq : Continuous q := ((Complex.continuous_ofReal.pow k).mul hp).mul
+    (Complex.continuous_exp.comp (continuous_const.mul Complex.continuous_ofReal))
+  exact (integral_map hl.measurable.aemeasurable (f := q) hq.aestronglyMeasurable).symm.trans
+    (congrArg (fun η : Measure ℝ ↦ ∫ t, q t ∂η) hl.map_eq)
+
+end StripProfileInterpolation
+
+section StripSingleJets
+open scoped Classical
+local notation "Jχ(" χ ", " a ", " α ", " s ")" => SpectralStripJetIndex χ a α s
+local notation "Zj(" i ")" => shift((i).val.2.1, (i).val.2.2.1)
+local notation "dj(" i ")" => (i).val.2.2.2
+
+/-- The Mellin transform of a polar-free generator is uniformly bounded on each
+closed vertical substrip, including after a translation of the center. -/
+private theorem stripProfile_theta_strip_bound (χ : PontryaginDual C𝔽) (f : adelePolarSubspace F)
+    (a : ℝ) :
+    let Z := fun z : ℂ ↦ globalThetaMellinIntegral f.val (ideleClassNormTwist χ ((a : ℂ) + z))
+    Differentiable ℂ Z ∧ ∀ l r : ℝ, l ≤ r → ∃ C : ℝ, ∀ z : ℂ, z.re ∈ Icc l r → ‖Z z‖ ≤ C := by
+  intro Z
+  obtain ⟨hf, hf'⟩ := (mem_adelePolarSubspace f.val).mp f.property
+  have hd := globalThetaMellinIntegral_entire_of_vanishing f.val hf hf' χ
+  refine ⟨hd.comp (show Differentiable ℂ (fun z : ℂ ↦ (a : ℂ) + z) by fun_prop), ?_⟩
+  let u (x : C𝔽) := adelicTheta f.val x * (χ x : ℂ)
+  let η : QuasiCharacter C𝔽 := (⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp χ
+  have he (v : ℂ) (x : C𝔽) : adelicTheta f.val x * ideleClassNormTwist χ v x =
+      u x * Complex.exp (v * (logNorm x : ℂ)) := by
+    have hh := quasiCharacterNormTwist_eq_exp m𝔽 η v x
+    change ideleClassNormTwist χ v x = (χ x : ℂ) * Complex.exp (v * (logNorm x : ℂ)) at hh
+    rw [hh, ← mul_assoc]
+  have hu (r : ℝ) : Integrable (fun x ↦ u x * Complex.exp ((r : ℂ) * (logNorm x : ℂ))) μ𝔽 :=
+    (globalThetaMellinIntegral_integrable_of_vanishing f.val hf hf' _).congr (.of_forall (he r))
+  intro l r _
+  obtain ⟨C, hC⟩ := StripInterpolation.laplace_strip_bound μ𝔽 u logNorm hu (a + l) (a + r)
+  refine ⟨C, fun z hz ↦ ?_⟩
+  have hz' : ((a : ℂ) + z).re ∈ Icc (a + l) (a + r) := by
+    change a + l ≤ a + z.re ∧ a + z.re ≤ a + r
+    exact ⟨by linarith [hz.1], by linarith [hz.2]⟩
+  have hv : Z z = ∫ x, u x * Complex.exp (((a : ℂ) + z) * (logNorm x : ℂ)) ∂μ𝔽 :=
+    integral_congr_ae (.of_forall (he _))
+  rw [hv]
+  exact hC _ hz'
+
+/-- On one compact-character chart every admitted jet has a Schwartz–Bergman
+interpolant, vanishing at every remaining admitted jet on that entire chart. -/
+private theorem stripProfile_single_chart (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
+    {a α s : ℝ} (i : Jχ(χ, a, α, s)) (d : ℂ) :
+    ∃ H : SchwartzBergman univ, ∀ j : Jχ(χ, a, α, s), j.val.1 = i.val.1 →
+      iteratedDeriv dj(j) H.val Zj(j) = if j = i then d else 0 := by
+  classical
+  let n (j : Jχ(χ, a, α, s)) := multiplicity(χ j.val.1, shift(a + j.val.2.1, j.val.2.2.1))
+  have hn (j : Jχ(χ, a, α, s)) : dj(j) < n j := by
+    have hj := j.property
+    change dj(j) < spectralStripMultiplicity α s j.val.2.1 (n j) at hj
+    unfold spectralStripMultiplicity spectralBoundaryMultiplicity at hj
+    split_ifs at hj <;> omega
+  obtain ⟨f, hvan, hnon⟩ := i.exists_thetaMellin_first_nonvanishing
+  let Z (z : ℂ) := globalThetaMellinIntegral f.val (ideleClassNormTwist (χ i.val.1) z)
+  let W (z : ℂ) := Z ((a : ℂ) + z)
+  have hv (j : Jχ(χ, a, α, s)) : (a : ℂ) + Zj(j) = shift(a + j.val.2.1, j.val.2.2.1) := by
+    push_cast
+    ring
+  have ht (k : ℕ) (j : Jχ(χ, a, α, s)) :
+      iteratedDeriv k W Zj(j) = iteratedDeriv k Z (shift(a + j.val.2.1, j.val.2.2.1)) := by
+    exact (congrFun (iteratedDeriv_comp_const_add k Z (a : ℂ)) _).trans (congrArg (iteratedDeriv k Z) (hv j))
+  obtain ⟨hd, hb⟩ := stripProfile_theta_strip_bound (χ i.val.1) f a
+  have ho : analyticOrderAt W Zj(i) = n i := by
+    apply (analyticOrderAt_eq_nat_iff_iteratedDeriv_eq_zero (hd.analyticAt _)).mpr
+    exact ⟨fun k hk ↦ (ht k i).trans (hvan k hk), (ht _ i).trans_ne hnon⟩
+  let c (k : Fin (n i)) := if (k : ℕ) = dj(i) then d else 0
+  obtain ⟨H, hH, hother⟩ := StripInterpolation.interpolate_transform hd hb Zj(i) (n i) ho c
+  refine ⟨H, fun j hω ↦ ?_⟩
+  by_cases he : Zj(j) = Zj(i)
+  · have hbj : j.val.2.1 = i.val.2.1 := by simpa using congrArg Complex.re he
+    have htj : j.val.2.2.1 = i.val.2.2.1 := by simpa using congrArg Complex.im he
+    have hnj : n j = n i := by simp only [n, hω, hbj, htj]
+    have hij : j = i ↔ dj(j) = dj(i) :=
+      ⟨fun e ↦ congrArg (fun x : Jχ(χ, a, α, s) ↦ dj(x)) e,
+        fun h ↦ Subtype.ext (Prod.ext hω (Prod.ext hbj (Prod.ext htj h)))⟩
+    rw [he]
+    apply (hH ⟨dj(j), (hn j).trans_eq hnj⟩).trans
+    by_cases e : j = i
+    · simp [c, e]
+    · simp [c, e, (not_congr hij).mp e]
+  · rw [ite_eq_right (show j ≠ i from fun hj ↦ he (congrArg (fun x : Jχ(χ, a, α, s) ↦ Zj(x)) hj))]
+    apply hother Zj(j) he (n j) _ dj(j) (hn j)
+    intro k hk
+    rw [ht k j]
+    apply stripTheta_mellin_zero
+    simpa only [n, hω] using hk
+
+/-- Paper: Theorem 10.2.2.1, p. 446. Each admitted strip jet has an ambient Sobolev
+interpolant with all its other admitted moments zero.
+Deviation: The proof divides a polar-free entire Mellin transform within the scalar
+Schwartz–Bergman space and uses the strict Sobolev cutoff at the boundary. -/
+theorem spectralStripJet_singleInterpolant (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
+    (hχ : IsSpectralBasepointChoice χ) {a α s : ℝ} (hα : 0 ≤ α) (hs : 0 ≤ s)
+    (i : Jχ(χ, a, α, s)) :
+    ∃ y : W(-α, α, s), ∀ j : Jχ(χ, a, α, s),
+      spectralSobolevPairing y ((spectralStripJet_memLp χ hα hs j).toLp (stripJet(χ, j))) =
+        if j = i then 1 else 0 := by
+  classical
+  let ν := canonicalModulatedHaar m𝔽 hm𝔽
+  let : ν.IsHaarMeasure := (existsUnique_canonicalModulatedHaar m𝔽 hm𝔽).exists.choose_spec.1
+  let c : ℝ := Measure.haarScalarFactor μ𝔽 ν
+  have hc : (c : ℂ) ≠ 0 := Complex.ofReal_ne_zero.mpr (by
+    have hpos : 0 < c := by exact_mod_cast Measure.haarScalarFactor_pos_of_isHaarMeasure μ𝔽 ν
+    exact hpos.ne')
+  obtain ⟨H, hH⟩ := stripProfile_single_chart χ i (c : ℂ)⁻¹
+  let M := positiveRealFourierMellin univ isOpen_univ ordConnected_univ univ_nonempty
+  let p := M.symm H
+  have hM : mellin (fun t ↦ p.val (Real.log t)) = H.val := by
+    funext z
+    exact (positiveRealFourierMellin_apply univ isOpen_univ ordConnected_univ univ_nonempty p z
+      (mem_univ _)).symm.trans (congrArg (fun u : SchwartzBergman univ ↦ u.val z) (M.apply_symm_apply H))
+  obtain ⟨y, hy⟩ := stripProfile_sobolev (χ i.val.1) hα hs p
+  have habs : μ𝔽 ≪ L2μ'(-α, α, s) :=
+    withDensity_absolutelyContinuous'
+      (symmIntervalSobolevDensity_inv_continuous hα s).measurable.ennreal_ofReal.aemeasurable
+      (.of_forall fun g ↦ ENNReal.ofReal_ne_zero_iff.mpr
+        (inv_pos.mpr (symmIntervalSobolevDensity_pos hα s (logNorm g))))
+  refine ⟨y, fun j ↦ ?_⟩
+  let q (r : ℝ) := ((r : ℂ)^dj(j) * p.val r) * Complex.exp (Zj(j) * (r : ℂ))
+  have hu : (((spectralStripJet_memLp χ hα hs j).toLp (stripJet(χ, j))) : C𝔽 → ℂ) =ᵐ[μ𝔽] stripJet(χ, j) :=
+    habs.ae_le (MemLp.coeFn_toLp _)
+  let v (x : C𝔽) := ((χ i.val.1) x : ℂ)⁻¹ * ((χ j.val.1) x : ℂ)
+  have hpair : spectralSobolevPairing y ((spectralStripJet_memLp χ hα hs j).toLp (stripJet(χ, j))) =
+      ∫ x, v x * q (logNorm x) ∂μ𝔽 := by
+    refine (integral_congr_ae (hy.mul hu)).trans (integral_congr_ae (.of_forall fun x ↦ ?_))
+    change ((χ i.val.1 x : ℂ)⁻¹ * p.val (logNorm x)) * stripJet(χ, j) x = v x * q (logNorm x)
+    rw [stripProfile_jet]
+    dsimp only [v, q]
+    ring
+  rw [hpair]
+  by_cases hω : j.val.1 = i.val.1
+  · have hv (x : C𝔽) : v x = 1 := by dsimp [v]; rw [hω, inv_mul_cancel₀ (Circle.coe_ne_zero _)]
+    simp_rw [hv, one_mul]
+    have hm := stripProfile_log_moment (F := F) ν (sobolev_log_preserving m𝔽 hm𝔽 hms𝔽) p dj(j) Zj(j)
+    change (∫ x, q (logNorm x) ∂μ𝔽) = (c : ℂ) * iteratedDeriv dj(j) (mellin _) Zj(j) at hm
+    rw [hm, hM, hH j hω]
+    split_ifs <;> simp [hc]
+  · have hj : j ≠ i := fun he ↦ hω (congrArg (fun u : Jχ(χ, a, α, s) ↦ u.val.1) he)
+    rw [ite_eq_right hj]
+    have hk : ∃ k : C₁, (χ i.val.1) k.val ≠ (χ j.val.1) k.val := by
+      by_contra! he
+      apply hω
+      rw [← hχ j.val.1, ← hχ i.val.1]
+      exact DFunLike.ext _ _ fun k ↦ (he k).symm
+    obtain ⟨k, hk⟩ := hk
+    apply stripProfile_orthogonality μ𝔽 (χ i.val.1) (χ j.val.1) k.val hk (fun x ↦ q (logNorm x))
+    intro x
+    change q (Real.log ((ideleClassNorm F (k.val * x)).val : ℝ)) = q (logNorm x)
+    rw [map_mul, k.property, one_mul]
+
+/-- Paper: Theorem 10.2.2.1, p. 446. Common-kernel perturbations of the constructed
+interpolants can be chosen so that their classes span densely in the geometric quotient.
+Gap: The proof on p. 446 refers back to the finite-band argument on p. 443. It supplies
+no approximation in the strip norm by these classes. With the common-kernel identity,
+all such perturbations have zero class in the quotient. -/
+private theorem spectralStripJet_interpolantDensity (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
+    (hχ : IsSpectralBasepointChoice χ) {a α s : ℝ} (hα : 0 ≤ α) (hs : 0 ≤ s) :
+    let J := Jχ(χ, a, α, s)
+    let u : J → W'(-α, α, s) := stripU(χ, hα, hs)
+    let v (i : J) := (spectralStripJet_singleInterpolant χ hχ hα hs i).choose
+    ∃ r : J → W(-α, α, s), (∀ i j, spectralSobolevPairing (r i) (u j) = 0) ∧
+      Dense (Submodule.span ℂ (range fun i ↦ (Θ(a, stripI(hα), hs)).mkQ (v i + r i)) :
+        Set (spectralSobolevQuotient F a (stripI(hα)) hs)) := by sorry
+
+end StripSingleJets
+
 /-- Paper: Theorem 10.2.2.1, p. 446. The individual strip jets admit
 interpolants whose classes span densely in the geometric quotient.
 Gap: Orthogonal exhaustion by the evaluation representers does not establish
-interpolation and density of the biorthogonal vectors. -/
+density of the biorthogonal vectors in the geometric quotient. -/
 theorem spectralStripJet_denseInterpolants (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
     (_hχ : IsSpectralBasepointChoice χ) {a α s : ℝ} (hα : 0 ≤ α) (hs : 0 ≤ s) :
     let J := SpectralStripJetIndex χ a α s
     let u : J → W'(-α, α, s) := stripU(χ, hα, hs)
-    JetInterpolation(J, a, stripI(hα), hs, u) := by sorry
+    JetInterpolation(J, a, stripI(hα), hs, u) := by
+  intro J u
+  let v (i : J) := (spectralStripJet_singleInterpolant χ _hχ hα hs i).choose
+  let T := (modulatedIntervalSobolev_dual m𝔽 hm𝔽 μ𝔽 (-α) α s (stripI(hα)) hs).exists.choose
+  let L (j : J) := T.symm (u j)
+  have hL (j : J) (x : W(-α, α, s)) : L j x = spectralSobolevPairing x (u j) :=
+    (spectralSobolevPairing_dual (stripI(hα)) hs (L j) x).2.trans
+      (congrArg (spectralSobolevPairing x) (T.apply_symm_apply (u j)))
+  let D (y : J → W(-α, α, s)) : Prop :=
+    Dense (Submodule.span ℂ (range fun i ↦ (Θ(a, stripI(hα), hs)).mkQ (y i)) :
+      Set (spectralSobolevQuotient F a (stripI(hα)) hs))
+  have hv (i : J) : L i (v i) = 1 := (hL i _).trans (by
+    simpa only [ite_true] using (spectralStripJet_singleInterpolant χ _hχ hα hs i).choose_spec i)
+  have hz (i j : J) (hij : i ≠ j) : L j (v i) = 0 := (hL j _).trans (by
+    simpa only [ite_eq_right (Ne.symm hij)] using
+      (spectralStripJet_singleInterpolant χ _hχ hα hs i).choose_spec j)
+  obtain ⟨r, hr, hd⟩ := spectralStripJet_interpolantDensity χ _hχ hα hs (a := a)
+  obtain ⟨y, hy, hy', hd'⟩ := (StripInterpolation.density_iff
+    (fun j ↦ (L j).toLinearMap) D v hv hz).mpr ⟨r, fun i j ↦ (hL j _).trans (hr i j), hd⟩
+  exact ⟨y, fun i ↦ (hL i _).symm.trans (hy i),
+    fun i j hij ↦ (hL j _).symm.trans (hy' i j hij), hd'⟩
 
 /-- At width zero the real offset of each strip jet is zero, and its remaining
 indices give exactly one line jet with the same function representative. -/
