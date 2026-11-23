@@ -2,6 +2,7 @@ module
 
 public import RiemannMasullo.Ch12_TraceGeometric.Sec4
 public import RiemannMasullo.Ch10_TraceSpectral.Sec4b
+public import RiemannMasullo.Research.PositiveStrip.Solution
 import RiemannMasullo.Ch10_TraceSpectral.Sec1
 import RiemannMasullo.AppB_AnalyticNT.Sec4b
 import RiemannMasullo.Ch12_TraceGeometric.Sec1b
@@ -534,6 +535,44 @@ private theorem stripDiagonal_trace (φ : BruhatCompactSupport C𝔽)
     hchange.trans ((integral_neg f).trans (congrArg Neg.neg hspec.choose_spec.2))⟩
   rw [heq]
   exact hspec.choose_spec.1.neg
+
+local notation "stripMomentsVanish(" χ ", " α ", " s ", " hα ", " hs ", " y ")" =>
+  (∀ j : SpectralStripJetIndex (F := F) χ (1 / 2) α s,
+    spectralSobolevPairing y ((spectralStripJet_memLp χ hα hs j).toLp
+      (spectralZeroJet (χ j.val.1) j.val.2.1 j.val.2.2.1 j.val.2.2.2)) = 0)
+
+/-- Paper: (12.5.1.4), p. 520. Given the projective kernel, the smoothened
+geometric diagonal is Haar-integrable. Its negative integral is the absolutely
+convergent sum of the surviving Hecke zero jets.
+Deviation: The trace counts the closed strip with strict reciprocal-weight
+multiplicities on its two edges. If both edges are zero-free the sum is precisely
+the interior sum printed on p. 520. -/
+theorem hasSum_stripZeros_neg_integral_smoothenedDiagonal
+    (φ : BruhatCompactSupport C𝔽) (hφ : ∀ g : C₁, φ.val g = 0)
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ)
+    {α s : ℝ} (hα : 0 < α) (hs : 3 ≤ s) (hK : stripTensorExists(hα.le, hs, φ))
+    (U : ℕ → Set C𝔽) (hU : IsDPrimeSequence μ𝔽 U) (hBorel : ∀ n, MeasurableSet (U n)) :
+    let shift (b t : ℝ) := (b : ℂ) + (t : ℂ) * Complex.I
+    let order (η : PontryaginDual C𝔽) := meromorphicOrderAt (continuedCompletedHeckeL η)
+    let Z := {z : PontryaginDual C₁ × ℝ × ℝ //
+      z.2.1 ∈ Icc (-α) α ∧ 0 < order (χ z.1) (shift (1 / 2 + z.2.1) z.2.2)}
+    let term (z : Z) := ((spectralStripMultiplicity α s z.val.2.1
+      (order (χ z.val.1) (shift (1 / 2 + z.val.2.1) z.val.2.2)).untop₀.toNat : ℕ) : ℂ) *
+      M(φ, twist(χ z.val.1, shift z.val.2.1 z.val.2.2))
+    Integrable geomDiagonal(hα.le, hs, φ, hK, U) μ𝔽 ∧ Summable (fun z ↦ ‖term z‖) ∧
+      HasSum term (-(∫ x, geomDiagonal(hα.le, hs, φ, hK, U) x ∂μ𝔽)) := by
+  intro shift order Z term
+  have hk (y) : y ∈ globalThetaSobolev F (1 / 2) (hStrip(hα.le)) hs₀(hs) ↔
+      stripMomentsVanish(χ, α, s, hα.le, hs₀(hs), y) :=
+    spectralStripJet_commonKernel_direct χ hχ hα.le hs₀(hs) y
+  obtain ⟨hn, hint, heq⟩ := stripDiagonal_trace (F := F) (hone_lt_three := hone_lt_three)
+    φ hφ hα hs hK U hU hBorel
+  let T : nuclearEndomorphisms (spectralSobolevQuotient F (1 / 2) (hStrip(hα.le)) hs₀(hs)) := ⟨_, hn⟩
+  obtain ⟨hsum, ht⟩ := spectralStripConvolution_trace_of_commonKernel
+    (F := F) (1 / 2) χ hχ hα.le hs₁(hs) φ hk T rfl
+  refine ⟨hint, hsum, ?_⟩
+  rw [heq, neg_neg]
+  exact ht
 
 end StripDiagonalProof
 
