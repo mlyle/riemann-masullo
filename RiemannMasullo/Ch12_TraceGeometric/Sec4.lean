@@ -677,6 +677,40 @@ private theorem sLocalTraceCutoffKernel_skew_integrable (f : BruhatCompactSuppor
     Integrable (fun u ↦ ρ' u * fourierₛ (sLocalTraceEta f ξ) (x.val * u)) νₛ := by
   sorry
 
+/-- Push a unit-group integral into the ambient measure and cancel its density
+on the image. The target integrand vanishes away from that image. -/
+private theorem sLocalTraceCutoffKernel_skew_dilation_density
+    {U X : Type*} [MeasurableSpace U] [MeasurableSpace X] (μ : Measure U) (ν : Measure X)
+    (e : U → X) (he : MeasurableEmbedding e) (d : X → ℝ) (hd : Measurable d)
+    (hm : μ.map e = (ν.restrict (range e)).withDensity (fun z ↦ ENNReal.ofReal (d z)))
+    (raw : U → ℂ) (target : X → ℂ) (c : ℂ)
+    (hv : ∀ u, (ENNReal.ofReal (d (e u))).toReal • raw u = c * target (e u))
+    (hz : ∀ x ∉ range e, target x = 0) :
+    ∫ u, raw u ∂μ = c * ∫ z, target z ∂ν := by
+  let ext := Function.extend e raw (fun _ ↦ 0)
+  have h (u : U) : ext (e u) = raw u := he.injective.extend_apply _ _ u
+  calc
+    _ = ∫ z, ext z ∂(μ.map e) := by rw [he.integral_map]; simp only [h]
+    _ = ∫ z in range e, (ENNReal.ofReal (d z)).toReal • ext z ∂ν := by
+      rw [hm, integral_withDensity_eq_integral_toReal_smul₀
+        hd.ennreal_ofReal.aemeasurable (ae_of_all _ fun _ ↦ ENNReal.ofReal_lt_top)]
+    _ = _ := by
+      rw [← integral_indicator he.measurableSet_range, ← integral_const_mul]
+      apply integral_congr_ae
+      filter_upwards with z
+      by_cases hz' : z ∈ range e
+      · obtain ⟨u, rfl⟩ := hz'
+        rw [indicator_of_mem (mem_range_self u), h]
+        exact hv u
+      · rw [indicator_of_notMem hz', hz z hz', mul_zero]
+
+/-- The S-idele module is the product of the archimedean and finite absolute values. -/
+private theorem sLocalTraceCutoffKernel_skew_dilation_module (y : Iₛ) : normS(y) = modS(y.val) := by
+  let ev : ((Iₛ →* ℝ≥0ˣ) →* ℝ) := NNReal.toRealHom.toMonoidHom.comp
+    ((Units.coeHom ℝ≥0).comp (MonoidHom.eval y))
+  change ev (sIdeleNorm F S) = _
+  simp [sIdeleNorm, map_mul, map_prod, map_pow, ev]
+
 /-- Paper: (12.4.1.18)–(12.4.1.21), p. 518. The dilation average of the skew
 diagonal, integrated against the frequency symbol, is the measure factor of
 (12.4.1.17) times the Fourier transform of the lifted test at the printed
@@ -689,7 +723,96 @@ private theorem sLocalTraceCutoffKernel_skew_dilation (f : BruhatCompactSupport 
         (fun z ↦ (ψₛ ((z - x.val) * u) : ℂ)) (ξ.val * x).val ∂νₛ) =
       (sLocalTraceMeasureFactor S : ℂ) *
         ∫ u, ρ' u * fourierₛ (sLocalTraceEta f ξ) (x.val * u) ∂νₛ := by
-  sorry
+  have : BorelSpace Aₛ := sAdeleRing_borelSpace (F := F) (S := S)
+  have : BorelSpace Iₛ := sIdeleGroup_borelSpace (F := F) (S := S)
+  let (v : S) : ProperSpace (v.val.adicCompletion F) := properSpace_adicCompletion v.val
+  let (w : InfinitePlace F) : SecondCountableTopology w.Completion :=
+    (InfinitePlace.Completion.isometry_extensionEmbedding w).isEmbedding.secondCountableTopology
+  let : SecondCountableTopology Aₛ := inferInstanceAs (SecondCountableTopology
+    (((w : InfinitePlace F) → w.Completion) × ((v : S) → v.val.adicCompletion F)))
+  let : SecondCountableTopology Iₛ := (sIdeleGroup_description F S).1.secondCountableTopology
+  let : (μₛ).IsHaarMeasure := sMultiplicativeTamagawaMeasure_isHaarMeasure
+  let m : Measure (Multiplicative Aₛ) := νₛ
+  have hHaar : m.IsHaarMeasure := (sAdele_fourierMeasure (F := F) (S := S)).2.2.2.1
+  let : (νₛ).IsAddHaarMeasure :=
+    { toIsFiniteMeasureOnCompacts := hHaar.toIsFiniteMeasureOnCompacts
+      toIsOpenPosMeasure := hHaar.toIsOpenPosMeasure
+      map_add_left_eq_self := fun y ↦ hHaar.map_mul_left_eq_self (Multiplicative.ofAdd y) }
+  have hopen : Topology.IsOpenEmbedding (Units.val : Iₛ → Aₛ) :=
+    IsOpenUnits.isOpenEmbedding_unitsVal
+      (M := ((w : InfinitePlace F) → w.Completion) × ((v : S) → v.val.adicCompletion F))
+  have he := hopen.measurableEmbedding
+  have hξ : sIdeleNorm F S ξ.val = 1 := by
+    obtain ⟨γ, hγ, h⟩ := Subgroup.mem_map.mp ξ.property
+    rw [← h]
+    exact (sIdeleNorm_spec F S).2 hγ
+  let c := sLocalTraceMeasureFactor S
+  have hc : 0 ≤ c := by
+    apply Finset.prod_nonneg
+    intro v hv
+    have hq : 1 < (v.asIdeal.absNorm : ℝ) := by exact_mod_cast HeightOneSpectrum.one_lt_absNorm v
+    positivity
+  have hd : Measurable (fun z : Aₛ ↦ c / modS(z)) := by
+    apply Measurable.div measurable_const
+    exact ((continuous_finsetProd _ fun w _ ↦
+      (((continuous_apply w).comp continuous_fst).norm.pow _)).mul
+      (continuous_finsetProd _ fun v _ ↦ ((continuous_apply v).comp continuous_snd).norm)).measurable
+  obtain ⟨E, hE, -⟩ := sAdditiveTamagawaMeasure_selfDual F S
+  have hψ (z w : Aₛ) : star (ψₛ (z * -w) : ℂ) = (ψₛ (z * w) : ℂ) := by
+    have h : ψₛ (z * -w) = (ψₛ (z * w))⁻¹ := by
+      rw [← hE, ← hE]
+      exact map_inv _ _
+    simp only [h, Circle.coe_inv_eq_conj, ← Complex.star_def, star_star]
+  have hinner (u : Aₛ) :
+      sLocalTraceDilationKernel f (fun z ↦ (ψₛ ((z - x.val) * u) : ℂ)) (ξ.val * x).val =
+      (c : ℂ) * fourierₛ (sLocalTraceEta f ξ) (-(x.val * u)) := by
+    let L (g : Iₛ) := f.val g / (Real.sqrt (normS(g)) : ℂ) *
+      (ψₛ (((g⁻¹).val * (ξ.val * x).val - x.val) * u) : ℂ)
+    let b (z : Aₛ) := sLocalTraceEta f ξ z * (ψₛ (z * (x.val * u)) : ℂ)
+    change (∫ g, L g ∂μₛ) = _
+    calc
+      _ = ∫ q, L ((ξ.val⁻¹ * q)⁻¹) ∂μₛ := by
+        rw [integral_mul_left_eq_self (μ := μₛ) (fun q : Iₛ ↦ L q⁻¹) ξ.val⁻¹, integral_inv_eq_self]
+      _ = (c : ℂ) * ∫ y, b (y - 1) ∂νₛ := by
+        apply sLocalTraceCutoffKernel_skew_dilation_density μₛ νₛ Units.val he _ hd
+          (sLocalTrace_measure_density (F := F) (S := S))
+        · intro q
+          have hn : 0 < normS(q) := NNReal.coe_pos.mpr (Units.zero_lt (sIdeleNorm F S q))
+          have hs : (Real.sqrt (normS(q)) : ℂ) ≠ 0 := Complex.ofReal_ne_zero.mpr (Real.sqrt_pos.mpr hn).ne'
+          have hsq : (Real.sqrt (normS(q)) : ℂ)^2 = (normS(q) : ℂ) := by
+            exact_mod_cast Real.sq_sqrt hn.le
+          have hw : ((ξ.val⁻¹ * q).val * (ξ.val * x).val - x.val) * u =
+              (q.val - 1) * (x.val * u) := by
+            simp only [Units.val_mul]
+            rw [show (ξ.val⁻¹).val * q.val * (ξ.val.val * x.val) = q.val * x.val by
+              rw [mul_mul_mul_comm, Units.inv_mul, one_mul]]
+            ring
+          dsimp only [L, b, sLocalTraceEta]
+          rw [show 1 + (q.val - 1) = q.val by abel, Units.val_injective.extend_apply, inv_inv, hw]
+          simp only [map_mul, map_inv, hξ, inv_one, one_mul, Units.val_inv_eq_inv_val, NNReal.coe_inv,
+            Real.sqrt_inv, Complex.ofReal_inv, div_inv_eq_mul]
+          rw [← sLocalTraceCutoffKernel_skew_dilation_module, ENNReal.toReal_ofReal (div_nonneg hc hn.le)]
+          simp only [Complex.real_smul, Complex.ofReal_div]
+          rw [← hsq]
+          field_simp
+        · intro y hy
+          dsimp only [b, sLocalTraceEta]
+          rw [show 1 + (y - 1) = y by abel, Function.extend_apply' _ _ _ hy, zero_mul]
+      _ = _ := by
+        congr 1
+        rw [show (fun y : Aₛ ↦ b (y - 1)) = (fun y ↦ b (-1 + y)) by funext y; abel_nf]
+        rw [integral_add_left_eq_self]
+        simp only [b, tamagawaFourier, hψ]
+  calc
+    _ = ∫ u, ρ' u * ((c : ℂ) * fourierₛ (sLocalTraceEta f ξ) (-(x.val * u))) ∂νₛ := by
+      simp only [hinner]
+    _ = (c : ℂ) * ∫ u, ρ' u * fourierₛ (sLocalTraceEta f ξ) (x.val * u) ∂νₛ := by
+      rw [← integral_neg_eq_self (fun u ↦ ρ' u * ((c : ℂ) * fourierₛ (sLocalTraceEta f ξ) (-(x.val * u)))) νₛ,
+        ← integral_const_mul]
+      apply integral_congr_ae
+      filter_upwards with u
+      rw [_hEven, mul_neg, neg_neg]
+      ring
 
 /-- Paper: (12.4.1.12)–(12.4.1.22), pp. 517–518. The skew diagonal of the
 composed kernel is the integral of the Fourier transform of the translated test,
