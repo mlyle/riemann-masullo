@@ -2087,6 +2087,343 @@ private theorem traceJet_disc_suffices (χ : U) (τ : ℝ≥0ˣ →ₜ* IdeleGro
       (fun z ↦ nuclearityTestMellin χ φ (z.val-(a:ℂ)))
       (spectralNuclearity_trace_term_summable χ τ hτ a N φ)
 
+
+open Bornology
+open scoped ENNReal Pointwise
+
+/-- The gauge is preserved by a linear equivalence. This and the next lemma use the gauge argument of Appendix C.3.1, p. 693. -/
+private theorem traceJet_gauge_image {M N : Type*} [AddCommGroup M] [Module ℂ M]
+    [AddCommGroup N] [Module ℂ N] (φ : M ≃ₗ[ℂ] N) (s : Set M) (x : M) :
+    gauge (φ '' s) (φ x) = gauge s x := by
+  unfold gauge
+  congr 1
+  ext r
+  simp only [Set.mem_ofPred_eq]
+  refine and_congr_right fun _ ↦ ?_
+  simp only [Set.mem_smul_set, Set.exists_mem_image]
+  refine exists_congr fun y ↦ and_congr_right fun _ ↦ ?_
+  rw [show r • φ y = φ (r • y) from (LinearMap.map_smul_of_tower φ.toLinearMap r y).symm]
+  exact φ.injective.eq_iff
+
+/-- The image of a Banach disc under an injective continuous linear map is a Banach disc:
+the map restricts to a linear equivalence of the spans that preserves the gauges. -/
+private theorem traceJet_banach_disc_image {Y Z : Type*}
+    [AddCommGroup Y] [Module ℂ Y] [UniformSpace Y] [IsUniformAddGroup Y]
+    [PolynormableSpace ℂ Y] [T2Space Y]
+    [AddCommGroup Z] [Module ℂ Z] [UniformSpace Z] [IsUniformAddGroup Z]
+    [PolynormableSpace ℂ Z] [T2Space Z]
+    {disc₀ : Set Y} (hB : IsBanachDisc disc₀) (T : Y →L[ℂ] Z) (hT : Injective T) :
+    IsBanachDisc (T '' disc₀) := by
+  let S := Submodule.span ℂ disc₀
+  let S' := Submodule.span ℂ (T '' disc₀)
+  have hSS : S.map T.toLinearMap = S' := (Submodule.span_image T.toLinearMap).symm
+  let φ : S ≃ₗ[ℂ] S' :=
+    (Submodule.equivMapOfInjective T.toLinearMap hT S).trans (LinearEquiv.ofEq _ _ hSS)
+  have himage : ((↑) ⁻¹' (T '' disc₀) : Set S') = φ '' ((↑) ⁻¹' disc₀ : Set S) := by
+    ext z
+    constructor
+    · rintro ⟨b, hb, hbz⟩
+      exact ⟨⟨b, Submodule.subset_span hb⟩, hb, Subtype.ext hbz⟩
+    · rintro ⟨w, hw, rfl⟩
+      exact ⟨w, hw, rfl⟩
+  have bB : Balanced ℂ ((↑) ⁻¹' (T '' disc₀) : Set S') :=
+    himage ▸ hB.balanced.image φ.toLinearMap
+  have cB : Convex ℝ ((↑) ⁻¹' (T '' disc₀) : Set S') :=
+    himage ▸ hB.convex.linear_image (φ.toLinearMap.restrictScalars ℝ)
+  have aB : Absorbent ℝ ((↑) ⁻¹' (T '' disc₀) : Set S') :=
+    himage ▸ Absorbent.image_of_surjective (f := φ.toLinearMap.restrictScalars ℝ)
+      φ.surjective hB.absorbent
+  let p := gaugeSeminorm hB.balanced hB.convex hB.absorbent
+  let p' := gaugeSeminorm bB cB aB
+  have hnorm (z : S') : p' z = p (φ.symm z) := by
+    change gauge _ z = gauge _ (φ.symm z)
+    rw [himage, ← traceJet_gauge_image φ, φ.apply_symm_apply]
+  let ψ : WithLocalSeminorm p' → WithLocalSeminorm p := fun z ↦ (φ.symm (show S' from z) : S)
+  have hψ : Isometry ψ := Isometry.of_dist_eq fun x y ↦ by
+    rw [dist_eq_norm, dist_eq_norm]
+    change p (φ.symm (show S' from x) - φ.symm (show S' from y)) =
+      p' ((show S' from x) - (show S' from y))
+    rw [← map_sub]
+    exact (hnorm _).symm
+  have hinj : Injective ψ := fun a b h ↦ φ.symm.injective h
+  have hsurj : Surjective ψ := fun z ↦ ⟨(φ (show S from z) : S'), φ.symm_apply_apply _⟩
+  have := hB.separated
+  exact ⟨hB.bounded.image T, bB, cB, aB,
+    T2Space.of_injective_continuous hinj hψ.continuous,
+    (hψ.isUniformInducing.completeSpace_congr hsurj).mpr hB.complete⟩
+
+/-- For a bounded biorthogonal family in a complete locally convex space, the
+image of the closed unit ball of ℓ¹ under synthesis supplies one Banach disc. -/
+private theorem bounded_biorthogonal_common_disc {I E : Type*} [DecidableEq I]
+    [AddCommGroup E] [Module ℂ E] [UniformSpace E] [IsUniformAddGroup E]
+    [PolynormableSpace ℂ E] [T2Space E] [CompleteSpace E]
+    (v : I → E) (bnd : IsVonNBounded ℂ (range v))
+    (L : I → StrongDual ℂ E) (hL : ∀ i j, L i (v j) = if i=j then (1:ℂ) else 0) :
+    ∃ D : Set E, IsBanachDisc D ∧ ∀ i, v i ∈ D := by
+  classical
+  let X := lp (fun _ : I ↦ ℂ) 1
+  let hp := PolynormableSpace.withSeminorms ℂ E
+  have bounded_q (q : {q : Seminorm ℂ E // Continuous q}) :
+      ∃ C > (0:ℝ), ∀ i, q.val (v i) ≤ C := by
+    obtain ⟨C,hC,h⟩ := hp.isVonNBounded_iff_seminorm_bounded.mp bnd q
+    exact ⟨C,hC,fun i ↦ (h _ (mem_range_self i)).le⟩
+  have normsum (x : X) : HasSum (fun i ↦ ‖x i‖) ‖x‖ := by
+    simpa using (lp.hasSum_norm (p := (1:ℝ≥0∞)) (by simp) x)
+  have hterms (x : X) : Summable (fun i ↦ x i • v i) := by
+    apply summable_iff_cauchySeq_finset.mpr
+    apply cauchySeq_finset_iff_sum_vanishing.mpr
+    intro neighborhood hU
+    obtain ⟨p,hp0,hpU⟩ := (PolynormableSpace.hasBasis_zero_ball ℂ E).mem_iff.mp hU
+    obtain ⟨C,hC,hh⟩ := bounded_q ⟨p,hp0⟩
+    have hmajor := (normsum x).summable.mul_left C
+    obtain ⟨s,hs⟩ := cauchySeq_finset_iff_sum_vanishing.mp
+      (summable_iff_cauchySeq_finset.mp hmajor) (Iio 1) (Iio_mem_nhds zero_lt_one)
+    refine ⟨s,fun u hu ↦ hpU (p.mem_ball_zero.mpr (lt_of_le_of_lt ?_ (hs u hu)))⟩
+    calc
+      p (∑ i ∈ u, x i • v i) ≤ ∑ i ∈ u, p (x i • v i) :=
+        Finset.le_sum_of_subadditive p (map_zero p).le (map_add_le_add p) _ _
+      _ ≤ _ := Finset.sum_le_sum fun i _ ↦ by
+        rw [map_smul_eq_mul, mul_comm]
+        exact mul_le_mul_of_nonneg_right (hh i) (norm_nonneg _)
+  let A : X →ₗ[ℂ] E :=
+    { toFun := fun x ↦ ∑' i, x i • v i
+      map_add' := fun x y ↦ by
+        simpa [add_smul] using (hterms x).tsum_add (hterms y)
+      map_smul' := fun c x ↦ by
+        change (∑' i, (c * x i) • v i) = c • _
+        simpa [smul_smul] using (hterms x).tsum_const_smul c }
+  have cont : Continuous A := by
+    apply hp.continuous_of_continuous_comp A
+    intro q
+    obtain ⟨C,hC,h⟩ := bounded_q q
+    apply Seminorm.continuous' (r := C+1)
+    refine mem_of_superset (Metric.ball_mem_nhds (0:X) one_pos) fun x hx ↦ ?_
+    rw [Metric.mem_ball,dist_zero_right] at hx
+    have hlimit := q.property.continuousAt.tendsto.comp (hterms x).hasSum
+    have hmajor := ((normsum x).mul_left C)
+    have hbound : q.val (A x) ≤ C * ‖x‖ :=
+      le_of_tendsto_of_tendsto' hlimit hmajor (fun s ↦ by
+        change q.val (∑ i ∈ s, x i • v i) ≤ ∑ i ∈ s, C * ‖x i‖
+        refine (Finset.le_sum_of_subadditive q.val (map_zero q.val).le (map_add_le_add q.val) _ _).trans ?_
+        apply Finset.sum_le_sum
+        intro i _
+        rw [map_smul_eq_mul,mul_comm]
+        exact mul_le_mul_of_nonneg_right (h i) (norm_nonneg _))
+    apply (q.val.comp A).mem_closedBall_zero.mpr
+    change q.val (A x) ≤ C+1
+    nlinarith
+  let S : X →L[ℂ] E := ⟨A,cont⟩
+  have hcoord (x : X) (i : I) : L i (S x) = x i := by
+    have he := (hterms x).hasSum.mapL (L i)
+    simpa [S,A,hL,map_smul,smul_eq_mul, mul_ite] using he.tsum_eq.symm
+  have inj : Injective S := by
+    intro x y hxy
+    ext i
+    exact (hcoord x i).symm.trans ((congrArg (L i) hxy).trans (hcoord y i))
+  refine ⟨S '' Metric.closedBall (0:X) 1, traceJet_banach_disc_image isBanachDisc_closedUnitBall S inj,?_⟩
+  intro i
+  refine ⟨lp.single (E := fun _ : I ↦ ℂ) 1 i (1:ℂ),?_,?_⟩
+  · rw [Metric.mem_closedBall,dist_zero_right,lp.norm_single (by norm_num),norm_one]
+  · change (∑' j : I, lp.single (E := fun _ : I ↦ ℂ) 1 i (1:ℂ) j • v j) = v i
+    simpa [lp.single_apply] using
+      (tsum_eq_single i (f := fun j : I ↦ lp.single (E := fun _ : I ↦ ℂ) 1 i (1:ℂ) j • v j)
+        (fun j hj ↦ by simp [lp.single_apply,hj]))
+
+/-- Any height-rapid nonnegative row mass admits a positive rapid splitting: after
+dividing by its coefficient the scaled polynomially growing primals are bounded.
+A different height exponent is allowed for every continuous seminorm. -/
+private theorem jet_primal_scale {I E : Type*}
+    [AddCommGroup E] [Module ℂ E] [TopologicalSpace E] [PolynormableSpace ℂ E]
+    (H m : I → ℝ) (hH : ∀ i, 1 ≤ H i) (hm : ∀ i, 0 ≤ m i)
+    (hr : ∀ k : ℕ, ∃ C > (0:ℝ), ∀ i, m i * (H i)^k ≤ C)
+    (b : I → E) (hb : ∀ p : Seminorm ℂ E, Continuous p → ∃ k : ℕ, ∃ C > (0:ℝ),
+      ∀ i, p (b i) ≤ C * (H i)^k) :
+    ∃ c : I → ℝ, (∀ i, 0 < c i) ∧ (∀ k : ℕ, ∃ C : ℝ, ∀ i, c i * (H i)^k ≤ C) ∧
+      (∀ i, m i / c i = if m i = 0 then 0 else c i) ∧
+      IsVonNBounded ℂ (range (fun i ↦ ((c i : ℝ) : ℂ) • b i)) := by
+  let c (i : I) := if m i = 0 then Real.exp (-H i) else Real.sqrt (m i)
+  have hp (i : I) : 0 < c i := by
+    dsimp [c]
+    split_ifs with h
+    · exact Real.exp_pos _
+    · exact Real.sqrt_pos.mpr (lt_of_le_of_ne (hm i) (Ne.symm h))
+  have hhalf (k : ℕ) : ∃ M > (0:ℝ), ∀ i, Real.sqrt (m i) * (H i)^k ≤ M := by
+    obtain ⟨D,hD,h⟩ := hr (2*k)
+    refine ⟨Real.sqrt D, Real.sqrt_pos.mpr hD, fun i ↦ ?_⟩
+    have hh := h i
+    have hpow : (H i)^(2*k) = ((H i)^k)^2 := by rw [Nat.mul_comm,pow_mul]
+    rw [hpow] at hh
+    have hi := Real.sq_sqrt (hm i)
+    have hM := Real.sq_sqrt hD.le
+    nlinarith [Real.sqrt_nonneg D,
+      sq_nonneg (Real.sqrt (m i) * (H i)^k - Real.sqrt D),
+      show (Real.sqrt (m i) * (H i)^k)^2 ≤ (Real.sqrt D)^2 by
+        rw [mul_pow,hi,hM]; exact hh]
+  have hquot (i : I) : m i / c i = Real.sqrt (m i) := by
+    by_cases hz : m i = 0
+    · simp [hz]
+    · apply (div_eq_iff (hp i).ne').mpr
+      simpa [c,hz,←sq] using (Real.sq_sqrt (hm i)).symm
+  have hrates (k : ℕ) : ∃ C : ℝ, ∀ i, c i * (H i)^k ≤ C := by
+    obtain ⟨D,_,h⟩ := hhalf k
+    refine ⟨max D k.factorial,fun i ↦ ?_⟩
+    dsimp [c]
+    split_ifs with hz
+    · refine le_trans ?_ (le_max_right _ _)
+      have he := (div_le_iff₀ (by positivity : 0 < (k.factorial:ℝ))).mp
+        (Real.pow_div_factorial_le_exp (H i) (zero_le_one.trans (hH i)) k)
+      rw [Real.exp_neg,←div_eq_inv_mul]
+      exact (div_le_iff₀ (Real.exp_pos _)).mpr (by simpa only [mul_comm] using he)
+    · exact (h i).trans (le_max_left _ _)
+  refine ⟨c,hp,hrates,?_,?_⟩
+  · intro i
+    rw [hquot]
+    by_cases h : m i = 0 <;> simp [h,c]
+  · apply (PolynormableSpace.withSeminorms ℂ E).isVonNBounded_iff_seminorm_bddAbove.mpr
+    intro p
+    obtain ⟨k,D,hD,hd⟩ := hb p.val p.property
+    obtain ⟨M,hM⟩ := hrates k
+    refine ⟨D*M,?_⟩
+    rintro _ ⟨_,⟨i,rfl⟩,rfl⟩
+    change p.val _ ≤ _
+    rw [map_smul_eq_mul, Complex.norm_real, Real.norm_eq_abs, abs_of_pos (hp i)]
+    calc
+      _ ≤ c i * (D * (H i)^k) := mul_le_mul_of_nonneg_left (hd i) (hp i).le
+      _ = D * (c i * (H i)^k) := by ring
+      _ ≤ _ := mul_le_mul_of_nonneg_left (hM i) hD.le
+
+/-- Polynomial growth of the primal interpolators, with the polynomial allowed to
+vary with the seminorm, gives the full positive scales and common Banach disc. -/
+private theorem jet_polynomial_primal_common_disc {I E : Type*} [DecidableEq I]
+    [AddCommGroup E] [Module ℂ E] [UniformSpace E] [IsUniformAddGroup E]
+    [PolynormableSpace ℂ E] [T2Space E] [CompleteSpace E]
+    (H m : I → ℝ) (hH : ∀ i, 1 ≤ H i) (hm : ∀ i, 0 ≤ m i)
+    (hr : ∀ k : ℕ, ∃ C > (0:ℝ), ∀ i, m i * (H i)^k ≤ C)
+    (b : I → E) (hb : ∀ p : Seminorm ℂ E, Continuous p → ∃ k : ℕ, ∃ C > (0:ℝ),
+      ∀ i, p (b i) ≤ C * (H i)^k)
+    (L : I → StrongDual ℂ E) (bio : ∀ i j, L i (b j) = if i=j then (1:ℂ) else 0) :
+    ∃ (c : I → ℝ) (D : Set E), (∀ i, 0 < c i) ∧ IsBanachDisc D ∧
+      (∀ i, ((m i / c i : ℝ) : ℂ) • b i ∈ D) ∧
+      ∀ k : ℕ, ∃ C : ℝ, ∀ i, c i * (H i)^k ≤ C := by
+  classical
+  obtain ⟨c,hc,hrates,hquot,hbdd⟩ := jet_primal_scale H m hH hm hr b hb
+  let v (i : I) := (c i:ℂ) • b i
+  let M (i : I) : StrongDual ℂ E := (c i:ℂ)⁻¹ • L i
+  have hbio (i j : I) : M i (v j) = if i=j then 1 else 0 := by
+    change (c i:ℂ)⁻¹ * L i ((c j:ℂ) • b j) = _
+    rw [map_smul,smul_eq_mul,bio]
+    by_cases h : i=j
+    · subst j
+      simp [Complex.ofReal_ne_zero.mpr (hc i).ne']
+    · simp [h]
+  obtain ⟨D,hD,hmem⟩ := bounded_biorthogonal_common_disc v hbdd M hbio
+  refine ⟨c,D,hc,hD,fun i ↦ ?_,hrates⟩
+  rw [hquot]
+  by_cases h : m i = 0
+  · simp only [h,ite_true,Complex.ofReal_zero,zero_smul]
+    have hzero := hD.absorbent.zero_mem
+    exact hzero
+  · simpa [h,v] using hmem i
+
+/-- Paper: Theorem 7.4.1.1(2), pp. 366–367. Polynomial growth in each continuous
+seminorm of a biorthogonal primal family suffices for the spectral presentation. -/
+private theorem spectral_trace_of_polynomial_primal_interpolation (χ : U) (τ : ℝ≥0ˣ →ₜ* IdeleGroup (𝓞 F) F) (hτ : RightInverse τ (ideleNorm F))
+    (a : ℝ) (N : ℕ) (φ : 𝒟) (d : jets(χ, τ, hτ) → StrongDual ℂ (SpectralNuclearityQuotient χ τ hτ a))
+    (hd : ∀ i f, d i ((spectralNuclearityDenominator χ τ hτ a).mkQ f) = iteratedDeriv i.2.val f.val (i.1.val - (a:ℂ))) :
+    let D := (spectralNuclearityDenominator χ τ hτ a)
+    let Q := (SpectralNuclearityQuotient χ τ hτ a)
+    let I := {i : jets(χ, τ, hτ) // i.2.val < N}
+    let K := ⨅ i : I, (d i.val).toLinearMap.ker
+    let E := Q ⧸ K
+    letI : UniformSpace E := IsTopologicalAddGroup.rightUniformSpace E
+    let n := fun z : zeros(χ, τ, hτ) ↦ min N (multiplicity(χ, τ, hτ, z))
+    ∀ (A : B →L[ℂ] B) (Aq : Q →L[ℂ] Q) (T : E →L[ℂ] E),
+      (∀ f s, (A f).val s = nuclearityTestMellin χ φ s * f.val s) →
+      (∀ f, Aq (D.mkQ f) = D.mkQ (A f)) →
+      (∀ x, T (K.mkQ x) = K.mkQ (Aq x)) →
+      ∀ (L : I → StrongDual ℂ E), (∀ i x, L i (K.mkQ x) = d i.val x) →
+      ∀ b : I → E, (∀ i j, L i (b j) = if i=j then 1 else 0) →
+      (∀ q : Seminorm ℂ E, Continuous q → ∃ k : ℕ, ∃ C > (0:ℝ),
+        ∀ i, q (b i) ≤ C * (1+|i.val.1.val.im|)^k) →
+      IsStronglyNuclearOperator T ∧ ∀ r : NuclearPresentation T,
+        HasSum (fun l ↦ r.coeff l * r.functional l (r.vector l).val)
+          (∑' z : zeros(χ, τ, hτ), (n z:ℂ)*nuclearityTestMellin χ φ (z.val-(a:ℂ))) := by
+  classical
+  intro D Q I K E n A Aq T hA hAq hT L hL b bio poly
+  obtain ⟨L₀,he,hbounds⟩ := spectralNuclearity_retainedJets_weighted χ τ hτ a N d hd
+  obtain ⟨q,hq,h0⟩ := hbounds 0
+  have hsame (i : I) (x : E) : L₀ i x = L i x := by
+    obtain ⟨y,rfl⟩ := K.mkQ_surjective x
+    rw [he,hL]
+  have hbounded : ∃ q : Seminorm ℂ E, Continuous q ∧ ∀ i x, ‖L i x‖ ≤ q x :=
+    ⟨q,hq,fun i x ↦ by simpa only [pow_zero,one_mul,hsame] using h0 i x⟩
+  let t (i : I) : Fin (n i.val.1) := ⟨i.val.2.val,lt_min i.property i.val.2.isLt⟩
+  let Arow (z : zeros(χ, τ, hτ)) := jetBlock(nuclearityTestMellin χ φ, z.val-(a:ℂ), n z)
+  let m (i : I) : ℝ := ∑ j, ‖Arow i.val.1 (t i) j‖
+  let : UniformSpace E := IsTopologicalAddGroup.rightUniformSpace E
+  let : IsUniformAddGroup E := isUniformAddGroup_of_addCommGroup
+  let : IsClosed (D : Set B) := schwartzBergmanDivisible_isClosed _
+  let : T2Space B := spectralJet_sb_nuclear.1
+  let : PolynormableSpace ℂ B := spectralJet_sb_nuclear.2.1
+  let : T2Space Q := inferInstanceAs (T2Space (B ⧸ D))
+  let : PolynormableSpace ℂ Q := polynormableSpace_quotient D
+  let : IsClosed (K : Set Q) := by
+    change IsClosed (↑(⨅ i : I, (d i.val).toLinearMap.ker) : Set Q)
+    rw [Submodule.coe_iInf]
+    exact isClosed_iInter (fun i ↦ (d i.val).isClosed_ker)
+  let : T2Space E := inferInstanceAs (T2Space (Q ⧸ K))
+  let : PolynormableSpace ℂ E := polynormableSpace_quotient K
+  let : CompleteSpace E := (isFrechetTVS_quotient
+    (isFrechetTVS_quotient (schwartzBergman_frechet univ isOpen_univ ordConnected_univ univ_nonempty)
+      D (inferInstanceAs (IsClosed (D : Set B)))) K (inferInstanceAs (IsClosed (K : Set Q)))).2.2.2
+  let H (i : I) : ℝ := 1+|i.val.1.val.im|
+  have hr (k : ℕ) : ∃ C > (0:ℝ), ∀ i, m i * H i ^ k ≤ C := by
+    let f := nuclearityTestMellin χ φ
+    have hf := archNuclearityDenominator_closed_invariant_multiplier χ φ
+    have hv := spectralJet_globalStrip hf.continuous
+      (spectralNuclearity_trace_vertical_decay χ φ (-a-1) ((1-a)+1) (by linarith)) k
+    obtain ⟨C,hC,hjets⟩ := spectralJet_jetStrip hf (a := -a) (b := 1-a) k N hv
+    refine ⟨((N:ℝ)+1) * (2^N*C),by positivity,fun i ↦ ?_⟩
+    obtain ⟨u,hu,_,he⟩ := spectralNuclearity_trace_zero_order χ τ hτ i.val.1
+    have hz : 0 < (MeromorphicOn.divisor (continuedCompletedHeckeL χ) univ i.val.1.val) := by
+      rw [he]; exact_mod_cast hu
+    have strip := spectralNuclearity_trace_zero_strip χ hz
+    have hs : (i.val.1.val - (a:ℂ)).re ∈ Icc (-a) (1-a) := by
+      simp only [Complex.sub_re,Complex.ofReal_re,mem_Icc]
+      constructor <;> linarith [strip.1,strip.2]
+    change (∑ j : Fin (n i.val.1), ‖Arow i.val.1 (t i) j‖) * H i ^ k ≤ _
+    rw [Finset.sum_mul]
+    calc
+      _ ≤ ∑ _j : Fin (n i.val.1), (2:ℝ)^N * C := by
+        apply Finset.sum_le_sum
+        intro j _
+        change ‖(if j.val ≤ i.val.2.val then (i.val.2.val.choose j.val : ℂ) *
+          iteratedDeriv (i.val.2.val-j.val) f (i.val.1.val-(a:ℂ)) else 0)‖ * H i ^ k ≤ _
+        by_cases hh : j.val ≤ i.val.2.val
+        · simp only [hh,ite_true,norm_mul,Complex.norm_natCast,mul_assoc]
+          have hj := hjets (i.val.1.val-(a:ℂ)) hs (i.val.2.val-j.val)
+            ((Nat.sub_le _ _).trans i.property.le)
+          simp only [Complex.sub_im,Complex.ofReal_im,sub_zero] at hj
+          have ch : (i.val.2.val.choose j.val : ℝ) ≤ (2:ℝ)^N := by
+            exact_mod_cast (Nat.choose_le_two_pow i.val.2.val j.val).trans (Nat.pow_le_pow_right (by decide : 0 < 2) i.property.le)
+          exact mul_le_mul ch hj (by dsimp [H]; positivity) (by positivity)
+        · simp [hh, hC.le]
+      _ ≤ _ := by
+        rw [Finset.sum_const,Finset.card_univ,Fintype.card_fin,nsmul_eq_mul]
+        gcongr
+        have hn : n i.val.1 ≤ N := min_le_left _ _
+        exact_mod_cast hn.trans (Nat.le_succ _)
+  obtain ⟨c,disc₀,hc,hP,hmem,hrates⟩ := jet_polynomial_primal_common_disc H m
+    (fun i ↦ by dsimp [H]; linarith [abs_nonneg i.val.1.val.im])
+    (fun i ↦ Finset.sum_nonneg (fun _ _ ↦ norm_nonneg _)) hr b poly L bio
+  obtain ⟨r,hfast,htrace⟩ :=
+    traceJet_disc_suffices χ τ hτ a N φ d hd A Aq T hA hAq hT L hL hbounded b c disc₀ bio hc hP hmem hrates
+  refine ⟨⟨r,hfast⟩,?_⟩
+  obtain ⟨v,hv,_⟩ := spectralJet_unique_presentation_sum χ τ hτ a N d T ⟨r⟩
+  have he := (hv r).2.unique htrace
+  exact fun s ↦ he ▸ (hv s).2
+
+
 end RetainedJetBounds
 
 open Classical in
