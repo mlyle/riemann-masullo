@@ -3516,6 +3516,34 @@ private theorem lineProfile_all_bounded_jets_vanish
   let j : SpectralLineJetIndex χ a s := ⟨(ξ,t,k), (lt_spectralBoundaryMultiplicity s _ k).mpr ⟨hk,by linarith⟩⟩
   exact (lineProfile_admitted_functional χ ξ hs P γ hγ hF e he hrep j rfl Λ hΛ y).trans (by rw [hy j rfl,mul_zero])
 
+/-- In a fixed isotype the geometric theta closure contains every vector
+annihilated by the continuous derivatives below the Hecke zero orders. -/
+private theorem lineProfile_isotype_mem_of_bounded_jets
+    (η : PontryaginDual C𝔽) (a s : ℝ) (hs : 0 ≤ s)
+    (P : 𝓢(ℝ, ℂ) →L[ℂ] SchwartzBruhat C𝔽) (γ : ℝ → PontryaginDual C𝔽)
+    (hγ : ∀ t x, γ t x = (η x)⁻¹ * Circle.exp (-t * logNorm x))
+    (hF : ∀ p t, lcaFourier μ𝔽 (P p) (γ t) = p t)
+    (hoff : ∀ p ψ, ψ ∉ range γ → lcaFourier μ𝔽 (P p) ψ = 0)
+    (honto : ∀ v : SchwartzBruhat C𝔽, (∀ (k : C₁) (x : C𝔽), v (k.val⁻¹*x) = (η k.val : ℂ) * v x) → ∃ p, P p = v)
+    (e : 𝓢(ℝ, ℂ) →ₗ[ℂ] Wχ(η, s, hs)) (hrep : ∀ p, ((e p).val : C𝔽 → ℂ) =ᵐ[μ𝔽] (P p : C𝔽 → ℂ))
+    (y : Wχ(η, s, hs))
+    (hy : ∀ (t : ℝ) (k : ℕ), k < (meromorphicOrderAt (continuedCompletedHeckeL η) (shift(a, t))).untop₀.toNat →
+      ∀ Λ : StrongDual ℂ Wχ(η, s, hs), (∀ p, Λ (e p) = iteratedDeriv k p t) → Λ y = 0) :
+    y.val ∈ globalThetaSobolev F a (le_rfl : (0 : ℝ) ≤ 0) hs := by
+  let m (t : ℝ) := (meromorphicOrderAt (continuedCompletedHeckeL η) (shift(a,t))).untop₀.toNat
+  let N := (globalThetaSobolev F a (le_rfl : (0:ℝ) ≤ 0) hs).comap (Wχ(η, s, hs)).subtype
+  have hN : IsClosed (N : Set Wχ(η, s, hs)) := (Submodule.isClosed_topologicalClosure _).preimage continuous_subtype_val
+  have he := lineProfile_denseEmbedding η s hs P honto e hrep
+  have hint := lineProfile_chart_intertwine η s hs P γ hF hoff e hrep
+  let U := lineProfile_chart_approximateUnit η s hs P γ hγ hF honto e hint
+  let g := U.choose
+  let T := U.choose_spec.choose
+  have hT := U.choose_spec.choose_spec
+  exact schwartzMap_mem_closedSubmodule_of_vanishing_jets m N hN e he
+    (fun h _ ↦ lineProfile_chart_multiplier η s hs P e hint h)
+    (continuedCompletedHeckeL_finite_vertical_zeros_on_compact η a) (lineProfile_hecke_compactIdeal η a s hs P γ hγ hF hoff e hrep)
+    g hT.1 T hT.2.1 hT.2.2 y hy
+
 /-- Reverse norm-closure inclusion inside a single compact-character isotype on
 a zero-width spectral line. Each surviving jet of this isotype is tested. -/
 private theorem lineProfile_isotype_synthesis_chart
@@ -3529,19 +3557,9 @@ private theorem lineProfile_isotype_synthesis_chart
     (y : Wχ(χ ξ, s, hs0(hs)))
     (hy : ∀ j : SpectralLineJetIndex χ a s, j.val.1 = ξ → spectralSobolevPairing y.val zeroVec(χ,hs,j) = 0) :
     y.val ∈ globalThetaSobolev F a (le_rfl : (0:ℝ) ≤ 0) hs0(hs) := by
-  let m (t : ℝ) := (meromorphicOrderAt (continuedCompletedHeckeL (χ ξ)) (shift(a,t))).untop₀.toNat
-  let N := (globalThetaSobolev F a (le_rfl : (0:ℝ) ≤ 0) hs0(hs)).comap (Wχ(χ ξ, s, hs0(hs))).subtype
-  have hN : IsClosed (N : Set Wχ(χ ξ, s, hs0(hs))) := (Submodule.isClosed_topologicalClosure _).preimage continuous_subtype_val
   have he := lineProfile_denseEmbedding (χ ξ) s hs0(hs) P honto e hrep
-  have hint := lineProfile_chart_intertwine (χ ξ) s hs0(hs) P γ hF hoff e hrep
-  let U := lineProfile_chart_approximateUnit (χ ξ) s hs0(hs) P γ hγ hF honto e hint
-  let g := U.choose
-  let T := U.choose_spec.choose
-  have hT := U.choose_spec.choose_spec
-  exact schwartzMap_mem_closedSubmodule_of_vanishing_jets m N hN e he
-    (fun h _ ↦ lineProfile_chart_multiplier (χ ξ) s hs0(hs) P e hint h)
-    (continuedCompletedHeckeL_finite_vertical_zeros_on_compact (χ ξ) a) (lineProfile_hecke_compactIdeal (χ ξ) a s hs0(hs) P γ hγ hF hoff e hrep)
-    g hT.1 T hT.2.1 hT.2.2 y (lineProfile_all_bounded_jets_vanish χ ξ hs P γ hγ hF honto e he hrep y hy)
+  exact lineProfile_isotype_mem_of_bounded_jets (χ ξ) a s hs0(hs) P γ hγ hF hoff honto e hrep y
+    (lineProfile_all_bounded_jets_vanish χ ξ hs P γ hγ hF honto e he hrep y hy)
 
 private theorem lineProfile_isotype_synthesis
     (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (ξ : PontryaginDual C₁) {a s : ℝ} (hs : 1 < s)
@@ -3703,6 +3721,44 @@ private theorem spectralLineJet_commonKernel_forward_proved (χ : PontryaginDual
     induction v using Submodule.Quotient.induction_on with
     | H f => exact hgen f
   exact (H.choose_spec.1 y).symm.trans ((E.toLinearMap.range.topologicalClosure_minimal hR Λ.isClosed_ker) hy)
+
+/-- At degree at most one no derivative on a frequency line is continuous in
+the weighted norm. Even the values at Hecke zeros impose no closed condition. -/
+private theorem lineProfile_lowDegree_mem (χ : PontryaginDual C𝔽) (a s : ℝ)
+    (hs : 0 ≤ s) (hs' : s ≤ 1) (y : Wχ(χ, s, hs)) :
+    y.val ∈ globalThetaSobolev F a (le_rfl : (0 : ℝ) ≤ 0) hs := by
+  obtain ⟨P, γ, hγ, hF, hoff, hiso, honto⟩ :=
+    exists_schwartzBruhat_mellinFrequencyChart m𝔽 hm𝔽 hms𝔽 μ𝔽 χ
+  obtain ⟨e, hrep⟩ := lineProfile_sobolevLift χ s hs P hiso
+  apply lineProfile_isotype_mem_of_bounded_jets χ a s hs P γ hγ hF hoff honto e hrep y
+  intro t k _ Λ hΛ
+  have h := lineProfile_jet_endpoint_necessary χ s hs P γ hγ hF honto e hrep t k Λ hΛ
+  linarith [Nat.cast_nonneg (α := ℝ) k]
+
+/-- Paper: Theorem 10.2.2.1, p. 446, at width zero and degree at most one.
+The polar-free theta classes are dense at every real center.
+Deviation: With the strict endpoint cutoff the jet family is empty, including
+at degree one. No chart derivative extends continuously to this Sobolev space. -/
+theorem globalThetaSobolev_line_eq_top_of_le_one (a s : ℝ) (hs : 0 ≤ s) (hs' : s ≤ 1) :
+    globalThetaSobolev F a (le_rfl : (0 : ℝ) ≤ 0) hs = ⊤ := by
+  apply top_unique
+  intro y _
+  obtain ⟨χ, hχ⟩ := exists_spectralBasepointChoice F
+  let : CompactSpace C₁ := (ideleClassGroup_finiteness F).2.1
+  let κ : Measure C₁ := Measure.haar
+  let : κ.IsHaarMeasure := inferInstanceAs (Measure.haar (G := C₁)).IsHaarMeasure
+  let ρ := (hardySobolevTranslation μ𝔽 m𝔽 0 0 s le_rfl hs).comp (ideleClassNorm F).ker.subtype
+  have hρ : Continuous (fun p : C₁ × WI(s) ↦ ρ p.1 p.2) :=
+    (exists_hardySobolevTranslation μ𝔽 m𝔽 0 0 s le_rfl hs).choose_spec.2.comp
+      ((continuous_subtype_val.comp continuous_fst).prodMk continuous_snd)
+  apply lineProfile_compact_components (J := Empty) κ ρ hρ _ (Submodule.isClosed_topologicalClosure _)
+    Empty.elim y (fun _ j ↦ j.elim)
+  intro ξ z hz _
+  have hz' : z ∈ Wχ(χ ξ, s, hs) := by
+    change z ∈ actionIsotype ρ ((χ ξ).comp restriction)
+    rw [hχ ξ]
+    exact hz
+  exact lineProfile_lowDegree_mem (χ ξ) a s hs hs' ⟨z, hz'⟩
 
 end LineThetaSynthesis
 
@@ -4098,6 +4154,68 @@ theorem spectralLineJet_denseInterpolants (χ : PontryaginDual C₁ → Pontryag
     JetInterpolation(J, a, le_rfl (a := (0 : ℝ)), lineHs(hs), u) := by
   exact lineJet_dense_interpolants_of_reverse χ _hχ hs
     (fun f ↦ (spectralLineJet_commonKernel (a := a) χ _hχ hs f).mpr)
+
+/-- Paper: Theorem 10.2.2.1, p. 446. At width zero the common-kernel and
+dense-interpolant assertions hold for every nonnegative degree.
+Deviation: Use the strict boundary cutoff. For degrees at most one the
+theta image is dense and the admitted jet family is empty. -/
+theorem spectralStripJet_zeroWidth_geometry (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
+    (hχ : IsSpectralBasepointChoice χ) (a s : ℝ) (hs : 0 ≤ s) :
+    let J := SpectralStripJetIndex χ a 0 s
+    let u : J → W'(-0, 0, s) := stripU(χ, le_rfl (a := (0 : ℝ)), hs)
+    JetKernel(a, stripI(le_rfl (a := (0 : ℝ))), hs, u) ∧
+      JetInterpolation(J, a, stripI(le_rfl (a := (0 : ℝ))), hs, u) := by
+  let J := SpectralStripJetIndex χ a 0 s
+  let claim (l : ℝ) (hl : l ≤ 0) := ∀ (hm : ∀ j : J, MemLp (stripJet(χ, j)) 2 L2μ'(l, 0, s)),
+    let v (j : J) := (hm j).toLp (stripJet(χ, j))
+    JetKernel(a, hl, hs, v) ∧ JetInterpolation(J, a, hl, hs, v)
+  have H : claim 0 le_rfl := by
+    intro hm v
+    obtain ⟨e, he⟩ := spectralLineJet_zeroWidth_indices χ a s
+    by_cases hs1 : 1 < s
+    · have hv (i : SpectralLineJetIndex χ a s) : v (e i) = (lineU(χ, hs1)) i :=
+        MemLp.toLp_congr _ _ (.of_forall (congrFun (he i)))
+      have hK := spectralLineJet_commonKernel (a := a) χ hχ hs1
+      obtain ⟨f, hf, hcross, hd⟩ := spectralLineJet_denseInterpolants (a := a) χ hχ hs1
+      constructor
+      · intro y
+        constructor
+        · intro hy j
+          obtain ⟨i, rfl⟩ := e.surjective j
+          rw [hv]
+          exact (hK y).mp hy i
+        · intro hy
+          exact (hK y).mpr (fun i ↦ (hv i) ▸ hy (e i))
+      · refine ⟨f ∘ e.symm, ?_, ?_, ?_⟩
+        · intro j
+          obtain ⟨i, rfl⟩ := e.surjective j
+          simpa only [comp_apply, Equiv.symm_apply_apply, hv] using hf i
+        · intro i j hij
+          obtain ⟨k, rfl⟩ := e.surjective i
+          obtain ⟨l, rfl⟩ := e.surjective j
+          simpa only [comp_apply, Equiv.symm_apply_apply, hv] using hcross k l (fun h ↦ hij (congrArg e h))
+        · let q := (Θ(a, le_rfl (a := (0 : ℝ)), hs)).mkQ
+          change Dense (Submodule.span ℂ (range ((fun i ↦ q (f i)) ∘ e.symm)) : Set (spectralSobolevQuotient F a (le_rfl (a := (0 : ℝ))) hs))
+          rwa [e.symm.surjective.range_comp]
+    · have ht := globalThetaSobolev_line_eq_top_of_le_one (F := F) a s hs (le_of_not_gt hs1)
+      have hemt (j : J) : False := by
+        let i := e.symm j
+        have hcut := ((lt_spectralBoundaryMultiplicity _ _ _).mp i.property).2
+        linarith [Nat.cast_nonneg (α := ℝ) i.val.2.2]
+      constructor
+      · intro y
+        rw [ht]
+        exact ⟨fun _ j ↦ (hemt j).elim, fun _ ↦ Submodule.mem_top⟩
+      · refine ⟨fun _ ↦ 0, fun j ↦ (hemt j).elim, fun i _ _ ↦ (hemt i).elim, ?_⟩
+        intro q
+        obtain ⟨f, rfl⟩ := (Θ(a, le_rfl (a := (0 : ℝ)), hs)).mkQ_surjective q
+        apply subset_closure
+        rw [(spectralSobolevQuotient_eq_zero a le_rfl hs f).mpr (ht ▸ Submodule.mem_top)]
+        exact (Submodule.span ℂ _).zero_mem
+  have transport (l : ℝ) (hl : l ≤ 0) (h0 : l = 0) : claim l hl := by
+    subst l
+    exact H
+  exact transport (-0) _ neg_zero (spectralStripJet_memLp χ le_rfl hs)
 
 /-- Paper: Theorem 10.2.1.1 and Terminology 10.2.1.1, p. 440. The a-line
 jets represent quotient functionals and admit a Markushevich biorthogonal family.
