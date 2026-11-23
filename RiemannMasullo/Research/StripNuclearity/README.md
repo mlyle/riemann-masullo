@@ -22,7 +22,7 @@ $$
 
 The bounded operator `exists_scalar_weighted_convolution` represents ordinary convolution on every vector. Its Hilbert adjoint acts on compact tests by convolution with the reflected conjugate kernel, weighted by the ratio of source and output densities. The two far-source pieces each factor through $R$. On the remaining compact source set, finite propagation also bounds the output support. Two square-integrable masks and absolute Fourier inversion give a nuclear integral operator there. Adding the three pieces proves trace class for convolution after the fixed-character projection.
 
-The passage to the full idèle-class group requires transport of the scalar operator and its spectral projection to each relevant character component. For an infinite family of angular characters, it also requires summable component nuclear norms.
+For an inverse-character radial lift $L$, the scalar common kernel maps into the full geometric theta subspace. Orthogonality therefore gives $P_{\rm rad}L^*P=L^*P$, where $P$ is the ambient Chapter 10 spectral projector. The theorem `exists_projectiveKernel_projected_radial_lift` constructs the reciprocal-weight tensor representing $(L A_κ L^*)P$ for every smooth compact radial test $κ$. The Tamagawa-to-normalized Haar ratio is explicit in the moment comparison. Identifying the ambient convolution by a pure angular test with $L A_κ L^*$ then gives its tensor. An infinite family of angular characters additionally requires summable component nuclear norms.
 
 ## Relation to the manuscript
 

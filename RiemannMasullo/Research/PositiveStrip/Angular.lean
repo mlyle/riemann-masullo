@@ -162,6 +162,16 @@ private theorem stripAngular_closed_radial (ξ : PontryaginDual C𝔽) (α s : �
   filter_upwards [hU (T f), Lp.coeFn_compMeasurePreserving (f : Lp ℂ 2 η) hw] with x h₁ h₂
   exact h₁.trans (congrArg (v x * ·) h₂)
 
+/-- The logarithm of the idèle norm is measure preserving for normalized
+modulated Haar measure. Inverse-character pullback sends the radial scalar
+space continuously onto a closed subspace of the Tamagawa Sobolev space. -/
+theorem exists_normalized_idele_log_haar_and_radial_lift (ψ : PontryaginDual C𝔽) (α s : ℝ) :
+    ∃ (ν : Measure C𝔽) (_ : ν.IsHaarMeasure), MeasurePreserving logNorm ν volume ∧
+      ∃ L : Ws(α, s) →L[ℂ] W(-α, α, s), IsClosed (range L) ∧
+        ∀ f, (L f : C𝔽 → ℂ) =ᵐ[μ𝔽] fun x ↦ (ψ x : ℂ)⁻¹ * f (logNorm x) :=
+  ⟨nuTheta, thetaStripCanonicalHaar, sobolev_log_preserving m𝔽 hm𝔽 hms𝔽,
+    stripAngular_closed_radial ψ α s⟩
+
 private theorem stripAngular_radial_eigen (χ : PontryaginDual C𝔽) {α s : ℝ} (hα : 0 ≤ α) (hs : 0 ≤ s)
     (f : Ws(α, s)) (y : W(-α, α, s))
     (hy : (y : C𝔽 → ℂ) =ᵐ[μ𝔽] fun x ↦ (χ x : ℂ)⁻¹ * f (logNorm x)) (k : C₁) :
