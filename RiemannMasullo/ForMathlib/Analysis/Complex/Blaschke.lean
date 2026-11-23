@@ -539,16 +539,17 @@ private theorem product_divisible {ι : Type*} (a : ι → ℂ) (m : ι → ℕ)
     rw [hn, mul_div_assoc]
   rw [htail, hfac, mul_pow, mul_assoc]
 
-/-- Any divisor satisfying the Blaschke condition has contractive holomorphic
-tail factors on the disk. The tails tend pointwise to one and have all
-prescribed zero multiplicities outside a finite set. -/
-theorem exists_holomorphic_disk_tails {ι : Type*} (a : ι → ℂ) (m : ι → ℕ)
+/-- The normalized Blaschke tails are contractive. Their distance from one is
+bounded by the disk distortion times the remaining Blaschke mass, uniformly
+on each closed subdisk. -/
+theorem exists_holomorphic_disk_tails_bound {ι : Type*} (a : ι → ℂ) (m : ι → ℕ)
     (ha : ∀ i, a i ≠ 0) (ha' : ∀ i, ‖a i‖ < 1)
     (hs : Summable (fun i ↦ (m i : ℝ) * (1 - ‖a i‖))) :
     ∃ B : Finset ι → ℂ → ℂ,
       (∀ S, AnalyticOnNhd ℂ (B S) (ball 0 1)) ∧
       (∀ S z, ‖z‖ < 1 → ‖B S z‖ ≤ 1) ∧
-      (∀ z, ‖z‖ < 1 → Tendsto (fun S ↦ B S z) atTop (𝓝 1)) ∧
+      (∀ (S : Finset ι) (z : ℂ), ‖z‖ < 1 → ‖B S z - 1‖ ≤
+        ((1 + ‖z‖) / (1 - ‖z‖)) * ∑' j : {j // j ∉ S}, (m j.val : ℝ) * (1 - ‖a j.val‖)) ∧
       ∀ (S : Finset ι) (i : ι), i ∉ S →
         ∃ G : ℂ → ℂ, AnalyticAt ℂ G (a i) ∧
           B S =ᶠ[𝓝 (a i)] fun z ↦ (z - a i) ^ m i * G z := by
@@ -563,17 +564,31 @@ theorem exists_holomorphic_disk_tails {ι : Type*} (a : ι → ℂ) (m : ι → 
     product_analytic (ar S) (mult S) (hn S) (hlt S) (hconv S)
   have hbound (S : Finset ι) (z : ℂ) (hz : ‖z‖ < 1) := product_bound
     (ar S) (mult S) (hn S) (hlt S) (hconv S) z hz
-  refine ⟨tail, hA, fun S z hz ↦ (hbound S z hz).1, ?_, ?_⟩
-  · intro z hz
-    let C := (1 + ‖z‖) / (1 - ‖z‖)
-    let u (i : ι) := (m i : ℝ) * (1 - ‖a i‖)
-    have hmajor (S : Finset ι) : ‖tail S z - 1‖ ≤ C * ∑' j : {x // x ∉ S}, u j.val :=
-      (hbound S z hz).2
-    have hlim : Tendsto (fun S : Finset ι ↦ C * ∑' j : {x // x ∉ S}, u j.val) atTop (𝓝 0) := by
-      simpa only [mul_zero] using (tendsto_tsum_compl_atTop_zero u).const_mul C
-    exact tendsto_iff_norm_sub_tendsto_zero.mpr (squeeze_zero (fun S ↦ norm_nonneg _) hmajor hlim)
-  · intro S i hi
-    let j : {x // x ∉ S} := ⟨i, hi⟩
-    exact product_divisible (ar S) (mult S) (hn S) (hlt S) (hconv S) j
+  refine ⟨tail, hA, fun S z hz ↦ (hbound S z hz).1, fun S z hz ↦ (hbound S z hz).2, ?_⟩
+  intro S i hi
+  exact product_divisible (ar S) (mult S) (hn S) (hlt S) (hconv S) ⟨i, hi⟩
+
+/-- Any divisor satisfying the Blaschke condition has contractive holomorphic
+tail factors on the disk. The tails tend pointwise to one and have all
+prescribed zero multiplicities outside a finite set. -/
+theorem exists_holomorphic_disk_tails {ι : Type*} (a : ι → ℂ) (m : ι → ℕ)
+    (ha : ∀ i, a i ≠ 0) (ha' : ∀ i, ‖a i‖ < 1)
+    (hs : Summable (fun i ↦ (m i : ℝ) * (1 - ‖a i‖))) :
+    ∃ B : Finset ι → ℂ → ℂ,
+      (∀ S, AnalyticOnNhd ℂ (B S) (ball 0 1)) ∧
+      (∀ S z, ‖z‖ < 1 → ‖B S z‖ ≤ 1) ∧
+      (∀ z, ‖z‖ < 1 → Tendsto (fun S ↦ B S z) atTop (𝓝 1)) ∧
+      ∀ (S : Finset ι) (i : ι), i ∉ S →
+        ∃ G : ℂ → ℂ, AnalyticAt ℂ G (a i) ∧
+          B S =ᶠ[𝓝 (a i)] fun z ↦ (z - a i) ^ m i * G z := by
+  obtain ⟨B, hA, hb, herr, hv⟩ := exists_holomorphic_disk_tails_bound a m ha ha' hs
+  refine ⟨B, hA, hb, ?_, hv⟩
+  intro z hz
+  let C := (1 + ‖z‖) / (1 - ‖z‖)
+  let u (i : ι) := (m i : ℝ) * (1 - ‖a i‖)
+  have hlim : Tendsto (fun S : Finset ι ↦ C * ∑' j : {x // x ∉ S}, u j.val) atTop (𝓝 0) := by
+    simpa only [mul_zero] using (tendsto_tsum_compl_atTop_zero u).const_mul C
+  exact tendsto_iff_norm_sub_tendsto_zero.mpr
+    (squeeze_zero (fun S ↦ norm_nonneg _) (fun S ↦ herr S z hz) hlim)
 
 end RiemannMasullo.Blaschke
