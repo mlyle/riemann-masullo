@@ -61,15 +61,112 @@ local notation "pvTest(" S ", " f ")" =>
 local notation "theta(" f ")" =>
   (Submodule.Quotient.mk (f : ℬ₀) : GlobalPolarFreeThetaSpace F)
 
--- TODO(paper-gap): The proof of density uses §10.2.1's passage from the
--- test-space Mellin image to an annihilator in the completed norm.
--- The cited Theorem 10.2.1.1 assumes s > 1. For 0 ≤ s ≤ 1, density in degree
--- 2 descends through the dense inclusion of weighted spaces by log-norm cutoff.
+section ZeroLineDensity
+
+/-- A positive zero order at real part zero would reflect to a zero on the
+one-line, where the completed Hecke continuation has no zeros. -/
+private theorem denseRange_globalTheta_zeroLine_order (χ : PontryaginDual C𝔽) {z : ℂ}
+    (hz : z.re = 0) : meromorphicOrderAt (continuedCompletedHeckeL χ) z ≤ 0 := by
+  let L := continuedCompletedHeckeL χ
+  let L' := continuedCompletedHeckeL χ⁻¹
+  obtain ⟨hL, h⟩ := continuedCompletedHeckeL_spec χ
+  obtain ⟨hL', h'⟩ := continuedCompletedHeckeL_spec χ⁻¹
+  obtain ⟨ε, hε, hn, hf⟩ := completedHeckeL_continuation_functionalEquation χ L L' hL h hL' h'
+  let r (w : ℂ) := 1 - w
+  have hfun : L' ∘ r = ε * L := funext hf
+  have hr := (hasDerivAt_id z).const_sub (1 : ℂ)
+  have he : meromorphicOrderAt L z = meromorphicOrderAt L' (1 - z) := by
+    rw [← meromorphicOrderAt_mul_of_ne_zero (f := L) (hε.analyticAt z) (hn z), ← hfun]
+    apply meromorphicOrderAt_comp_of_deriv_ne_zero (analyticAt_const.sub analyticAt_id)
+    change deriv r z ≠ 0
+    rw [show deriv r z = -1 from hr.deriv]
+    norm_num
+  change meromorphicOrderAt L z ≤ 0
+  rw [he]
+  have hRe : (1 - z).re = 1 := by simp [hz]
+  apply le_of_not_gt
+  intro hzero
+  have hbad := completedHeckeL_continuation_zeros χ⁻¹ L' hL' h' (hRe ▸ zero_lt_one) hzero
+  exact (lt_irrefl (1 : ℝ)) (hRe ▸ hbad)
+
+/-- At degree greater than one the line common-kernel theorem applies.
+There are no admitted jets on the zero-line. -/
+private theorem denseRange_globalTheta_zeroLine_high {s : ℝ} (hs : 1 < s) :
+    DenseRange (fun u : GlobalPolarFreeThetaSpace F ↦ (j(0, (zero_lt_one.trans hs).le) u : W(s))) := by
+  obtain ⟨χ, hχ⟩ := exists_spectralBasepointChoice F
+  intro y
+  change y ∈ globalThetaSobolev F 0 hI (zero_lt_one.trans hs).le
+  refine (spectralLineJet_commonKernel (a := 0) χ hχ hs y).mpr (fun i ↦ False.elim ?_)
+  let z : ℂ := (0 : ℂ) + (i.val.2.1 : ℂ) * Complex.I
+  have ho := denseRange_globalTheta_zeroLine_order (χ i.val.1) (z := z) (by simp [z])
+  obtain ⟨n, hn⟩ := WithTop.ne_top_iff_exists.mp (ne_top_of_le_ne_top (WithTop.coe_ne_top (a := (0 : ℤ))) ho)
+  have hpos := ((lt_spectralBoundaryMultiplicity _ _ _).mp i.property).1
+  change i.val.2.2 < (meromorphicOrderAt (continuedCompletedHeckeL (χ i.val.1)) z).untop₀.toNat at hpos
+  rw [← hn] at ho hpos
+  have hn' : n ≤ 0 := WithTop.coe_le_coe.mp ho
+  simp [Int.toNat_of_nonpos hn'] at hpos
+
+/-- Restriction from a stronger weighted L² norm has dense range when
+compactly supported continuous functions belong to both spaces. -/
+private theorem denseRange_globalTheta_zeroLine_restrict {X : Type*} [TopologicalSpace X]
+    [T2Space X] [NormalSpace X] [LocallyCompactSpace X] [MeasurableSpace X] [BorelSpace X]
+    (μ ν : Measure X) [μ.Regular] [IsFiniteMeasureOnCompacts ν] (h : μ ≤ ν) :
+    ∃ U : Lp ℂ 2 ν →L[ℝ] Lp ℂ 2 μ, DenseRange U ∧ ∀ f, (U f : X → ℂ) =ᵐ[μ] f := by
+  have h1 : μ ≤ (1 : ENNReal) • ν := by simpa using h
+  let U := Lp.LpToLpOfMeasureLeSMul (E := ℂ) (p := 2) ENNReal.one_ne_top h1
+  have hU (f) : (U f : X → ℂ) =ᵐ[μ] f := Lp.coeFn_LpToLpOfMeasureLeSMul _ _ f
+  refine ⟨U, fun x ↦ EMetric.mem_closure_iff.mpr fun ε hε ↦ ?_, hU⟩
+  obtain ⟨δ, hδ, hδε⟩ := exists_between hε
+  obtain ⟨g, hg, hclose, hgc, _⟩ := (Lp.memLp x).exists_hasCompactSupport_eLpNorm_sub_le
+    ENNReal.ofNat_ne_top hδ.ne'
+  have hgν : MemLp g 2 ν := hgc.memLp_of_hasCompactSupport hg
+  have heq := (hU (hgν.toLp g)).trans (h.absolutelyContinuous.ae_eq hgν.coeFn_toLp)
+  refine ⟨U (hgν.toLp g), mem_range_self _, ?_⟩
+  rw [Lp.edist_def]
+  exact (eLpNorm_congr_ae (Filter.EventuallyEq.rfl.sub heq)).trans_le hclose |>.trans_lt hδε
+
+/-- The zero-line Sobolev density is polynomial in the log norm. Increasing
+its degree increases the measure, and both measures are finite on compacts. -/
+private theorem denseRange_globalTheta_zeroLine_compare {s t : ℝ} (hs : 0 ≤ s) (ht : 0 ≤ t)
+    (hst : s ≤ t) (hd : DenseRange (fun u : GlobalPolarFreeThetaSpace F ↦ (j(0, ht) u : W(t)))) :
+    DenseRange (fun u : GlobalPolarFreeThetaSpace F ↦ (j(0, hs) u : W(s))) := by
+  let ρ (r : ℝ) (g : C𝔽) := intervalSobolevDensity 0 0 r (logNorm g)
+  let μ (r : ℝ) := (μ𝔽).withDensity (fun g ↦ ENNReal.ofReal (ρ r g))
+  have hlog : Continuous logNorm := (NNReal.continuous_coe.comp (Units.continuous_val.comp
+    (isProperMap_ideleClassNorm F).continuous)).log fun x ↦ (NNReal.coe_pos.mpr (Units.zero_lt _)).ne'
+  have hbase : Continuous (fun x : C𝔽 ↦ 1 + (logNorm x) ^ 2) := continuous_const.add (hlog.pow 2)
+  have hρ (r : ℝ) : Continuous (ρ r) := by
+    simpa [ρ, intervalSobolevDensity] using
+      hbase.rpow_const (p := r / 2) (fun x ↦ Or.inl (by dsimp; positivity))
+  let (r : ℝ) : IsLocallyFiniteMeasure (μ r) := IsLocallyFiniteMeasure.withDensity_ofReal (hρ r)
+  have hst' : μ s ≤ μ t := withDensity_mono (.of_forall fun x ↦ ENNReal.ofReal_le_ofReal
+    (by simpa [ρ, intervalSobolevDensity] using Real.rpow_le_rpow_of_exponent_le
+          (le_add_of_nonneg_right (sq_nonneg (logNorm x))) (by linarith : s / 2 ≤ t / 2)))
+  obtain ⟨U, hU, hrep⟩ := denseRange_globalTheta_zeroLine_restrict (μ s) (μ t) hst'
+  have hEq (u : GlobalPolarFreeThetaSpace F) :
+      U (j(0, ht) u : W(t)) = (j(0, hs) u : W(s)) := by
+    induction u using Submodule.Quotient.induction_on with
+    | H f =>
+      apply Lp.ext
+      apply (hrep _).trans
+      apply (withDensity_absolutelyContinuous μ𝔽 _).ae_eq
+      exact ((existsUnique_globalThetaSobolevEmbedding (F := F) 0 0 0 t hI ht).exists.choose_spec.2 f).trans
+        ((existsUnique_globalThetaSobolevEmbedding (F := F) 0 0 0 s hI hs).exists.choose_spec.2 f).symm
+  have hfull := hU.comp hd U.continuous
+  exact (funext hEq) ▸ hfull
+
+end ZeroLineDensity
 
 /-- Paper: Proposition 11.2.0.1, p. 484. The polar-free theta classes are norm
-dense in the full global Sobolev space on the 0-line. -/
+dense in the full global Sobolev space on the 0-line.
+Deviation: The cited line theorem assumes degree greater than one. Pass
+from a higher degree through the dense inclusion of the weighted spaces
+to cover every nonnegative degree in the printed statement. -/
 theorem denseRange_globalTheta_zeroLine {s : ℝ} (hs : 0 ≤ s) :
-    DenseRange (fun u : GlobalPolarFreeThetaSpace F ↦ (j(0, hs) u : W(s))) := by sorry
+    DenseRange (fun u : GlobalPolarFreeThetaSpace F ↦ (j(0, hs) u : W(s))) := by
+  have ht : 1 < s + 2 := by linarith
+  exact denseRange_globalTheta_zeroLine_compare hs (zero_lt_one.trans ht).le (by linarith)
+    (denseRange_globalTheta_zeroLine_high ht)
 
 /-- Inserting a local completion into the adeles is continuous. -/
 private theorem globalThetaPrincipalValue_sobolevBound_formula_cont (v : V) :
