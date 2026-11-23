@@ -55,7 +55,8 @@ private theorem centered_full_divisor_summable (χ : X → PontryaginDual C𝔽)
   let hn := spectralConvolution_nuclear_of_projectiveKernel (F := F) (1/2) hα hs₀ φ
     (exists_numberField_projectiveKernel_comp_spectralProjection (F := F) hα hs φ)
   let T : nuclearEndomorphisms (spectralSobolevQuotient F (1/2) (neg_le_self hα) hs₀) := ⟨_, hn⟩
-  let series := spectralStripConvolution_trace (F := F) (1/2) χ hχ hα hs φ T rfl
+  let series := spectralStripConvolution_trace_of_commonKernel (F := F) (1/2) χ hχ hα hs φ
+    (spectralStripJet_commonKernel_direct (F := F) (a := 1/2) χ hχ hα hs₀) T rfl
   exact (hasSum_heckeZeros_of_closedStripJetSum (α := 1/2) (s := 3) φ χ S hS hi
     series.1 series.2).1
 
