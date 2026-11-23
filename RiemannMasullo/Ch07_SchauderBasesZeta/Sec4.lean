@@ -14,6 +14,7 @@ import all RiemannMasullo.AppA_AlgebraicNT.Sec3
 import all RiemannMasullo.Ch03_IdelicZeta.Sec3b
 import all RiemannMasullo.Ch05_ThetaZSpaces.Sec3b
 
+import RiemannMasullo.ForMathlib.Analysis.Complex.LandauLemma
 import RiemannMasullo.ForMathlib.Analysis.Meromorphic.VerticalStripZeros
 
 /-! # §7.4 Nuclearity
@@ -1215,6 +1216,218 @@ private theorem spectralNuclearity_trace_descends (a : ℝ) (N : ℕ) (φ : 𝒟
   let T : E →L[ℂ] E := ⟨T₀, (Submodule.isQuotientMap_mkQ K).continuous_iff.mpr
     ((Submodule.isQuotientMap_mkQ K).continuous.comp Aq.continuous)⟩
   exact ⟨Aq, T, hAq, fun _ ↦ rfl⟩
+
+/-- Cauchy's estimate uniformly on enlarged vertical strips, with the height at the centre. -/
+private theorem spectralNuclearity_retainedJets_weighted_strip (f : B) (a : ℝ) (N p : ℕ) :
+    ∃ C : ℝ, ∀ z : ℂ, z.re ∈ Icc (-a) (1-a) → ∀ k ≤ N,
+      (1 + |z.im|)^p * ‖iteratedDeriv k f.val z‖ ≤ C := by
+  obtain ⟨C₀, h₀⟩ := f.property.2.2 (-a-1) (2-a) (by linarith) (subset_univ _) 0
+  obtain ⟨Cₚ, hₚ⟩ := f.property.2.2 (-a-1) (2-a) (by linarith) (subset_univ _) p
+  let C := max 0 (max C₀ Cₚ)
+  have hC : 0 ≤ C := le_max_left _ _
+  refine ⟨N.factorial * (3^p * C), ?_⟩
+  intro z hz k hk
+  let H : ℂ := ((1 + |z.im| : ℝ) : ℂ) ^ p
+  have hH : ‖H‖ = (1 + |z.im|)^p := by
+    rw [show ‖H‖ = ‖((1 + |z.im| : ℝ) : ℂ)‖^p from norm_pow _ _, Complex.norm_real, Real.norm_eq_abs, abs_of_nonneg (by positivity)]
+  have hf : Differentiable ℂ f.val := fun v ↦
+    (f.property.2.1 v (mem_univ _)).differentiableAt (Filter.univ_mem' fun _ ↦ mem_univ _)
+  have hcircle (w : ℂ) (hw : w ∈ Metric.sphere z 1) : ‖H * f.val w‖ ≤ 3^p * C := by
+    have hd := mem_closedBall_iff_norm.mp (Metric.sphere_subset_closedBall hw)
+    have hr := (Complex.abs_re_le_norm (w-z)).trans hd
+    rw [Complex.sub_re, abs_le] at hr
+    have hs : w.re ∈ Icc (-a-1) (2-a) := ⟨by linarith [hz.1, hr.1], by linarith [hz.2, hr.2]⟩
+    have hi : |z.im| ≤ ‖w‖ + 1 := calc
+      |z.im| = |w.im - (w-z).im| := by rw [Complex.sub_im]; ring_nf
+      _ ≤ |w.im| + |(w-z).im| := abs_sub _ _
+      _ ≤ ‖w‖ + 1 := add_le_add (Complex.abs_im_le_norm _) ((Complex.abs_im_le_norm _).trans hd)
+    rw [norm_mul, hH]
+    by_cases hsmall : ‖w‖ ≤ 1
+    · have hw₀ : ‖f.val w‖ ≤ C₀ := by simpa using h₀ ⟨w, hs, rfl⟩
+      exact mul_le_mul (pow_le_pow_left₀ (by positivity) (by linarith : 1 + |z.im| ≤ 3) p)
+        (hw₀.trans ((le_max_left _ _).trans (le_max_right _ _))) (norm_nonneg _) (by positivity)
+    · have hg : 1 + |z.im| ≤ 3 * ‖w‖ := by linarith [lt_of_not_ge hsmall]
+      have hwₚ : ‖w‖^p * ‖f.val w‖ ≤ Cₚ := by simpa only [norm_mul, norm_pow] using hₚ ⟨w, hs, rfl⟩
+      calc
+        _ ≤ (3 * ‖w‖)^p * ‖f.val w‖ := by gcongr
+        _ = 3^p * (‖w‖^p * ‖f.val w‖) := by rw [mul_pow, mul_assoc]
+        _ ≤ 3^p * C := by
+          gcongr
+          exact hwₚ.trans ((le_max_right _ _).trans (le_max_right _ _))
+  have hc := Complex.norm_iteratedDeriv_le_of_forall_mem_sphere_norm_le k one_pos
+    (hf.const_mul H).diffContOnCl hcircle
+  rw [iteratedDeriv_const_mul_field, norm_mul, hH, one_pow, div_one] at hc
+  exact hc.trans (mul_le_mul_of_nonneg_right (by exact_mod_cast Nat.factorial_le hk) (by positivity))
+
+/-- Paper: Theorem 7.4.1.1(2), p. 367. The retained jet evaluations descend to the
+truncated quotient. At each polynomial weight in the zero height, a single continuous
+seminorm dominates all the weighted evaluations. -/
+theorem spectralNuclearity_retainedJets_weighted (a : ℝ) (N : ℕ)
+    (d : jets(χ, τ, hτ) → StrongDual ℂ (Q(a)))
+    (hd : ∀ i f, d i ((D(a)).mkQ f) = iteratedDeriv i.2.val f.val (i.1.val - (a : ℂ))) :
+    let I := {i : jets(χ, τ, hτ) // i.2.val < N}
+    let K := ⨅ i : I, (d i.val).toLinearMap.ker
+    let E := Q(a) ⧸ K
+    ∃ L : I → StrongDual ℂ E, (∀ i x, L i (K.mkQ x) = d i.val x) ∧
+      ∀ p : ℕ, ∃ q : Seminorm ℂ E, Continuous q ∧
+        ∀ i : I, ∀ x : E, (1 + |i.val.1.val.im|)^p * ‖L i x‖ ≤ q x := by
+  classical
+  intro I K E
+  let L (i : I) : StrongDual ℂ E :=
+    ⟨K.liftQ (d i.val).toLinearMap (iInf_le _ i),
+      (Submodule.isQuotientMap_mkQ K).continuous_iff.mpr (d i.val).continuous⟩
+  refine ⟨L, fun _ _ ↦ rfl, ?_⟩
+  intro p
+  let π := K.mkQL.comp (D(a)).mkQL
+  have hπ : Topology.IsQuotientMap π :=
+    (Submodule.isQuotientMap_mkQ K).comp (Submodule.isQuotientMap_mkQ (D(a)))
+  let : BarrelledSpace ℂ B := isFrechetTVS_barrelled
+    (schwartzBergman_frechet univ isOpen_univ inferInstance univ_nonempty)
+  let : BarrelledSpace ℂ E := by
+    constructor
+    intro q hq
+    apply hπ.continuous_iff.mpr
+    exact (q.comp π.toLinearMap).continuous_of_lowerSemicontinuous (hq.comp π.continuous)
+  let W (i : I) : StrongDual ℂ E := (((1 + |i.val.1.val.im| : ℝ) : ℂ)^p) • L i
+  have hnorm (i : I) (x : E) : ‖W i x‖ = (1 + |i.val.1.val.im|)^p * ‖L i x‖ := by
+    change ‖(((1 + |i.val.1.val.im| : ℝ) : ℂ)^p) • L i x‖ = _
+    rw [norm_smul, norm_pow, Complex.norm_real, Real.norm_eq_abs, abs_of_nonneg (by positivity)]
+  have hb (x : E) : BddAbove (range fun i ↦ ‖W i x‖) := by
+    obtain ⟨q, rfl⟩ := K.mkQ_surjective x
+    obtain ⟨f, rfl⟩ := (D(a)).mkQ_surjective q
+    obtain ⟨C, hC⟩ := spectralNuclearity_retainedJets_weighted_strip f a N p
+    refine ⟨C, forall_mem_range.mpr ?_⟩
+    intro i
+    obtain ⟨m, hm, _, he⟩ := spectralNuclearity_trace_zero_order χ τ hτ i.val.1
+    have horder : 0 < MeromorphicOn.divisor (continuedCompletedHeckeL χ) univ i.val.1.val := by
+      rw [he]
+      exact_mod_cast hm
+    have hs := spectralNuclearity_trace_zero_strip χ horder
+    have hz : (i.val.1.val - (a : ℂ)).re ∈ Icc (-a) (1-a) := by
+      rw [Complex.sub_re, Complex.ofReal_re]
+      constructor <;> linarith [hs.1, hs.2]
+    rw [hnorm]
+    change (1 + |i.val.1.val.im|)^p * ‖d i.val ((D(a)).mkQ f)‖ ≤ C
+    rw [hd]
+    simpa only [Complex.sub_im, Complex.ofReal_im, sub_zero] using
+      hC _ hz _ i.property.le
+  let s (i : I) := (normSeminorm ℂ ℂ).comp (W i).toLinearMap
+  have hb' : BddAbove (range s) := Seminorm.bddAbove_range_iff.mpr hb
+  refine ⟨⨆ i, s i, ?_, ?_⟩
+  · rw [Seminorm.coe_iSup_eq hb']
+    exact Seminorm.continuous_iSup s (fun i ↦ (W i).continuous.norm) hb'
+  · intro i x
+    rw [← hnorm]
+    exact (le_ciSup hb' i : s i ≤ ⨆ j, s j) x
+
+
+/-- If scaled primal vectors with unit diagonal pairing are bounded, their scalars must decay
+faster than every power of the height. -/
+private theorem spectralNuclearity_retainedJets_primal_scaling (a : ℝ) (N : ℕ)
+    (d : jets(χ, τ, hτ) → StrongDual ℂ (Q(a)))
+    (hd : ∀ i f, d i ((D(a)).mkQ f) = iteratedDeriv i.2.val f.val (i.1.val - (a : ℂ))) :
+    let I := {i : jets(χ, τ, hτ) // i.2.val < N}
+    let K := ⨅ i : I, (d i.val).toLinearMap.ker
+    let E := Q(a) ⧸ K
+    ∃ L : I → StrongDual ℂ E, (∀ i x, L i (K.mkQ x) = d i.val x) ∧
+      ∀ (b : I → E) (c : I → ℂ), (∀ i, L i (b i) = 1) →
+        Bornology.IsVonNBounded ℂ (range fun i ↦ c i • b i) →
+        ∀ p : ℕ, ∃ C : ℝ, ∀ i : I, (1 + |i.val.1.val.im|)^p * ‖c i‖ ≤ C := by
+  intro I K E
+  obtain ⟨L, hL, hbound⟩ := spectralNuclearity_retainedJets_weighted χ τ hτ a N d hd
+  refine ⟨L, hL, ?_⟩
+  intro b c hpair hB p
+  obtain ⟨q, hq, h⟩ := hbound p
+  let : PolynormableSpace ℂ B := (schwartzBergman_frechet univ isOpen_univ inferInstance univ_nonempty).2.1
+  let : PolynormableSpace ℂ (Q(a)) := polynormableSpace_quotient (D(a))
+  let : PolynormableSpace ℂ E := polynormableSpace_quotient K
+  obtain ⟨C, _, hC⟩ := (PolynormableSpace.withSeminorms ℂ E).isVonNBounded_iff_seminorm_bounded.mp
+    hB ⟨q, hq⟩
+  refine ⟨C, fun i ↦ ?_⟩
+  have hi := (h i (c i • b i)).trans (hC _ (mem_range_self i)).le
+  simpa only [map_smul, hpair, smul_eq_mul, mul_one] using hi
+
+
+/-- Only finitely many retained derivatives can lie below one height. -/
+private theorem spectralNuclearity_retainedJets_finite_of_height_bound (N : ℕ) :
+    let I := {i : jets(χ, τ, hτ) // i.2.val < N}
+    ∀ C : ℝ, (∀ i : I, 1 + |i.val.1.val.im| ≤ C) → Finite I := by
+  intro I C hC
+  let G := Λ(χ, τ, hτ)
+  have hstrip (z : zeros(χ, τ, hτ)) : 0 < z.val.re ∧ z.val.re < 1 := by
+    obtain ⟨m, hm, _, he⟩ := spectralNuclearity_trace_zero_order χ τ hτ z
+    apply spectralNuclearity_trace_zero_strip χ
+    rw [he]
+    exact_mod_cast hm
+  have hne : G.val (2 : ℂ) ≠ 0 := by
+    intro h
+    have hz : 0 < analyticOrderAt (G.val : ℂ → ℂ) 2 :=
+      pos_iff_ne_zero.mpr ((G.property.analyticAt 2).analyticOrderAt_ne_zero.mpr h)
+    have hs := (hstrip ⟨2, hz⟩).2
+    norm_num at hs
+  let S := {w : ℂ | w ∈ Metric.closedBall (2 : ℂ) (|C| + 3) ∧ G.val w = 0}
+  have hS : S.Finite := finite_zeros_closedBall (by positivity) (fun w _ ↦ G.property.analyticAt w) hne
+  let : Finite S := hS.to_subtype
+  have hmem (i : I) : i.val.1.val ∈ S := by
+    let z := i.val.1
+    obtain ⟨hl, hu⟩ := hstrip z
+    refine ⟨mem_closedBall_iff_norm.mpr ?_, apply_eq_zero_of_analyticOrderAt_ne_zero z.property.ne'⟩
+    have h := Complex.norm_le_abs_re_add_abs_im (z.val - 2)
+    simp only [Complex.sub_re, Complex.sub_im, Complex.re_ofNat, Complex.im_ofNat, sub_zero] at h
+    rw [abs_of_nonpos (by linarith : z.val.re - 2 ≤ 0)] at h
+    change ‖z.val - 2‖ ≤ |C| + 3
+    have hi : 1 + |z.val.im| ≤ C := hC i
+    linarith [le_abs_self C]
+  let e (i : I) : S × Fin N := (⟨i.val.1.val, hmem i⟩, ⟨i.val.2.val, i.property⟩)
+  apply Finite.of_injective e
+  intro i j hij
+  have h₁ := congrArg (fun t : S × Fin N ↦ t.1.val) hij
+  have h₂ := congrArg (fun t : S × Fin N ↦ t.2.val) hij
+  rcases i with ⟨⟨⟨z, hz⟩, ⟨m, hm⟩⟩, hN⟩
+  rcases j with ⟨⟨⟨w, hw⟩, ⟨k, hk⟩⟩, hN'⟩
+  change z = w at h₁
+  change m = k at h₂
+  subst w k
+  rfl
+
+/-- Paper: Theorem 7.4.1.1(2), p. 367, following (7.4.1.2). On the actual truncated
+jet quotient, bounded factorial-rescaled primal vectors with unit diagonal pairing and
+a polynomial upper bound for the factorials force the entire retained index set to be finite.
+Deviation: This tests the two normalizations in the printed proof for the same family of vectors. -/
+theorem spectralNuclearity_retainedJets_factorial_scaling (a : ℝ) (N : ℕ)
+    (d : jets(χ, τ, hτ) → StrongDual ℂ (Q(a)))
+    (hd : ∀ i f, d i ((D(a)).mkQ f) = iteratedDeriv i.2.val f.val (i.1.val - (a : ℂ))) :
+    let I := {i : jets(χ, τ, hτ) // i.2.val < N}
+    let K := ⨅ i : I, (d i.val).toLinearMap.ker
+    let E := Q(a) ⧸ K
+    let m := fun i : I ↦ multiplicity(χ, τ, hτ, i.val.1)
+    ∃ L : I → StrongDual ℂ E, (∀ i x, L i (K.mkQ x) = d i.val x) ∧
+      ∀ b : I → E, (∀ i, L i (b i) = 1) →
+        Bornology.IsVonNBounded ℂ (range fun i ↦ ((m i).factorial : ℂ)⁻¹ • b i) →
+        (∃ (k : ℕ) (C : ℝ), ∀ i : I, ((m i).factorial : ℝ) ≤ C * (1 + |i.val.1.val.im|)^k) →
+        Finite I := by
+  intro I K E m
+  obtain ⟨L, hL, hscale⟩ := spectralNuclearity_retainedJets_primal_scaling χ τ hτ a N d hd
+  refine ⟨L, hL, ?_⟩
+  intro b hb hB ⟨k, C, hfac⟩
+  obtain ⟨B₀, hB₀⟩ := hscale b _ hb hB (k+1)
+  apply spectralNuclearity_retainedJets_finite_of_height_bound χ τ hτ N (B₀ * max 0 C)
+  intro i
+  let H := 1 + |i.val.1.val.im|
+  have hH : 0 < H := by dsimp [H]; positivity
+  have hf : (0 : ℝ) < (m i).factorial := by positivity
+  have hlarge := hB₀ i
+  rw [norm_inv, Complex.norm_natCast, ← div_eq_mul_inv, div_le_iff₀ hf] at hlarge
+  have hBpos : 0 ≤ B₀ := le_of_lt (pos_of_mul_pos_left ((pow_pos hH _).trans_le hlarge) hf.le)
+  apply le_of_mul_le_mul_left ?_ (pow_pos hH k)
+  calc
+    H^k * H = H^(k+1) := (pow_succ H k).symm
+    _ ≤ B₀ * ((m i).factorial : ℝ) := hlarge
+    _ ≤ B₀ * (C * H^k) := mul_le_mul_of_nonneg_left (hfac i) hBpos
+    _ ≤ B₀ * (max 0 C * H^k) := by
+      gcongr
+      exact le_max_right _ _
+    _ = H^k * (B₀ * max 0 C) := by ring
 
 -- TODO(paper-gap): The proof on p. 367 gives no uniform boundedness estimate for
 -- the rescaled biorthogonal vectors. Discreteness does not control zero counts,
