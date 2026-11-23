@@ -122,4 +122,14 @@ theorem exists_projectiveKernel_comp_spectralProjection_of_cutoffs
     rw [map_sub, sub_eq_zero] at hdiff
     exact hdiff.symm.trans ((ev j _).trans (hv n j hj x))
 
+/-- Every admissible output cutoff of convolution after the spectral projection
+has a reciprocal-weight projective kernel. This follows from the ambient
+cutoff convolution theorem even in the absence of global spectral nuclearity. -/
+theorem exists_local_projectiveKernel (a : ℝ) {α s : ℝ} (ha : 0 ≤ α) (hs : 0 ≤ s)
+    (φ : BruhatCompactSupport C𝔽) {R ε : ℝ} {ρ : C𝔽 → ℝ}
+    (hρ : IsModulatedCutoff m𝔽 R ε ρ) (hband : 0 < R⁻¹+ε ∧ R⁻¹+ε < R-ε) :
+    ∃ K, sobolevProjectiveKernelOperator (F := F) ha hs K =
+      spectralRestriction a ha hs hρ φ :=
+  (exists_projectiveKernel_iff ha hs _).mpr (spectralRestriction_nuclear a ha hs hρ hband φ)
+
 end RiemannMasullo.StripNuclearity
