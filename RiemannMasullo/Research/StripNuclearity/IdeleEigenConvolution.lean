@@ -173,6 +173,42 @@ private theorem radial_convolution_formula
   simp only [div_eq_mul_inv, mul_inv_rev, inv_inv, mul_assoc, inv_mul_cancel, mul_one]
   ring
 
+/-- A radial convolution between the inverse-character lift and its adjoint acts on
+ambient weighted representatives by the Haar convolution of its separated kernel. -/
+theorem radial_adjoint_eq_convolution_ae
+    (μ : Measure G) [μ.IsHaarMeasure] (m : G →ₜ* ℝ≥0ˣ)
+    (hm : QuasiMeasurePreserving (fun x ↦ Real.log ((m x).val : ℝ)) μ volume)
+    (ψ : PontryaginDual G) (p : ℝ → ℂ) (hpc : Continuous p) (hps : HasCompactSupport p)
+    (a b s : ℝ) :
+    let l := fun x : G ↦ Real.log ((m x).val : ℝ)
+    let E := CompactIntervalSobolev volume id a b s
+    let W := CompactIntervalSobolev μ l a b s
+    ∀ (L : E →L[ℂ] W) (_ : ∀ f, (L f : G → ℂ) =ᵐ[μ] fun x ↦ (ψ x : ℂ)⁻¹ * f (l x))
+      (B : E →L[ℂ] E) (_ : ∀ f, ∀ᵐ x ∂volume, B f x = ∫ t : ℝ, p t * f (x-t)) (u : W),
+      (L (B (L.adjoint u)) : G → ℂ) =ᵐ[μ]
+        lcaConvolution μ (fun x ↦ (ψ x : ℂ)⁻¹ * p (l x)) u := by
+  intro l E W L hL B hB u
+  let w := intervalSobolevDensity a b s
+  have hw : Continuous w := eigenWeight_continuous a b s
+  have hp := eigenWeight_pos a b s
+  have hpos (u : ℝ≥0ˣ) : 0 < (u.val : ℝ) := by exact_mod_cast (pos_iff_ne_zero.mpr u.ne_zero)
+  have hl (x y : G) : l (x/y) = l x - l y := by
+    change Real.log ((m (x/y)).val : ℝ) = _
+    rw [map_div, Units.val_div_eq_div_val, NNReal.coe_div, Real.log_div (hpos _).ne' (hpos _).ne']
+  filter_upwards [hL (B (L.adjoint u)), hm.ae_eq_comp (hB (L.adjoint u))] with x hlift hscalar
+  symm
+  change B (L.adjoint u) (l x) = ∫ t : ℝ, p t * L.adjoint u (l x - t) at hscalar
+  rw [hlift, hscalar, radial_convolution_formula μ l hl ψ _ p (fun _ ↦ rfl)]
+  apply congrArg ((ψ x : ℂ)⁻¹ * ·)
+  let q (t : ℝ) := p (l x - t)
+  have hq : Continuous q := hpc.comp (continuous_const.sub continuous_id)
+  have hqc : HasCompactSupport q := hps.comp_homeomorph (Homeomorph.subLeft (l x))
+  calc
+    _ = ∫ t : ℝ, p (l x-t) * L.adjoint u t := integral_character_radial_adjoint μ l hm ψ hw hp L hL q hq hqc u
+    _ = _ := by
+      rw [← integral_sub_left_eq_self (fun t : ℝ ↦ p t * L.adjoint u (l x-t)) volume (l x)]
+      simp
+
 /-- A compact test of a single angular character acts by ordinary radial convolution
 between the lift and its Hilbert adjoint. The raw section profile needs no Haar factor. -/
 theorem hardySobolevTestAction_eq_radial_adjoint
@@ -188,30 +224,12 @@ theorem hardySobolevTestAction_eq_radial_adjoint
       (B : E →L[ℂ] E) (_ : ∀ f, ∀ᵐ x ∂volume, B f x = ∫ t : ℝ, p t * f (x-t)),
       (hardySobolevTestAction μ m a b s hab hs φ : W →L[ℂ] W) = (L.comp B).comp L.adjoint := by
   intro l E W L hL B hB
-  let w := intervalSobolevDensity a b s
-  have hw : Continuous w := eigenWeight_continuous a b s
-  have hp := eigenWeight_pos a b s
-  have hpos (u : ℝ≥0ˣ) : 0 < (u.val : ℝ) := by exact_mod_cast (pos_iff_ne_zero.mpr u.ne_zero)
-  have hl (x y : G) : l (x/y) = l x - l y := by
-    change Real.log ((m (x/y)).val : ℝ) = _
-    rw [map_div, Units.val_div_eq_div_val, NNReal.coe_div, Real.log_div (hpos _).ne' (hpos _).ne']
   ext u : 1
   apply Lp.ext
   apply (withDensity_absolutelyContinuous μ _).ae_eq
-  change (hardySobolevTestAction μ m a b s hab hs φ u : G → ℂ) =ᵐ[μ] L (B (L.adjoint u))
-  filter_upwards [hardySobolevTestAction_apply μ m a b s hab hs φ u,
-    hL (B (L.adjoint u)), hm.ae_eq_comp (hB (L.adjoint u))] with x hA hlift hscalar
-  change B (L.adjoint u) (l x) = ∫ t : ℝ, p t * L.adjoint u (l x - t) at hscalar
-  rw [hA, hlift, hscalar, radial_convolution_formula μ l hl ψ φ.val p hφ]
-  apply congrArg ((ψ x : ℂ)⁻¹ * ·)
-  let q (t : ℝ) := p (l x - t)
-  have hq : Continuous q := hpc.comp (continuous_const.sub continuous_id)
-  have hqc : HasCompactSupport q := hps.comp_homeomorph (Homeomorph.subLeft (l x))
-  calc
-    _ = ∫ t : ℝ, p (l x-t) * L.adjoint u t := integral_character_radial_adjoint μ l hm ψ hw hp L hL q hq hqc u
-    _ = _ := by
-      rw [← integral_sub_left_eq_self (fun t : ℝ ↦ p t * L.adjoint u (l x-t)) volume (l x)]
-      simp
+  have h := radial_adjoint_eq_convolution_ae μ m hm ψ p hpc hps a b s L hL B hB u
+  rw [← funext hφ] at h
+  exact (hardySobolevTestAction_apply μ m a b s hab hs φ u).trans h.symm
 
 end RadialConvolution
 
@@ -347,6 +365,25 @@ private theorem exists_modulated_eigenkernel_factorization (ψ : PontryaginDual 
   obtain ⟨L,hL⟩ := exists_weighted_character_lift μ ℓ hl hw.measurable hp c hc z hz.measurable (fun x ↦ by simp [z])
   exact ⟨p,L,hpc,hpd,hval,hL,fun B hB ↦ hardySobolevTestAction_eq_radial_adjoint μ m hq ψ φ p
     hpd.continuous hpc hval hab hs L hL B hB⟩
+
+/-- A proper surjective modulation gives the Haar absolute continuity and all
+inverse-character radial lifts for a single common logarithmic coordinate. -/
+theorem exists_modulated_radial_lifts (μ : Measure G) [μ.IsHaarMeasure] (m : G →ₜ* ℝ≥0ˣ)
+    (hm : IsProperMap m) (hs : Surjective m) (a b s : ℝ) :
+    let l := fun x : G ↦ Real.log ((m x).val : ℝ)
+    let E := CompactIntervalSobolev volume id a b s
+    let W := CompactIntervalSobolev μ l a b s
+    QuasiMeasurePreserving l μ volume ∧ ∀ ψ : PontryaginDual G, ∃ L : E →L[ℂ] W,
+      ∀ f, (L f : G → ℂ) =ᵐ[μ] fun x ↦ (ψ x : ℂ)⁻¹ * f (l x) := by
+  intro l E W
+  obtain ⟨c, hc⟩ := exists_log_haar_scalar μ m hm hs
+  have hl : Measurable l := Real.measurable_log.comp
+    (NNReal.continuous_coe.comp (Units.continuous_val.comp m.continuous)).measurable
+  refine ⟨⟨hl.aemeasurable, hc ▸ Measure.smul_absolutelyContinuous⟩, fun ψ ↦ ?_⟩
+  let z (x : G) := (ψ x : ℂ)⁻¹
+  have hz : Continuous z := (continuous_subtype_val.comp ψ.continuous).inv₀ (fun x ↦ Circle.coe_ne_zero _)
+  exact exists_weighted_character_lift μ l hl (eigenWeight_continuous a b s).measurable (eigenWeight_pos a b s)
+    c hc z hz.measurable (fun x ↦ by simp [z])
 
 end ModulatedEigenkernel
 

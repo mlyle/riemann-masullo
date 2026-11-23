@@ -841,6 +841,17 @@ private theorem hardySobolev_orbit_integral (a b s : ℝ) (hab : a ≤ b) (hs : 
     hν.ae_le (hardySobolevTranslation_apply μ m a b s hab hs g u)] with x hx hy
   rw [hx, Pi.smul_apply, hy, smul_eq_mul]
 
+/-- A compact integrable kernel acting by Haar convolution on weighted representatives
+also acts by the Bochner integral of the translations. -/
+theorem hardySobolev_eq_integral_translation_of_convolution
+    (a b s : ℝ) (hab : a ≤ b) (hs : 0 ≤ s) {φ : G → ℂ}
+    (hi : Integrable φ μ) (hc : HasCompactSupport φ)
+    (A : W a b s →L[ℂ] W a b s) (hA : ∀ u, (A u : G → ℂ) =ᵐ[μ] lcaConvolution μ φ u) (u : W a b s) :
+    A u = ∫ g, φ g • hardySobolevTranslation μ m a b s hab hs g u ∂μ := by
+  apply Lp.ext
+  apply (withDensity_absolutelyContinuous μ _).ae_eq
+  exact (hA u).trans ((hardySobolev_orbit_integral μ m a b s hab hs hi hc u).mono fun _ hx ↦ hx.2.symm)
+
 /-- Paper: (9.3.1.2), p. 419. The test action on the weighted Hilbert space
 acts by the Haar convolution formula almost everywhere. -/
 theorem hardySobolevTestAction_apply (a b s : ℝ) (hab : a ≤ b) (hs : 0 ≤ s)
