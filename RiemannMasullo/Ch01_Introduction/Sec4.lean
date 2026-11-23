@@ -3,6 +3,7 @@ module
 public import RiemannMasullo.Ch13_ZerosHecke.Sec3
 public import RiemannMasullo.AppB_AnalyticNT.Sec6
 import RiemannMasullo.External.TauCeti.Analysis.Complex.Conformal.Montel.Basic
+import RiemannMasullo.ForMathlib.Analysis.Meromorphic.VerticalStripZeros
 import RiemannMasullo.Ch10_TraceSpectral.Sec1
 import RiemannMasullo.AppB_AnalyticNT.Sec4b
 import Mathlib.Analysis.Calculus.BumpFunction.Normed
@@ -1331,6 +1332,31 @@ theorem introTraceApprox_spectral_summable (χ : U𝔽) (h ρ : ℕ → ℝ → 
   rw [hterm, norm_div]
   rfl
 
+/-- Removing the gamma factor gives a continuation of the finite L-function. The entire
+reciprocal gamma factor can only increase the order at a zero. -/
+private theorem zeroCount_finite_companion (χ : U𝔽) :
+    ∃ L : ℂ → ℂ, MeromorphicNFOn L univ ∧ (∀ z : right(1), L z = finiteHeckeL χ z) ∧
+      ∀ z, meromorphicOrderAt (continuedCompletedHeckeL χ) z ≤ meromorphicOrderAt L z := by
+  let Λ := continuedCompletedHeckeL χ
+  let G (z : ℂ) := (heckeGammaFactor χ z)⁻¹
+  let P := G * Λ
+  obtain ⟨hΛ, hval⟩ := continuedCompletedHeckeL_spec χ
+  have hG := differentiable_inv_heckeGammaFactor χ
+  have hm : MeromorphicOn P univ := fun z hz ↦
+    (hG.analyticAt z).meromorphicAt.mul (hΛ hz).meromorphicAt
+  refine ⟨toMeromorphicNFOn P univ, meromorphicNFOn_toMeromorphicNFOn _ _, ?_, ?_⟩
+  · intro z
+    have hγ := heckeGammaFactor_ne_zero_of_re_pos χ (zero_lt_one.trans z.property)
+    have hNF : MeromorphicNFAt P z :=
+      (meromorphicNFAt_mul_iff_right (hG.analyticAt z) (inv_ne_zero hγ)).2 (hΛ (mem_univ _))
+    rw [toMeromorphicNFOn_eq_toMeromorphicNFAt hm (mem_univ _), toMeromorphicNFAt_eq_self.mpr hNF]
+    simp [P, Λ, G, hval z, completedHeckeL, finiteHeckeL, hγ]
+  · intro z
+    rw [meromorphicOrderAt_toMeromorphicNFOn hm (mem_univ _),
+      show meromorphicOrderAt P z = _ from meromorphicOrderAt_mul
+        (hG.analyticAt z).meromorphicAt (hΛ (mem_univ z)).meromorphicAt]
+    exact le_add_of_nonneg_left (hG.analyticAt z).meromorphicOrderAt_nonneg
+
 /-- Paper: §1.4.3, p. 29, for the proof that the zero sum is entire. Weighted zero count:
 for every unitary character `χ` and every half-width `a`, the zeros of the completed Hecke
 L-function in the open window `|Re s - 1/2| < a`, counted with their orders, satisfy
@@ -1338,7 +1364,12 @@ L-function in the open window `|Re s - 1/2| < a`, counted with their orders, sat
 `N(T + 1) - N(T) = O(log T)` for Hecke L-functions. -/
 private theorem introTraceApprox_spectral_differentiable_zeroCount (χ : U𝔽) (a : ℝ) :
     Summable (fun r : windowZeros(χ, a) ↦ (zeroOrder(χ, r.val) : ℝ) / (1 + |r.val.im|) ^ 2) := by
-  sorry
+  obtain ⟨L, hL, hSeries, hOrder⟩ := zeroCount_finite_companion χ
+  obtain ⟨hLine, k, _, hInv⟩ := finiteHeckeL_inv_isBigO_oneLine χ L hL hSeries
+  exact summable_divisor_div_one_add_abs_im_sq (k := k) (σ := 1)
+    (continuedCompletedHeckeL_spec χ).1.meromorphicOn hL hOrder
+    (finiteHeckeL_continuation_isBigO_rpow χ L hL hSeries) (hLine.mono fun _ ht ↦ ht.2)
+    hInv (1 / 2) a
 
 /-- A Mellin transform of a function vanishing outside `(a, b)`, with `0 < a`, is the
 interval integral over `[a, b]`. -/
