@@ -3,6 +3,7 @@ module
 public import RiemannMasullo.Ch12_TraceGeometric.Sec5
 public import RiemannMasullo.Research.StripNuclearity.AngularOperatorSum
 public import RiemannMasullo.Research.StripNuclearity.HeckeAngularFourierCost
+public import RiemannMasullo.Research.StripNuclearity.OpenStripDiagonal
 public import RiemannMasullo.Research.StripNuclearity.UniformLift
 
 /-! # The geometric diagonal for every number field
@@ -91,5 +92,40 @@ theorem hasSum_numberField_stripZeros_neg_integral_smoothenedDiagonal
     (hU : IsDPrimeSequence μ𝔽 U) (hBorel : ∀ n, MeasurableSet (U n)) :
     type_of% diagonalFormula(φ, hφ, χ, hχ, hα, hs, U, hU, hBorel) :=
   diagonalFormula(φ, hφ, χ, hχ, hα, hs, U, hU, hBorel)
+
+local notation "openFormula(" φ ", " hφ ", " χ ", " hχ ", " hα ", " hs ", " U ", " hU ", " hm ", " he ")" =>
+  hasSum_openStripZeros_neg_integral_smoothenedDiagonal (F := F) (hone_lt_three := Nat.one_lt_ofNat)
+    φ hφ χ hχ hα hs (kernelWitness(hα, hs, φ)) U hU hm he
+
+/-- Paper: Equation (12.5.1.4), p. 520. When the strip edges contain no zeros,
+the negative integral of the smoothened geometric diagonal equals the
+absolutely convergent sum over the interior completed Hecke zeros on p. 519.
+Each zero appears with its full multiplicity. -/
+theorem hasSum_numberField_openStripZeros_neg_integral_smoothenedDiagonal
+    (φ : BruhatCompactSupport C𝔽) (hφ : ∀ g : C₁, φ.val g = 0)
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ)
+    {α s : ℝ} (hα : 0 < α) (hs : 3 ≤ s) (U : ℕ → Set C𝔽)
+    (hU : IsDPrimeSequence μ𝔽 U) (hm : ∀ n, MeasurableSet (U n))
+    (he : ∀ (ξ : PontryaginDual C₁) (ρ : ℂ),
+      0 < MeromorphicOn.divisor (continuedCompletedHeckeL (χ ξ)) univ ρ → |ρ.re - 1/2| ≠ α) :
+    type_of% openFormula(φ, hφ, χ, hχ, hα, hs, U, hU, hm, he) :=
+  openFormula(φ, hφ, χ, hχ, hα, hs, U, hU, hm, he)
+
+local notation "allFormula(" φ ", " hφ ", " χ ", " hχ ", " hw ", " hs ", " U ", " hU ", " hm ")" =>
+  hasSum_allHeckeZeros_neg_integral_smoothenedDiagonal (F := F) (hone_lt_three := Nat.one_lt_ofNat)
+    φ hφ χ hχ hw hs
+    (kernelWitness((lt_of_lt_of_le (half_pos (zero_lt_one : (0 : ℝ) < 1)) hw), hs, φ)) U hU hm
+
+/-- Paper: Equation (12.5.1.4), p. 520, and Proposition 3.2.1.3, p. 123.
+At every half-width at least one half, including equality, the signed geometric
+diagonal equals the full Hecke zero sum for every number field. The real parts
+of the positive completed divisors lie strictly between zero and one. -/
+theorem hasSum_numberField_allHeckeZeros_neg_integral_smoothenedDiagonal
+    (φ : BruhatCompactSupport C𝔽) (hφ : ∀ g : C₁, φ.val g = 0)
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ)
+    {α s : ℝ} (hw : 1/2 ≤ α) (hs : 3 ≤ s) (U : ℕ → Set C𝔽)
+    (hU : IsDPrimeSequence μ𝔽 U) (hm : ∀ n, MeasurableSet (U n)) :
+    type_of% allFormula(φ, hφ, χ, hχ, hw, hs, U, hU, hm) :=
+  allFormula(φ, hφ, χ, hχ, hw, hs, U, hU, hm)
 
 end RiemannMasullo.StripNuclearity
