@@ -262,10 +262,200 @@ theorem adeleNormOneOrbitMap_val (g : N₁) (z : adeleOrbitBasepoints F) :
     (adeleNormOneOrbitMap F (g, z)).val = g • z.val := by
   rfl
 
+open Set Filter in
+/-- Compact sets whose images are neighborhoods give both quotientness and local compactness. -/
+private theorem sAdeleNormOneOrbitMap_isQuotientMap_of_compact_images {X Y : Type*}
+    [TopologicalSpace X] [TopologicalSpace Y] [T2Space Y] (f : X → Y) (hc : Continuous f)
+    (honto : Surjective f) (hl : ∀ y : Y, ∃ C : Set X, IsCompact C ∧ f '' C ∈ 𝓝 y) :
+    IsQuotientMap f ∧ LocallyCompactSpace Y := by
+  have : WeaklyLocallyCompactSpace Y := ⟨fun y ↦ by
+    obtain ⟨C, hC, hy⟩ := hl y
+    exact ⟨_, hC.image hc, hy⟩⟩
+  refine ⟨isQuotientMap_iff_isClosed.2 ⟨honto, fun s ↦ ⟨fun h ↦ h.preimage hc, fun h ↦ ?_⟩⟩, inferInstance⟩
+  rw [← isOpen_compl_iff, isOpen_iff_mem_nhds]
+  intro y hy
+  obtain ⟨C, hC, hV⟩ := hl y
+  have hclosed := ((hC.inter_right h).image hc).isClosed
+  have hnot : y ∉ f '' (C ∩ f ⁻¹' s) := by
+    rintro ⟨a, ⟨_, ha⟩, rfl⟩
+    exact hy ha
+  filter_upwards [hV, hclosed.isOpen_compl.mem_nhds hnot] with t ht hbad
+  rintro hts
+  obtain ⟨a, ha, rfl⟩ := ht
+  exact hbad ⟨a, ⟨ha, hts⟩, rfl⟩
+
+open Set Filter in
+/-- For norm-one weights, the other coordinates control the unique weight lost at a basepoint. -/
+private theorem sAdeleNormOneOrbitMap_isQuotientMap_single_zero {I G Z Y : Type*} [Fintype I]
+    [TopologicalSpace G] [TopologicalSpace Z] [CompactSpace Z] [TopologicalSpace Y]
+    (f : G × Z → Y) (hf : Surjective f)
+    (r : I → Y → ℝ) (hr : ∀ i, Continuous (r i)) (w : I → G → ℝ)
+    (hw : ∀ i g, 0 < w i g) (hp : ∀ g, ∏ i, w i g = 1)
+    (hc : ∀ B : I → ℝ, ∃ C : Set G, IsCompact C ∧ ∀ g, (∀ i, w i g ≤ B i) → g ∈ C)
+    (hz : ∀ z : Z, ∃ o : Option I, ∀ g i,
+      (o = some i → r i (f (g, z)) = 0) ∧ (o ≠ some i → r i (f (g, z)) = w i g)) :
+    ∀ y, ∃ C : Set (G × Z), IsCompact C ∧ f '' C ∈ 𝓝 y := by
+  classical
+  let p (i : I) (y : Y) := ∏ j ∈ Finset.univ.erase i, r j y
+  have h0 (i : I) (y : Y) : 0 ≤ r i y := by
+    obtain ⟨⟨g, z⟩, rfl⟩ := hf y
+    obtain ⟨o, ho⟩ := hz z
+    by_cases e : o = some i
+    · exact (ho g i).1 e ▸ le_rfl
+    · exact (ho g i).2 e ▸ (hw i g).le
+  have hpos (i : I) (y : Y) : 0 < r i y + p i y := by
+    obtain ⟨⟨g, z⟩, rfl⟩ := hf y
+    obtain ⟨o, ho⟩ := hz z
+    by_cases e : o = some i
+    · rw [(ho g i).1 e, zero_add]
+      apply Finset.prod_pos
+      intro j hj
+      rw [(ho g j).2 (by simpa [e] using (Finset.ne_of_mem_erase hj).symm)]
+      exact hw j g
+    · exact add_pos_of_pos_of_nonneg ((ho g i).2 e ▸ hw i g) (Finset.prod_nonneg fun j _ ↦ h0 j _)
+  let b (i : I) (y : Y) := r i y + (r i y + p i y)⁻¹
+  have hcont (i : I) : Continuous (b i) :=
+    (hr i).add (((hr i).add (continuous_finsetProd _ fun j _ ↦ hr j)).inv₀ fun y ↦ (hpos i y).ne')
+  have hbound (i : I) (g : G) (z : Z) : w i g ≤ b i (f (g, z)) := by
+    obtain ⟨o, ho⟩ := hz z
+    by_cases e : o = some i
+    · have hprod : p i (f (g, z)) = ∏ j ∈ Finset.univ.erase i, w j g := by
+        apply Finset.prod_congr rfl
+        intro j hj
+        exact (ho g j).2 (by simpa [e] using (Finset.ne_of_mem_erase hj).symm)
+      have he : w i g * p i (f (g, z)) = 1 := by
+        rw [hprod, Finset.mul_prod_erase Finset.univ (fun j ↦ w j g) (Finset.mem_univ i), hp]
+      simp only [b, (ho g i).1 e, zero_add]
+      exact (eq_inv_of_mul_eq_one_left he).le
+    · calc w i g = r i (f (g, z)) := ((ho g i).2 e).symm
+           _ ≤ _ := le_add_of_nonneg_right (inv_nonneg.mpr (hpos i _).le)
+  intro y
+  obtain ⟨C, hC, hB⟩ := hc (fun i ↦ b i y + 1)
+  refine ⟨C ×ˢ univ, hC.prod isCompact_univ, ?_⟩
+  have hV (i : I) : ∀ᶠ y' in 𝓝 y, b i y' < b i y + 1 :=
+    (hcont i).continuousAt.eventually_lt continuousAt_const (lt_add_one _)
+  filter_upwards [Filter.eventually_all.2 hV] with y' hy'
+  obtain ⟨⟨g, z⟩, rfl⟩ := hf y'
+  exact ⟨(g, z), ⟨hB _ (fun i ↦ (hbound i g z).trans (hy' i).le), mem_univ _⟩, rfl⟩
+
+open Set Filter in
+/-- The norm-one ideles lie in a closed product level set, so coordinate bounds give compact lifts. -/
+private theorem sAdeleNormOneOrbitMap_isQuotientMap_compact_lifts :
+    IsQuotientMap (sAdeleNormOneOrbitMap F S) ∧ LocallyCompactSpace (sAdeleNormOneOrbitUnion F S) := by
+  classical
+  let W (i : InfinitePlace F ⊕ S) (a : Aₛ) : ℝ := match i with
+    | .inl v => ‖a.1 v‖ ^ v.mult
+    | .inr v => ‖a.2 v‖
+  have hW (i) : Continuous (W i) := by
+    cases i <;> dsimp only [W] <;> fun_prop
+  have hprod (u : 𝕀ₛ) : ∏ i, W i u.val = ((sIdeleNorm F S u).val : ℝ) := by
+    rw [Fintype.prod_sum_type]
+    simp [W, sIdeleNorm, Units.coe_prod]
+  have hp (g : Nₛ) : ∏ i, W i g.val.val = 1 := by
+    rw [hprod, MonoidHom.mem_ker.mp g.property]
+    rfl
+  have hw (i) (g : Nₛ) : 0 < W i g.val.val := by
+    have h := (Finset.prod_ne_zero_iff.mp ((hp g).trans_ne one_ne_zero)) i (Finset.mem_univ _)
+    cases i <;> dsimp only [W] at h ⊢ <;> exact lt_of_le_of_ne (by positivity) h.symm
+  have he : IsClosedEmbedding (fun g : Nₛ ↦ g.val.val) := by
+    have hr : range (fun g : Nₛ ↦ g.val.val) = {a : Aₛ | ∏ i, W i a = 1} := by
+      ext a
+      constructor
+      · rintro ⟨g, rfl⟩
+        exact hp g
+      · intro ha
+        have hn (i) := (Finset.prod_ne_zero_iff.mp (ha.trans_ne one_ne_zero)) i (Finset.mem_univ _)
+        have hu : IsUnit a := by
+          refine Prod.isUnit_iff.mpr ⟨Pi.isUnit_iff.mpr (fun v ↦ isUnit_iff_ne_zero.mpr ?_),
+            Pi.isUnit_iff.mpr (fun v ↦ isUnit_iff_ne_zero.mpr ?_)⟩
+          · intro h
+            exact hn (.inl v) (by simp [W, h, InfinitePlace.mult_ne_zero])
+          · intro h
+            exact hn (.inr v) (by simp [W, h])
+        obtain ⟨u, rfl⟩ := hu
+        refine ⟨⟨u, MonoidHom.mem_ker.mpr (Units.ext (NNReal.coe_injective ?_))⟩, rfl⟩
+        exact (hprod u).symm.trans ha
+    refine ⟨⟨(sIdeleGroup_description F S).1.comp IsInducing.subtypeVal,
+      fun _ _ h ↦ Subtype.ext (Units.ext h)⟩, ?_⟩
+    rw [hr]
+    exact isClosed_eq (continuous_finsetProd _ fun i _ ↦ hW i) continuous_const
+  have hc (B : InfinitePlace F ⊕ S → ℝ) :
+      ∃ C : Set Nₛ, IsCompact C ∧ ∀ g : Nₛ, (∀ i, W i g.val.val ≤ B i) → g ∈ C := by
+    have (v : S) : ProperSpace (v.val.adicCompletion F) := properSpace_adicCompletion v.val
+    have (v : InfinitePlace F) : ProperSpace v.Completion := by
+      have h := InfinitePlace.Completion.isometry_extensionEmbedding v
+      exact LipschitzWith.properSpace h.isClosedEmbedding.isProperMap h.lipschitzWith
+    let K₁ := Set.pi univ (fun v : InfinitePlace F ↦ Metric.closedBall (0 : v.Completion) (max 1 (B (.inl v))))
+    let K₂ := Set.pi univ (fun v : S ↦ Metric.closedBall (0 : v.val.adicCompletion F) (B (.inr v)))
+    have hK₁ : IsCompact K₁ := isCompact_univ_pi fun v ↦ isCompact_closedBall _ _
+    have hK₂ : IsCompact K₂ := isCompact_univ_pi fun v ↦ isCompact_closedBall _ _
+    refine ⟨(fun g : Nₛ ↦ g.val.val) ⁻¹' (K₁ ×ˢ K₂), he.isProperMap.isCompact_preimage (hK₁.prod hK₂), ?_⟩
+    intro g hg
+    constructor
+    · intro v _
+      rw [Metric.mem_closedBall, dist_zero_right]
+      by_cases h : ‖g.val.val.1 v‖ ≤ 1
+      · exact h.trans (le_max_left _ _)
+      · exact ((le_self_pow₀ (le_of_not_ge h) InfinitePlace.mult_ne_zero).trans (hg (.inl v))).trans (le_max_right _ _)
+    · intro v _
+      simpa [Metric.mem_closedBall, dist_zero_right] using hg (.inr v)
+  have : T2Space Aₛ := inferInstanceAs (T2Space (((v : InfinitePlace F) → v.Completion) × ((v : S) → v.val.adicCompletion F)))
+  have : CompactSpace (sAdeleOrbitBasepoints F S) :=
+    isCompact_iff_compactSpace.mp (finite_range (sAdeleOrbitBasepoint F S)).isCompact
+  have hf : Continuous (sAdeleNormOneOrbitMap F S) :=
+    Continuous.subtype_mk ((continuous_subtype_val.comp continuous_fst).smul (continuous_subtype_val.comp continuous_snd)) _
+  have hs : Surjective (sAdeleNormOneOrbitMap F S) := by
+    rintro ⟨a, ha⟩
+    obtain ⟨g, z, h⟩ := (mem_sAdeleNormOneOrbitUnion_iff F S a).mp ha
+    exact ⟨(g, z), Subtype.ext h⟩
+  apply sAdeleNormOneOrbitMap_isQuotientMap_of_compact_images _ hf hs
+  apply sAdeleNormOneOrbitMap_isQuotientMap_single_zero _ hs (fun i y ↦ W i y.val) (fun i ↦ (hW i).comp continuous_subtype_val)
+    (fun i g ↦ W i g.val.val) hw hp hc
+  rintro ⟨_, o, rfl⟩
+  refine ⟨o, fun g i ↦ ?_⟩
+  change (o = some i → W i (g.val.val * sAdeleOrbitBasepoint F S o) = 0) ∧
+    (o ≠ some i → W i (g.val.val * sAdeleOrbitBasepoint F S o) = W i g.val.val)
+  cases o with
+  | none =>
+    have e : sAdeleOrbitBasepoint F S none = 1 := by simp [sAdeleOrbitBasepoint, adeleOrbitBasepoint]
+    simp [e]
+  | some j =>
+    cases j with
+    | inl v =>
+      obtain ⟨h0, h1, hf⟩ := (adeleOrbitBasepoint_coordinates F).2.1 v
+      cases i with
+      | inl w =>
+        change (_ → ‖g.val.val.1 w * (adeleOrbitBasepoint F (some (.inl v))).1 w‖ ^ w.mult = 0) ∧
+          (_ → ‖g.val.val.1 w * (adeleOrbitBasepoint F (some (.inl v))).1 w‖ ^ w.mult = _)
+        by_cases e : w = v
+        · subst w
+          simp [h0, InfinitePlace.mult_ne_zero]
+        · simp [Ne.symm e, h1 w e, W]
+      | inr w =>
+        change (_ → ‖g.val.val.2 w * (adeleOrbitBasepoint F (some (.inl v))).2 w.val‖ = 0) ∧
+          (_ → ‖g.val.val.2 w * (adeleOrbitBasepoint F (some (.inl v))).2 w.val‖ = _)
+        have h : (adeleOrbitBasepoint F (some (.inl v))).2 w.val = 1 := congrArg (fun t ↦ t w.val) hf
+        simp [h, W]
+    | inr v =>
+      obtain ⟨ha, h0, h1⟩ := (adeleOrbitBasepoint_coordinates F).2.2 v.val
+      cases i with
+      | inl w =>
+        change (_ → ‖g.val.val.1 w * (adeleOrbitBasepoint F (some (.inr v.val))).1 w‖ ^ w.mult = 0) ∧
+          (_ → ‖g.val.val.1 w * (adeleOrbitBasepoint F (some (.inr v.val))).1 w‖ ^ w.mult = _)
+        have h : (adeleOrbitBasepoint F (some (.inr v.val))).1 w = 1 := congrArg (fun t ↦ t w) ha
+        simp [h, W]
+      | inr w =>
+        change (_ → ‖g.val.val.2 w * (adeleOrbitBasepoint F (some (.inr v.val))).2 w.val‖ = 0) ∧
+          (_ → ‖g.val.val.2 w * (adeleOrbitBasepoint F (some (.inr v.val))).2 w.val‖ = _)
+        by_cases e : w = v
+        · subst w
+          simp [h0]
+        · simp [Ne.symm e, h1 w.val (fun h ↦ e (Subtype.ext h)), W]
+
 /-- Paper: Lemma 8.2.0.3(1), p. 385. The adelic subspace topology on the S-local
 norm-one orbit union is the quotient topology of the S-local orbit map. -/
 theorem sAdeleNormOneOrbitMap_isQuotientMap : IsQuotientMap (sAdeleNormOneOrbitMap F S) := by
-  sorry
+  exact (sAdeleNormOneOrbitMap_isQuotientMap_compact_lifts F S).1
 
 /-- Paper: Lemma 8.2.0.3(2), p. 385. The global orbit map is continuous for the
 adelic subspace topology on the target.
@@ -609,7 +799,56 @@ theorem adeleNormOneOrbitUnion_separableSpace : SeparableSpace (adeleNormOneOrbi
 /-- Paper: Lemma 8.2.0.3, p. 385. The S-local norm-one orbit union is locally compact. -/
 theorem sAdeleNormOneOrbitUnion_locallyCompactSpace :
     LocallyCompactSpace (sAdeleNormOneOrbitUnion F S) := by
-  sorry
+  exact (sAdeleNormOneOrbitMap_isQuotientMap_compact_lifts F S).2
+
+/-- The base points indexed by finite places converge to one along the cofinite
+filter. All their finite coordinates are integral. On each fixed coordinate all but
+one of them equal one. The remaining, archimedean, base points form a finite set. -/
+private theorem adeleNormOneOrbitUnion_locallyCompactSpace_basepoints
+    (F : Type*) [Field F] [NumberField F] : IsCompact (adeleOrbitBasepoints F) := by
+  classical
+  let V := HeightOneSpectrum (𝓞 F)
+  let b (v : V) := adeleOrbitBasepoint F (some (.inr v))
+  let a (v : InfinitePlace F) := adeleOrbitBasepoint F (some (.inl v))
+  let e (v w : V) : w.adicCompletionIntegers F := if v = w then 0 else 1
+  have he : Filter.Tendsto e Filter.cofinite (𝓝 (fun w : V ↦ (1 : w.adicCompletionIntegers F))) := by
+    apply tendsto_pi_nhds.mpr
+    intro w
+    apply tendsto_const_nhds.congr'
+    filter_upwards [Filter.eventually_cofinite_ne w] with v hv
+    simp [e, hv]
+  let ι := RestrictedProduct.structureMap (fun w : V ↦ w.adicCompletion F)
+    (fun w ↦ (w.adicCompletionIntegers F : Set (w.adicCompletion F))) Filter.cofinite
+  have hi : Continuous ι := RestrictedProduct.isEmbedding_structureMap.continuous
+  have hfin : Filter.Tendsto (fun v : V ↦ (b v).2) Filter.cofinite (𝓝 1) := by
+    have h := (hi.tendsto (fun w : V ↦ (1 : w.adicCompletionIntegers F))).comp he
+    change Filter.Tendsto (fun v : V ↦ ι (e v)) Filter.cofinite (𝓝 1) at h
+    apply h.congr
+    intro v
+    ext1 w
+    have hc := ((adeleOrbitBasepoint_coordinates F).2.2 v)
+    by_cases hw : v = w
+    · subst w
+      change ((e v v : v.adicCompletionIntegers F) : v.adicCompletion F) = (b v).2 v
+      simpa [e] using hc.2.1.symm
+    · change ((e v w : w.adicCompletionIntegers F) : w.adicCompletion F) = (b v).2 w
+      simpa [e, hw] using (hc.2.2 w (Ne.symm hw)).symm
+  have harch : Filter.Tendsto (fun v : V ↦ (b v).1) Filter.cofinite (𝓝 1) :=
+    tendsto_const_nhds.congr fun v ↦ ((adeleOrbitBasepoint_coordinates F).2.2 v).1.symm
+  have hb : Filter.Tendsto b Filter.cofinite (𝓝 1) := harch.prodMk_nhds hfin
+  have hset : adeleOrbitBasepoints F = insert 1 (Set.range b) ∪ Set.range a := by
+    ext x
+    constructor
+    · rintro ⟨_ | v | v, rfl⟩
+      · exact Or.inl (Or.inl rfl)
+      · exact Or.inr ⟨v, rfl⟩
+      · exact Or.inl (Or.inr ⟨v, rfl⟩)
+    · rintro ((rfl | ⟨v, rfl⟩) | ⟨v, rfl⟩)
+      · exact ⟨none, rfl⟩
+      · exact ⟨some (.inr v), rfl⟩
+      · exact ⟨some (.inl v), rfl⟩
+  rw [hset]
+  exact hb.isCompact_insert_range_of_cofinite.union (Set.finite_range a).isCompact
 
 /-- Paper: Lemma 8.2.0.3, p. 385. The global norm-one orbit union is locally compact
 in the quotient topology of the orbit map.
@@ -617,7 +856,12 @@ Deviation: The adelic subspace topology fails to be locally compact by ERRATA R1
 theorem adeleNormOneOrbitUnion_locallyCompactSpace :
     @LocallyCompactSpace (adeleNormOneOrbitUnion F)
       (TopologicalSpace.coinduced (adeleNormOneOrbitMap F) inferInstance) := by
-  sorry
+  have : LocallyCompactSpace 𝔸[F]ˣ := (ideleGroup_topology F).2.1
+  have : LocallyCompactSpace N₁ := (ideleGroup_topology F).2.2.2.2.2.locallyCompactSpace
+  have : CompactSpace (adeleOrbitBasepoints F) :=
+    isCompact_iff_compactSpace.mp (adeleNormOneOrbitUnion_locallyCompactSpace_basepoints F)
+  exact @IsOpenQuotientMap.locallyCompactSpace _ _ _ (TopologicalSpace.coinduced (adeleNormOneOrbitMap F) inferInstance)
+    _ _ (adeleNormOneOrbitMap_isOpenQuotientMap F)
 
 /-- Paper: Lemma 8.2.0.3, p. 385. The S-local norm-one orbit union is σ-compact. -/
 theorem sAdeleNormOneOrbitUnion_sigmaCompactSpace :
