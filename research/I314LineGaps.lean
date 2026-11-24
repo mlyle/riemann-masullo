@@ -1506,10 +1506,8 @@ theorem spectralStrip_exists_divergent_rankOne_of_no_polynomial_separation
 
 #print axioms spectralStrip_homogeneous_blocks_require_polynomial_separation
 #print axioms spectralStrip_exists_divergent_rankOne_of_no_polynomial_separation
-end RiemannMasullo
 
 open Filter Function MeasureTheory Topology Set FourierTransform
-namespace RiemannMasullo
 namespace LineCardinal
 local notation "S" => SchwartzMap ℝ ℂ
 private def dS (f : S) : ℕ → S
@@ -1549,10 +1547,8 @@ private theorem fourier_moment (f : S) (u : ℝ) (m : ℕ) :
   rw [e,fourier_dS,mul_pow,inv_pow]
   field_simp [K_ne]
 end LineCardinal
-end RiemannMasullo
 
 open Filter Function MeasureTheory Topology Set
-namespace RiemannMasullo
 namespace LineCardinal
 local notation "S" => SchwartzMap ℝ ℂ
 private def B (k : ℕ) : S :=
@@ -1618,10 +1614,8 @@ private theorem shifted_seminorm (k p m : ℕ) (t h : ℝ) (hh : 0<h) (hh' : h�
       _ = (‖x‖^p*‖iteratedDeriv m (B k) (h⁻¹*(x-t))‖)*(h⁻¹)^m := by ring
       _ ≤ _ := by grw [pow_le_pow_left₀ (norm_nonneg _) hnorm p,H]; apply le_of_eq; ring
 end LineCardinal
-end RiemannMasullo
 
 open Filter Function Set
-namespace RiemannMasullo
 namespace LineCardinal
 local notation "S" => SchwartzMap ℝ ℂ
 private theorem images_bounded {E : Type*} [NormedAddCommGroup E] [NormedSpace ℂ E] (P : S →L[ℂ] E)
@@ -1669,10 +1663,8 @@ private theorem inverse_coeff_bound (K C : ℂ) (hK : K ≠ 0) (hC : C ≠ 0) (M
     _ ≤ ‖C‖⁻¹*(1+‖K‖)^M*1*1 := by gcongr
     _ ≤ _ := by rw [mul_one,mul_one,mul_comm]; linarith
 end LineCardinal
-end RiemannMasullo
 
 open Filter Function MeasureTheory Topology Set FourierTransform
-namespace RiemannMasullo
 namespace LineCardinal
 local notation "S" => SchwartzMap ℝ ℂ
 local notation "dw(" s ")" => intervalSobolevMeasure (volume : Measure ℝ) id (-(0:ℝ)) 0 s
@@ -1711,14 +1703,11 @@ private theorem lineFourierLift_rep {s : ℝ} (hs : 0≤s) (f : S) :
     (.of_forall fun x ↦ ENNReal.ofReal_ne_zero_iff.mpr (by simp [intervalSobolevDensity]; positivity))
   exact hac.ae_le he
 end LineCardinal
-end RiemannMasullo
 
 open Filter Function MeasureTheory Topology Set FourierTransform NumberField IsDedekindDomain
 open scoped NumberField.AdeleRing NNReal ENNReal
-namespace RiemannMasullo
 namespace LineCardinal
 set_option quotPrecheck false
-variable {F : Type*} [Field F] [NumberField F]
 attribute [local instance] instIdeleClassMeasurableSpaceSec1 instIdeleClassBorelSpaceSec1
   instIdeleClassT2Sec1 instIdeleClassLocallyCompactSec1 instIdeleClassSecondCountableSec1
   instIdeleClassHaarMeasureSec1
@@ -1889,14 +1878,11 @@ private theorem interpolant_growth (χ : PontryaginDual C₁ → PontryaginDual 
     _ ≤ D*V*(A^d*(1+|t|)^((n+1)*d)) := mul_le_mul_of_nonneg_left hnum (mul_nonneg hD.le hV)
     _ = _ := (mul_assoc ..).symm
 end LineCardinal
-end RiemannMasullo
 
 open Filter Function MeasureTheory Topology Set FourierTransform NumberField IsDedekindDomain
 open scoped NumberField.AdeleRing NNReal ENNReal
-namespace RiemannMasullo
 namespace LineCardinal
 set_option quotPrecheck false
-variable {F : Type*} [Field F] [NumberField F]
 attribute [local instance] instIdeleClassMeasurableSpaceSec1 instIdeleClassBorelSpaceSec1
   instIdeleClassT2Sec1 instIdeleClassLocallyCompactSec1 instIdeleClassSecondCountableSec1
   instIdeleClassHaarMeasureSec1
@@ -2073,39 +2059,9 @@ private theorem action_estimate (χ : PontryaginDual C₁ → PontryaginDual C�
     _ = _ := by dsimp only [W,V]; ring
 
 end LineCardinal
-end RiemannMasullo
 
-open Function Set Filter MeasureTheory Topology IsDedekindDomain NumberField
-open scoped NNReal ENNReal NumberField.AdeleRing
-namespace RiemannMasullo
+
 namespace LineCardinal
-set_option quotPrecheck false
-variable {F : Type*} [Field F] [NumberField F]
-attribute [local instance] instIdeleClassMeasurableSpaceSec1 instIdeleClassBorelSpaceSec1
-  instIdeleClassT2Sec1 instIdeleClassLocallyCompactSec1 instIdeleClassSecondCountableSec1
-  instIdeleClassHaarMeasureSec1
-local notation "C𝔽" => IdeleClassGroup (𝓞 F) F
-local notation "C₁" => (ideleClassNorm F).ker
-local notation "μ𝔽" => ideleClassTamagawaMeasure F
-local notation "pt(" b ", " t ")" => ((b:ℝ):ℂ)+((t:ℝ):ℂ)*Complex.I
-local notation "Z(" χ ", " a ", " α ")" => {z : PontryaginDual C₁ × ℝ × ℝ //
-  z.2.1 ∈ Icc (-α) α ∧ 0 < meromorphicOrderAt (continuedCompletedHeckeL (χ z.1)) (pt(a+z.2.1,z.2.2))}
-local notation "N(" χ ", " a ", " α ", " s ", " z ")" => spectralStripMultiplicity α s (z).val.2.1
-    (meromorphicOrderAt (continuedCompletedHeckeL (χ (z).val.1)) (pt(a+(z).val.2.1,(z).val.2.2))).untop₀.toNat
-local notation "J(" χ ", " a ", " α ", " s ")" => SpectralStripJetIndex (F := F) χ a α s
-local notation "H(" a ", " hα ", " hs ")" => spectralSobolevQuotient F a (neg_le_self hα) (le_of_lt (zero_lt_one.trans hs))
-local notation "D(" a ", " hα ", " hs ")" => spectralSobolevDualEmbedding F a (neg_le_self hα) (le_of_lt (zero_lt_one.trans hs))
-local notation "raw(" χ ", " hα ", " hs ", " i ")" => (spectralStripJet_memLp χ hα (le_of_lt (zero_lt_one.trans hs)) i).toLp _
-local notation "A(" a ", " hα ", " hs ", " φ ")" => spectralConvolution (F := F) a (neg_le_self hα) (le_of_lt (zero_lt_one.trans hs)) φ
-local notation "jet(" z ", " m ")" => ⟨((z).val.1,(z).val.2.1,(z).val.2.2,(m).val),(m).isLt⟩
-local notation "hom(" φ ", " η ")" => ∀ (k : C₁) (g : C𝔽), (φ : BruhatCompactSupport C𝔽).val (k.val⁻¹*g) = (η k : ℂ)*(φ : BruhatCompactSupport C𝔽).val g
-local notation "X(" χ ", " a ", " α ", " s ", " η ")" => {z : Z(χ,a,α) // z.val.1 = η ∧ 0 < N(χ,a,α,s,z)}
-local notation "z₀(" z ")" => (⟨0,(z).property.2⟩ : Fin _)
-local notation "form(" L ", " z ")" => L (jet((z).val,z₀(z)))
-local notation "b(" z ")" => (z).val.val.2.1
-local notation "t(" z ")" => (z).val.val.2.2
-local notation "separates(" χ ", " a ", " α ", " s ", " η ")" => ∃ c > (0:ℝ), ∃ n : ℕ,
-  ∀ z w : X(χ,a,α,s,η), z ≠ w → c/(1+|t(z)|)^n ≤ ‖pt(b(z),t(z))-pt(b(w),t(w))‖
 private theorem line_site_center {χ : PontryaginDual C₁ → PontryaginDual C𝔽} {a : ℝ} (z : Z(χ,a,0)) :
     z.val.2.1 = 0 := by simpa only [neg_zero,Icc_self,mem_singleton_iff] using z.property.1
 private theorem site_weighted_sum (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (a s : ℝ)
@@ -2237,38 +2193,7 @@ private theorem line_blocks_of_separation (χ : PontryaginDual C₁ → Pontryag
       exact mul_nonneg (mul_nonneg hK (mul_nonneg (norm_nonneg _) (mul_nonneg hC (by dsimp [r]; positivity)))) (hW _)
     _ = _ := by change _ = P*(r*W z.val); dsimp only [P]; ring
 end LineCardinal
-end RiemannMasullo
 
-open Function Set Filter MeasureTheory Topology IsDedekindDomain NumberField
-open scoped NNReal ENNReal NumberField.AdeleRing
-namespace RiemannMasullo
-set_option quotPrecheck false
-variable {F : Type*} [Field F] [NumberField F]
-attribute [local instance] instIdeleClassMeasurableSpaceSec1 instIdeleClassBorelSpaceSec1
-  instIdeleClassT2Sec1 instIdeleClassLocallyCompactSec1 instIdeleClassSecondCountableSec1
-  instIdeleClassHaarMeasureSec1
-local notation "C𝔽" => IdeleClassGroup (𝓞 F) F
-local notation "C₁" => (ideleClassNorm F).ker
-local notation "μ𝔽" => ideleClassTamagawaMeasure F
-local notation "pt(" b ", " t ")" => ((b:ℝ):ℂ)+((t:ℝ):ℂ)*Complex.I
-local notation "Z(" χ ", " a ", " α ")" => {z : PontryaginDual C₁ × ℝ × ℝ //
-  z.2.1 ∈ Icc (-α) α ∧ 0 < meromorphicOrderAt (continuedCompletedHeckeL (χ z.1)) (pt(a+z.2.1,z.2.2))}
-local notation "N(" χ ", " a ", " α ", " s ", " z ")" => spectralStripMultiplicity α s (z).val.2.1
-    (meromorphicOrderAt (continuedCompletedHeckeL (χ (z).val.1)) (pt(a+(z).val.2.1,(z).val.2.2))).untop₀.toNat
-local notation "J(" χ ", " a ", " α ", " s ")" => SpectralStripJetIndex (F := F) χ a α s
-local notation "H(" a ", " hα ", " hs ")" => spectralSobolevQuotient F a (neg_le_self hα) (le_of_lt (zero_lt_one.trans hs))
-local notation "D(" a ", " hα ", " hs ")" => spectralSobolevDualEmbedding F a (neg_le_self hα) (le_of_lt (zero_lt_one.trans hs))
-local notation "raw(" χ ", " hα ", " hs ", " i ")" => (spectralStripJet_memLp χ hα (le_of_lt (zero_lt_one.trans hs)) i).toLp _
-local notation "A(" a ", " hα ", " hs ", " φ ")" => spectralConvolution (F := F) a (neg_le_self hα) (le_of_lt (zero_lt_one.trans hs)) φ
-local notation "jet(" z ", " m ")" => ⟨((z).val.1,(z).val.2.1,(z).val.2.2,(m).val),(m).isLt⟩
-local notation "hom(" φ ", " η ")" => ∀ (k : C₁) (g : C𝔽), (φ : BruhatCompactSupport C𝔽).val (k.val⁻¹*g) = (η k : ℂ)*(φ : BruhatCompactSupport C𝔽).val g
-local notation "X(" χ ", " a ", " α ", " s ", " η ")" => {z : Z(χ,a,α) // z.val.1 = η ∧ 0 < N(χ,a,α,s,z)}
-local notation "z₀(" z ")" => (⟨0,(z).property.2⟩ : Fin _)
-local notation "form(" L ", " z ")" => L (jet((z).val,z₀(z)))
-local notation "b(" z ")" => (z).val.val.2.1
-local notation "t(" z ")" => (z).val.val.2.2
-local notation "separates(" χ ", " a ", " α ", " s ", " η ")" => ∃ c > (0:ℝ), ∃ n : ℕ,
-  ∀ z w : X(χ,a,α,s,η), z ≠ w → c/(1+|t(z)|)^n ≤ ‖pt(b(z),t(z))-pt(b(w),t(w))‖
 /-- On the zero-width line, inverse-polynomial separation of the surviving sites
 bounds the norms of the actual biorthogonal vectors polynomially in their height,
 at every admitted derivative order. -/
