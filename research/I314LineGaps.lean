@@ -1728,9 +1728,12 @@ local notation "C₁" => (ideleClassNorm F).ker
 local notation "μ𝔽" => ideleClassTamagawaMeasure F
 local notation "l" => logIdeleClassNorm F
 local notation "J(" χ ", " a ", " s ")" => SpectralStripJetIndex (F:=F) χ a 0 s
-local notation "H(" a ", " hs ")" => spectralSobolevQuotient F a (neg_le_self (le_refl (0:ℝ))) (le_of_lt (zero_lt_one.trans hs))
-local notation "D(" a ", " hs ")" => spectralSobolevDualEmbedding F a (neg_le_self (le_refl (0:ℝ))) (le_of_lt (zero_lt_one.trans hs))
-local notation "raw(" χ ", " hs ", " i ")" => (spectralStripJet_memLp χ (le_refl (0:ℝ)) (le_of_lt (zero_lt_one.trans hs)) i).toLp _
+private abbrev lineSpace (F : Type*) [Field F] [NumberField F] (a : ℝ) {s : ℝ} (hs : 1<s) :=
+  spectralSobolevQuotient F a (neg_le_self (le_refl (0:ℝ))) (le_of_lt (zero_lt_one.trans hs))
+private abbrev lineEmbedding (F : Type*) [Field F] [NumberField F] (a : ℝ) {s : ℝ} (hs : 1<s) :=
+  spectralSobolevDualEmbedding F a (neg_le_self (le_refl (0:ℝ))) (le_of_lt (zero_lt_one.trans hs))
+private abbrev lineJetRepresentative (χ : PontryaginDual C₁ → PontryaginDual C𝔽) {a s : ℝ} (hs : 1<s)
+    (i : J(χ,a,s)) := (spectralStripJet_memLp χ (le_refl (0:ℝ)) (le_of_lt (zero_lt_one.trans hs)) i).toLp _
 local notation "ordD(" j ")" => (j).val.2.2.2
 local notation "freq(" j ")" => (j).val.2.2.1
 local notation "ang(" j ")" => (j).val.1
@@ -1745,8 +1748,8 @@ private theorem order_cutoff {χ : PontryaginDual C₁ → PontryaginDual C𝔽}
 open Classical in
 private theorem fourier_jet_map (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
     (hχ : IsSpectralBasepointChoice χ) (a : ℝ) {s : ℝ} (hs : 1<s)
-    (L : J(χ,a,s) → StrongDual ℂ H(a,hs)) (hj : ∀ j, D(a,hs) (L j) = raw(χ,hs,j)) (η : PontryaginDual C₁) :
-    ∃ P : S →L[ℂ] H(a,hs), ∀ (f : S) (j : J(χ,a,s)),
+    (L : J(χ,a,s) → StrongDual ℂ (lineSpace F a hs)) (hj : ∀ j, (lineEmbedding F a hs) (L j) = (lineJetRepresentative χ hs j)) (η : PontryaginDual C₁) :
+    ∃ P : S →L[ℂ] (lineSpace F a hs), ∀ (f : S) (j : J(χ,a,s)),
       L j (P f) = if ang(j)=η then (LineModulation.radScale F:ℂ)*K⁻¹^ordD(j)*
         iteratedDeriv ordD(j) f (freq(j)/(2*Real.pi)) else 0 := by
   let hs₀ := le_of_lt (zero_lt_one.trans hs)
@@ -1822,8 +1825,8 @@ private theorem numeric_radius_bound {c : ℝ} (hc : 0<c) (n : ℕ) :
 open Classical in
 private theorem interpolant_growth (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
     (hχ : IsSpectralBasepointChoice χ) (a : ℝ) {s : ℝ} (hs : 1<s)
-    (x : J(χ,a,s) → H(a,hs)) (L : J(χ,a,s) → StrongDual ℂ H(a,hs))
-    (hb : IsSpectralMarkushevichBasis x L) (hj : ∀ j, D(a,hs) (L j) = raw(χ,hs,j)) (η : PontryaginDual C₁)
+    (x : J(χ,a,s) → (lineSpace F a hs)) (L : J(χ,a,s) → StrongDual ℂ (lineSpace F a hs))
+    (hb : IsSpectralMarkushevichBasis x L) (hj : ∀ j, (lineEmbedding F a hs) (L j) = (lineJetRepresentative χ hs j)) (η : PontryaginDual C₁)
     {c : ℝ} (hc : 0<c) (n : ℕ)
     (sep : ∀ i j : J(χ,a,s), ang(i)=η → ang(j)=η → freq(i)≠freq(j) →
       c/(1+|freq(i)|)^n ≤ |freq(j)-freq(i)|) :
