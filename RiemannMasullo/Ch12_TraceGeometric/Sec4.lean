@@ -11,6 +11,10 @@ public import RiemannMasullo.ForMathlib.NumberTheory.NumberField.InfiniteAdeleRi
 public import RiemannMasullo.ForMathlib.Topology.Covering.AddCircle
 public import RiemannMasullo.AppB_AnalyticNT.Sec4b
 public import RiemannMasullo.Ch06_LocalGlobal.Sec1
+import RiemannMasullo.Ch04_PeriodicSchauderBases.Sec5
+import RiemannMasullo.AppD_SchwartzBruhat.Sec1c
+import RiemannMasullo.ForMathlib.MeasureTheory.Measure.Count
+import Mathlib.Analysis.SpecialFunctions.SmoothTransition
 import all RiemannMasullo.AppB_AnalyticNT.Sec4b
 import RiemannMasullo.AppA_AlgebraicNT.Sec3
 import RiemannMasullo.ForMathlib.Algebra.Module.ZLattice.Summable
@@ -73,6 +77,256 @@ local notation "testAt(" f "," x ")" => (f : testₛ) (Multiplicative.ofAdd x)
 
 local instance instSIdeleT2Sec4 : T2Space Iₛ := (sIdeleGroup_description F S).2.1
 
+/-- The insertion of a projected diagonal S-unit differs from its principal idele
+by an integral unit outside S. -/
+private theorem sLocalTraceRestriction_invariant
+    (φ : BruhatCompactSupport C𝔽)
+    (hOutside : ∀ (a : outsideIntegralIdeleUnits F S) (c : C𝔽),
+      φ.val (QuotientGroup.mk a.val * c) = φ.val c)
+    (ξ : Hₛ) (g : Iₛ) :
+    φ.val (classAtS(ξ.val * g)) = φ.val (classAtS(g)) := by
+  obtain ⟨v, hv⟩ := ξ
+  rw [sProjectedDiagonal, MonoidHom.map_range] at hv
+  obtain ⟨u, rfl⟩ := hv
+  let d := Units.map (integralAdeleDiagonal F S).toMonoidHom u
+  let i := (integralAdelesOutside F S).subtype
+  let a := Units.map i.toMonoidHom d
+  let s := Units.map ((adeleProjection F S).comp i).toMonoidHom d
+  let j := sIdeleInsertion F S s
+  let o := a * j⁻¹
+  obtain ⟨harch, hin, hout⟩ := sIdeleInsertion_apply F S s
+  have hinv (w : V) (hw : w ∉ S) : (j⁻¹).val.2 w = 1 := by
+    rw [← map_inv]
+    exact (sIdeleInsertion_apply F S s⁻¹).2.2 w hw
+  have hmem : o ∈ outsideIntegralIdeleUnits F S := by
+    rw [mem_outsideIntegralIdeleUnits_iff]
+    refine ⟨?_, ?_, ?_⟩
+    · have h : a.val.1 = j.val.1 := harch.symm
+      change a.val.1 * (j⁻¹).val.1 = 1
+      rw [h]
+      exact congrArg Prod.fst j.val_inv
+    · intro w hw
+      have h : a.val.2 w = j.val.2 w := (hin ⟨w, hw⟩).symm
+      change a.val.2 w * (j⁻¹).val.2 w = 1
+      rw [h]
+      exact congrArg (fun x : AdeleRing (𝓞 F) F ↦ x.2 w) j.val_inv
+    · intro w hw
+      have h₁ := d.val.property
+      have h₂ := d.inv.property
+      simp only [integralAdelesOutside, Subring.mem_iInf] at h₁ h₂
+      constructor
+      · change a.val.2 w * (j⁻¹).val.2 w ∈ _
+        rw [hinv w hw, mul_one]
+        exact h₁ w hw
+      · change (a * j⁻¹)⁻¹ |>.val.2 w ∈ _
+        rw [mul_inv_rev, inv_inv]
+        change j.val.2 w * (a⁻¹).val.2 w ∈ _
+        rw [hout w hw, one_mul]
+        exact h₂ w hw
+  let q := QuotientGroup.mk' (IdeleGroup.principalSubgroup (𝓞 F) F)
+  have ha : q a = 1 := (QuotientGroup.eq_one_iff a).mpr
+    ⟨Units.map ((S : Set V).integer F).val.toRingHom.toMonoidHom u, Units.ext rfl⟩
+  have ho : q o * q j = 1 := by rw [← map_mul, show o * j = a by simp [o], ha]
+  change φ.val (q (sIdeleInsertion F S (s * g))) = φ.val (q (sIdeleInsertion F S g))
+  rw [map_mul, map_mul]
+  have h := hOutside ⟨o, hmem⟩ (q j * q (sIdeleInsertion F S g))
+  change φ.val (q o * (q j * q (sIdeleInsertion F S g))) = _ at h
+  rw [← mul_assoc, ho, one_mul] at h
+  exact h.symm
+
+/-- Pullback by a continuous homomorphism preserves Bruhat smoothness. -/
+private theorem sLocalTrace_comp_bruhatSmooth {G H : Type*}
+    [CommGroup G] [TopologicalSpace G] [IsTopologicalGroup G] [T2Space G] [LocallyCompactSpace G]
+    [CommGroup H] [TopologicalSpace H] [IsTopologicalGroup H] [T2Space H] [LocallyCompactSpace H]
+    (f : G →ₜ* H) {r : H → ℂ} (hr : IsBruhatSmooth r) :
+    IsBruhatSmooth (r ∘ f) := by
+  intro p
+  obtain ⟨l, hl, hinv, hdesc⟩ := hr p
+  obtain ⟨L, hL⟩ := exists_openCompactlyGeneratedSubgroup_contains hl.isCompact
+  let a₀ : BruhatStructuralPair H := ⟨(L.val, OrderDual.toDual l), L.property.1, L.property.2, hl, hL⟩
+  obtain ⟨k, hk, hkl⟩ := exists_good_subgroup_image_in_kernel f a₀
+  change k.map f.toMonoidHom ≤ l at hkl
+  refine ⟨k, hk, ?_, ?_⟩
+  · intro t x
+    exact (congrArg (fun y ↦ r y) (map_mul f t.val x)).trans
+      (hinv ⟨f t.val, hkl ⟨t.val, t.property, rfl⟩⟩ (f x))
+  · intro a ha
+    obtain ⟨C, _, hc, hgen⟩ := a.property.2.1
+    obtain ⟨M, hM⟩ := exists_openCompactlyGeneratedSubgroup_contains
+      ((hc.image (f.continuous.comp continuous_subtype_val)).union hl.isCompact)
+    have hsub : C ⊆ (M.val.comap (f.toMonoidHom.comp a.val.1.subtype) : Set a.val.1) :=
+      fun x hx ↦ hM (Or.inl ⟨x, hx, rfl⟩)
+    have htop : ⊤ ≤ M.val.comap (f.toMonoidHom.comp a.val.1.subtype) :=
+      hgen ▸ (Subgroup.closure_le _).mpr hsub
+    let b : BruhatStructuralPair H := ⟨(M.val, OrderDual.toDual l),
+      M.property.1, M.property.2, hl, fun x hx ↦ hM (Or.inr hx)⟩
+    let i : a.val.1 →* b.val.1 := (f.toMonoidHom.comp a.val.1.subtype).codRestrict M.val
+      (fun x ↦ htop (Subgroup.mem_top x))
+    let j : a.quotient →* b.quotient :=
+      QuotientGroup.map _ _ i (fun x hx ↦ hkl ⟨x.val, ha ▸ hx, rfl⟩)
+    have hi : Continuous i := (f.continuous.comp continuous_subtype_val).subtype_mk _
+    have hj : Continuous j := (QuotientGroup.isQuotientMap_mk _).continuous_iff.mpr
+      (QuotientGroup.continuous_mk.comp hi)
+    obtain ⟨r₀, hr₀, hsm⟩ := hdesc b rfl
+    obtain ⟨e'⟩ := b.elementary
+    refine ⟨r₀ ∘ j, fun x ↦ hr₀ (i x), fun e z d ↦ ?_⟩
+    let P := AddMonoidHom.toMultiplicative.symm
+      (e'.equiv.toMulEquiv.toMonoidHom.comp (j.comp e.equiv.symm.toMulEquiv.toMonoidHom))
+    have hP : Continuous P := e'.equiv.continuous.comp (hj.comp e.equiv.symm.continuous)
+    let φ := fun y ↦ r₀ (e'.equiv.symm (Multiplicative.ofAdd y))
+    have hs := contDiff_comp_elementaryHom P hP (f := φ) (hsm e') z d
+    convert hs using 1
+    funext u
+    change r₀ (j (e.equiv.symm _)) = r₀ (e'.equiv.symm (e'.equiv (j (e.equiv.symm _))))
+    rw [e'.equiv.symm_apply_apply]
+
+/-- Bruhat smoothness of the global test restricts along the S-idele insertion into
+idele classes. This restriction need not have compact support on the S-ideles. -/
+private theorem sLocalTraceRestriction_smooth (φ : BruhatCompactSupport C𝔽) :
+    IsBruhatSmooth (fun g : Iₛ ↦ φ.val (classAtS(g))) := by
+  let f : Iₛ →ₜ* C𝔽 := ⟨(QuotientGroup.mk' _).comp (sIdeleInsertion F S),
+    QuotientGroup.continuous_mk.comp (isClosedEmbedding_sIdeleInsertion F S).continuous⟩
+  exact sLocalTrace_comp_bruhatSmooth f ((mem_bruhatSmoothSubmodule_iff _).mp φ.property.1)
+
+private theorem sLocalTrace_comp_complex {G : Type*}
+    [CommGroup G] [TopologicalSpace G] [IsTopologicalGroup G] [T2Space G] [LocallyCompactSpace G]
+    {r : G → ℂ} (hr : IsBruhatSmooth r) {P : ℂ → ℂ} (hP : ContDiff ℝ (∞) P) :
+    IsBruhatSmooth (P ∘ r) := by
+  intro p
+  obtain ⟨k, hk, hi, hd⟩ := hr p
+  refine ⟨k, hk, fun t x ↦ congrArg P (hi t x), fun a ha ↦ ?_⟩
+  obtain ⟨r₀, hr₀, hs⟩ := hd a ha
+  exact ⟨P ∘ r₀, fun x ↦ congrArg P (hr₀ x), fun e z d ↦
+    (hP.of_le (by exact_mod_cast le_top)).comp (hs e z d)⟩
+
+/-- A compact subset of the projected S-unit quotient has a compactly supported
+Bruhat test on the S-ideles whose orbit sums equal one over that subset. -/
+private theorem exists_sLocalTraceCutoff
+    (K : Set Jₛ) (hK : IsCompact K) :
+    ∃ w : BruhatCompactSupport Iₛ, ∀ g : Iₛ, (QuotientGroup.mk g : Jₛ) ∈ K →
+      HasSum (fun ξ : Hₛ ↦ w.val (ξ.val * g)) 1 := by
+  classical
+  let hclosed : IsClosed (Hₛ : Set Iₛ) := isClosed_sProjectedDiagonal
+  let : IsClosed (Hₛ : Set Iₛ) := hclosed
+  let : BorelSpace Iₛ := sIdeleGroup_borelSpace
+  let : DiscreteTopology Hₛ := discreteTopology_sProjectedDiagonal
+  let : (Measure.count : Measure Hₛ).IsHaarMeasure := count_isHaarMeasure_of_discreteTopology
+  let : (Measure.count : Measure Hₛ).Regular := count_regular_of_discreteTopology
+  let d : ((S : Set V).integer F)ˣ →* Iₛ :=
+    (Units.map ((adeleProjection F S).comp (integralAdelesOutside F S).subtype).toMonoidHom).comp
+      (Units.map (integralAdeleDiagonal F S).toMonoidHom)
+  let : Countable F := (Module.finBasis ℚ F).equivFun.injective.countable
+  let : Countable (((S : Set V).integer F)ˣ) := Units.val_injective.countable
+  have hdr : Hₛ = d.range := MonoidHom.map_range _ _
+  let : Countable Hₛ := hdr.symm ▸ d.rangeRestrict_surjective.countable
+  let q : Iₛ →ₜ* Jₛ := ⟨QuotientGroup.mk' Hₛ, QuotientGroup.continuous_mk⟩
+  have hopen : IsOpenMap q := QuotientGroup.isOpenMap_coe
+  let P : ℂ → ℂ := fun z ↦ Complex.ofReal (z.re * z.re)
+  have hP : ContDiff ℝ (∞) P := Complex.ofRealCLM.contDiff.comp
+    (Complex.reCLM.contDiff.mul Complex.reCLM.contDiff)
+  have hlocal (g : Iₛ) : ∃ u : SchwartzBruhat Iₛ, ∃ U : Set Iₛ, HasCompactSupport u.val ∧
+      IsOpen U ∧ g ∈ U ∧ (∀ x ∈ U, u.val x = 1) ∧
+      ∀ x, 0 ≤ (u.val x).re ∧ (u.val x).im = 0 := by
+    obtain ⟨v, hcv, _, h1⟩ := schwartzBruhat_exists_local_unit
+      (x := g) isOpen_univ (mem_univ g)
+    obtain ⟨u, hu⟩ := compact_schwartzBruhat_comp (φ := P) hcv hP (by simp [P])
+    obtain ⟨U, hU, ho, hg⟩ := mem_nhds_iff.mp h1
+    refine ⟨u, U, ?_, ho, hg, fun x hx ↦ ?_, fun x ↦ ?_⟩
+    · rw [hu]
+      exact hcv.of_isClosed_subset isClosed_closure (tsupport_comp_subset (by simp [P]) _)
+    · have hx' : v.val x = 1 := hU hx
+      simp [hu, P, hx']
+    · simp [hu, P, mul_self_nonneg]
+  choose u U hcu hU hgU hu hpos using hlocal
+  obtain ⟨s, hs⟩ := hK.elim_finite_subcover (fun g ↦ q '' U g) (fun g ↦ hopen _ (hU g))
+    (fun z _ ↦ by
+      obtain ⟨g, rfl⟩ := QuotientGroup.mk_surjective z
+      exact mem_iUnion.mpr ⟨g, g, hgU g, rfl⟩)
+  have hcompact (t : Finset Iₛ) : HasCompactSupport (∑ g ∈ t, (u g).val) := by
+    induction t using Finset.induction_on with
+    | empty => rw [Finset.sum_empty]; exact HasCompactSupport.zero
+    | insert g t hg ih =>
+        rw [Finset.sum_insert hg]
+        exact (hcu g).add ih
+  let v := ∑ g ∈ s, (u g).val
+  have hv : v ∈ schwartzBruhatSubmodule Iₛ :=
+    Submodule.sum_mem _ (fun g _ ↦ (u g).property)
+  let bump : SchwartzBruhat Iₛ := ⟨v, hv⟩
+  have hcv : HasCompactSupport v := hcompact s
+  have hvpos (x : Iₛ) : 0 ≤ (v x).re := by
+    simpa only [v, Finset.sum_apply, Complex.re_sum] using Finset.sum_nonneg (fun g _ ↦ (hpos g x).1)
+  have hvim (x : Iₛ) : (v x).im = 0 := by simp [v, Finset.sum_apply, Complex.im_sum, fun g ↦ (hpos g x).2]
+  let W := schwartzBruhatCosetIntegral Hₛ Measure.count hclosed bump
+  have hsum (g : Iₛ) : HasSum (fun ξ : Hₛ ↦ v (ξ.val * g)) (W.val (q g)) := by
+    have hi := (lcaCosetIntegral_mem_schwartzBruhat Hₛ Measure.count hclosed bump).1 g
+    rw [show W.val (q g) = ∫ k : Hₛ, bump (g * k.val) ∂Measure.count from
+      schwartzBruhatCosetIntegral_mk Hₛ Measure.count hclosed bump g]
+    rw [integral_countable hi]
+    simpa only [mul_comm g, bump, count_real_singleton, one_smul] using (integrable_count_iff.mp hi).of_norm.hasSum
+  have him (g : Iₛ) : (W.val (q g)).im = 0 :=
+    (Complex.imCLM.hasSum (hsum g)).unique (by simpa only [Complex.imCLM_apply, hvim] using hasSum_zero)
+  have hbound (g : Iₛ) (hg : q g ∈ K) : 1 ≤ (W.val (q g)).re := by
+    obtain ⟨x, hx, y, hy, hyq⟩ := mem_iUnion₂.mp (hs hg)
+    have hξ : y / g ∈ Hₛ := QuotientGroup.eq_iff_div_mem.mp hyq
+    let ξ : Hₛ := ⟨y / g, hξ⟩
+    have hy' : ξ.val * g = y := div_mul_cancel _ _
+    have h₁ : 1 ≤ (v y).re := by
+      rw [show (v y).re = ∑ z ∈ s, ((u z).val y).re by simp [v, Finset.sum_apply, Complex.re_sum]]
+      have he := Finset.single_le_sum (f := fun z ↦ ((u z).val y).re)
+        (fun z _ ↦ (hpos z y).1) hx
+      simpa only [hu x y hy, Complex.one_re] using he
+    have hre : HasSum (fun ξ : Hₛ ↦ (v (ξ.val * g)).re) (W.val (q g)).re :=
+      Complex.reCLM.hasSum (hsum g)
+    have hb := sum_le_hasSum ({ξ} : Finset Hₛ) (fun t _ ↦ hvpos (t.val * g)) hre
+    exact h₁.trans (by simpa only [Finset.sum_singleton, hy'] using hb)
+  -- Extend the identity on [1, ∞) to a strictly positive smooth function.
+  let D (t : ℝ) := 1 + Real.smoothTransition (2 * t - 1) * (t - 1)
+  have hD (t : ℝ) : 0 < D t := by
+    by_cases ht : t ≤ 1 / 2
+    · have he : 2 * t - 1 ≤ 0 := by linarith
+      simp [D, Real.smoothTransition.zero_of_nonpos he]
+    · have ht' : 0 < t := by linarith
+      have ha := Real.smoothTransition.nonneg (2 * t - 1)
+      have hb := Real.smoothTransition.le_one (2 * t - 1)
+      by_cases h : t ≤ 1
+      · have hle := mul_le_mul_of_nonpos_right hb (sub_nonpos.mpr h)
+        dsimp [D]
+        linarith
+      · have hge := mul_nonneg ha (sub_nonneg.mpr (le_of_not_ge h))
+        dsimp [D]
+        linarith
+  have hDeq (t : ℝ) (ht : 1 ≤ t) : D t = t := by
+    rw [show D t = 1 + Real.smoothTransition (2 * t - 1) * (t - 1) from rfl,
+      Real.smoothTransition.one_of_one_le (by linarith), one_mul]
+    ring
+  have hDs : ContDiff ℝ (∞) D :=
+    contDiff_const.add ((Real.smoothTransition.contDiff.comp
+      ((contDiff_const.mul contDiff_id).sub contDiff_const)).mul (contDiff_id.sub contDiff_const))
+  let N (z : ℂ) := Complex.ofReal (D z.re)⁻¹
+  have hN : ContDiff ℝ (∞) N := Complex.ofRealCLM.contDiff.comp
+    ((hDs.comp Complex.reCLM.contDiff).inv (fun z ↦ (hD z.re).ne'))
+  let n (g : Iₛ) := N (W.val (q g))
+  have hn : IsBruhatSmooth n := sLocalTrace_comp_complex
+    (sLocalTrace_comp_bruhatSmooth q (schwartzBruhat_isBruhatSmooth W)) hN
+  have hw : IsBruhatSmooth (v * n) := fun p ↦
+    isBruhatContDiff_mul (schwartzBruhat_isBruhatSmooth bump p) (hn p)
+  refine ⟨⟨v * n, (mem_bruhatSmoothSubmodule_iff _).mpr hw,
+    hcv.of_isClosed_subset isClosed_closure tsupport_mul_subset_left⟩, fun g hg ↦ ?_⟩
+  change HasSum (fun ξ : Hₛ ↦ v (ξ.val * g) * n (ξ.val * g)) 1
+  have hq (ξ : Hₛ) : q (ξ.val * g) = q g := by
+    rw [map_mul, show q ξ.val = 1 from (QuotientGroup.eq_one_iff _).mpr ξ.property, one_mul]
+  have hn' (ξ : Hₛ) : n (ξ.val * g) = n g := by simp only [n, hq]
+  simp_rw [hn']
+  have hb := hbound g hg
+  have hw' : W.val (q g) = Complex.ofReal (W.val (q g)).re :=
+    Complex.ext (by simp) (by simpa using him g)
+  have heq : W.val (q g) * n g = 1 := by
+    change W.val (q g) * Complex.ofReal (D (W.val (q g)).re)⁻¹ = 1
+    rw [hDeq _ hb]
+    conv_lhs => lhs; rw [hw']
+    rw [← Complex.ofReal_mul, mul_inv_cancel₀ (by linarith), Complex.ofReal_one]
+  exact heq ▸ (hsum g).mul_right (n g)
+
 /-- Paper: (12.4.1.4), p. 515. The restriction of an outside-unit-invariant test admits
 a compactly supported Bruhat lift whose S-unit periodization recovers the restriction.
 Deviation: The inserted S-idele evaluates the global test before taking the quotient. -/
@@ -82,7 +336,29 @@ theorem exists_sLocalTraceLift
     (_hOutside : ∀ (a : outsideIntegralIdeleUnits F S) (c : C𝔽),
       φ.val (QuotientGroup.mk a.val * c) = φ.val c) :
     ∃ f : BruhatCompactSupport Iₛ, ∀ g : Iₛ,
-      HasSum (fun ξ : Hₛ ↦ f.val (ξ.val * g)) (φ.val (classAtS(g))) := by sorry
+      HasSum (fun ξ : Hₛ ↦ f.val (ξ.val * g)) (φ.val (classAtS(g))) := by
+  let K := sIdeleQuotientNorm F S ⁻¹' (ideleClassNorm F '' tsupport φ.val)
+  have hK : IsCompact K := (isProperMap_sIdeleQuotientNorm F S).isCompact_preimage
+    (φ.property.2.image (isProperMap_ideleClassNorm F).continuous)
+  obtain ⟨w, hw⟩ := exists_sLocalTraceCutoff K hK
+  let r : Iₛ → ℂ := fun g ↦ φ.val (classAtS(g))
+  have hs : IsBruhatSmooth (w.val * r) := fun p ↦
+    isBruhatContDiff_mul ((mem_bruhatSmoothSubmodule_iff _).mp w.property.1 p)
+      (sLocalTraceRestriction_smooth φ p)
+  have hc : HasCompactSupport (w.val * r) :=
+    w.property.2.of_isClosed_subset isClosed_closure tsupport_mul_subset_left
+  refine ⟨⟨w.val * r, (mem_bruhatSmoothSubmodule_iff _).mpr hs, hc⟩, fun g ↦ ?_⟩
+  have hEq (ξ : Hₛ) : r (ξ.val * g) = r g := sLocalTraceRestriction_invariant φ _hOutside ξ g
+  change HasSum (fun ξ : Hₛ ↦ w.val (ξ.val * g) * r (ξ.val * g)) (r g)
+  simp_rw [hEq]
+  by_cases hg : r g = 0
+  · simp [hg]
+  have hmem : (QuotientGroup.mk g : Jₛ) ∈ K := by
+    refine ⟨classAtS(g), subset_closure hg, ?_⟩
+    rw [sIdeleQuotientNorm_mk]
+    exact ideleNorm_sIdeleInsertion F S g
+  simpa only [one_mul] using (hw g hmem).mul_right (r g)
+
 
 -- TODO(paper-gap): The operator A on p. 515 has an extra factor |x|^(1/2)
 -- in its output. Step I computes the scalar kernel with that factor removed.

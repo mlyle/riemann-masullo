@@ -9949,11 +9949,93 @@ theorem introTrace_all_continuations_iff_critical_line
     have he := hline χ s (by linarith) hs₁ hz
     linarith
 
+open Classical in
+/-- Paper: §1.4.5, p. 30 and Theorem 12.5.1.1, pp. 519–520. At a fixed
+half-width the exterior-zero terms cancel for every test vanishing on the norm-one
+classes exactly when every completed Hecke zero in the critical strip belongs to the
+open centered window. This uses one norm section and tests every unitary character.
+Normalizing the character translates its zeros by a purely imaginary number. -/
+theorem introTrace_exterior_cancellation_iff_all_zeros_in_window
+    (τ : ℝ≥0ˣ →ₜ* C𝔽) (hτ : RightInverse τ (ideleClassNorm F))
+    (a : ℝ) :
+    (∀ φ : D𝔽, (∀ g : (ideleClassNorm F).ker, φ.val g = 0) →
+      HasSum (fun z : {p : {η : U𝔽 // ∀ t : ℝ≥0ˣ, η (τ t) = 1} × ℂ //
+          0 < zeroOrder(p.1.val, p.2) ∧ a ≤ |p.2.re - 1 / 2|} ↦
+        (zeroOrder(z.val.1.val, z.val.2) : ℂ) *
+          ∫ g, φ.val g * ideleClassNormTwist z.val.1.val (z.val.2 - 1 / 2) g ∂ideleClassTamagawaMeasure F) 0) ↔
+      ∀ (χ : U𝔽) (s : ℂ), 0 < s.re → s.re < 1 →
+        0 < meromorphicOrderAt (continuedCompletedHeckeL χ) s → |s.re - 1 / 2| < a := by
+  have hdiv (χ : U𝔽) (s : ℂ) : 0 < zeroOrder(χ, s) ↔ 0 < meromorphicOrderAt (continuedCompletedHeckeL χ) s := by
+    have hL := (continuedCompletedHeckeL_spec χ).1.meromorphicOn
+    have ht : meromorphicOrderAt (continuedCompletedHeckeL χ) 2 ≠ ⊤ := by
+      intro h
+      have hpos : 0 < meromorphicOrderAt (continuedCompletedHeckeL χ) 2 := by simp [h]
+      have := introTrace_positive_order_re_lt_one χ hpos
+      norm_num at this
+    have hn := hL.meromorphicOrderAt_ne_top_of_isPreconnected isPreconnected_univ (x := 2)
+      (mem_univ _) (mem_univ s) ht
+    rw [MeromorphicOn.divisor_apply hL (mem_univ s)]
+    cases e : meromorphicOrderAt (continuedCompletedHeckeL χ) s with
+    | top => exact (hn e).elim
+    | coe k => simp
+  constructor
+  · intro hcan χ s hs₀ _ hs
+    have hempty := isEmpty_exteriorZeros_of_hasSum τ hτ a (fun φ hφ ↦ by
+      simpa only [modulatedFourierMellin, relativeVerticalStrip, Set.preimage_univ, Set.indicator_univ]
+        using hcan φ hφ)
+    obtain ⟨ψ, v, hv, hψ, htwist⟩ := introTraceApprox_spectral_normalized_character τ hτ χ
+    have hre : (s + v).re = s.re := by rw [Complex.add_re, hv, add_zero]
+    have horder := (introTraceApprox_spectral_finiteOrder_twist χ ψ v hv htwist s hs₀).trans
+      (introTrace_normalized_finite_order_eq_completed ψ (s + v) (hre.symm ▸ hs₀))
+    have hp := (hdiv ψ (s + v)).mpr (horder ▸ hs)
+    by_contra! hout
+    exact hempty.false ⟨(⟨ψ, hψ⟩, s + v), hp, by simpa only [hre] using hout⟩
+  · intro hzeros φ hφ
+    have hempty : IsEmpty {p : {η : U𝔽 // ∀ t : ℝ≥0ˣ, η (τ t) = 1} × ℂ //
+        0 < zeroOrder(p.1.val, p.2) ∧ a ≤ |p.2.re - 1 / 2|} := by
+      refine ⟨fun p ↦ ?_⟩
+      obtain ⟨hleft, hright⟩ := abs_lt.mp
+        (introTrace_positive_divisor_in_critical_strip p.val.1.val p.val.2 p.property.1)
+      have h := hzeros p.val.1.val p.val.2 (by linarith) (by linarith)
+        ((hdiv p.val.1.val p.val.2).mp p.property.1)
+      exact (not_lt_of_ge p.property.2) h
+    simpa only [modulatedFourierMellin, relativeVerticalStrip, Set.preimage_univ, Set.indicator_univ] using
+      (hasSum_exteriorZeros_iff_isEmpty τ hτ a).mpr hempty φ hφ
+
+open Classical in
+/-- Paper: §1.4.5, p. 30 and Theorem 12.5.1.1, pp. 519–520. Fix a number field
+and one section of its idele class norm. If the positive half-widths in a set
+come arbitrarily close to zero, cancellation for all tests at those widths
+is equivalent to the critical-line assertion for every unitary Hecke character
+of the field, including characters nontrivial on the section. -/
+theorem introTrace_cofinal_exterior_cancellation_iff_critical_line
+    (τ : ℝ≥0ˣ →ₜ* C𝔽) (hτ : RightInverse τ (ideleClassNorm F))
+    (W : Set ℝ) (hW : ∀ a ∈ W, 0 < a) (hsmall : ∀ δ > 0, ∃ a ∈ W, a ≤ δ) :
+    (∀ a ∈ W, ∀ φ : D𝔽, (∀ g : (ideleClassNorm F).ker, φ.val g = 0) →
+      HasSum (fun z : {p : {η : U𝔽 // ∀ t : ℝ≥0ˣ, η (τ t) = 1} × ℂ //
+          0 < zeroOrder(p.1.val, p.2) ∧ a ≤ |p.2.re - 1 / 2|} ↦
+        (zeroOrder(z.val.1.val, z.val.2) : ℂ) *
+          ∫ g, φ.val g * ideleClassNormTwist z.val.1.val (z.val.2 - 1 / 2) g ∂ideleClassTamagawaMeasure F) 0) ↔
+      ∀ (χ : U𝔽) (s : ℂ), 0 < s.re → s.re < 1 →
+        0 < meromorphicOrderAt (continuedCompletedHeckeL χ) s → s.re = 1 / 2 := by
+  constructor
+  · intro hcan χ s hs₀ hs₁ hs
+    by_contra hn
+    obtain ⟨a, ha, hle⟩ := hsmall |s.re - 1 / 2| (abs_pos.mpr (sub_ne_zero.mpr hn))
+    have h := (introTrace_exterior_cancellation_iff_all_zeros_in_window τ hτ a).mp
+      (hcan a ha) χ s hs₀ hs₁ hs
+    exact (not_lt_of_ge hle) h
+  · intro hline a ha
+    apply (introTrace_exterior_cancellation_iff_all_zeros_in_window τ hτ a).mpr
+    intro χ s hs₀ hs₁ hs
+    simpa only [hline χ s hs₀ hs₁ hs, sub_self, abs_zero] using hW a ha
+
 /-- Paper: §1.4.5, p. 30. For every number field and every unitary character
 of its idele class group, a zero of the continued completed Hecke L-function
 in the open critical strip has real part one half. The paper gives no
 numbered statement for this claim. Theorem 13.3.1.2 is a title. The deduction
-below depends on the missing extension in §1.4.5.
+uses the exterior-zero cancellation asserted in Theorem 12.5.1.1. That assertion, applied
+at a cofinal set of positive half-widths, is the remaining unproved premise.
 Deviation: Positive meromorphic order expresses a zero of the continuation
 and distinguishes zeros from poles. -/
 theorem heckeL_zero_re_eq_half (χ : U𝔽) (s : ℂ) (_hs₀ : 0 < s.re) (_hs₁ : s.re < 1)
@@ -9964,8 +10046,10 @@ theorem heckeL_zero_re_eq_half (χ : U𝔽) (s : ℂ) (_hs₀ : 0 < s.re) (_hs�
   let τ : ℝ≥0ˣ →ₜ* C𝔽 := q.comp
     ⟨canonicalIdeleNormSection F, canonicalIdeleNormSection_continuous F⟩
   have hτ : RightInverse τ (ideleClassNorm F) := canonicalIdeleNormSection_rightInverse F
-  apply (introTrace_all_continuations_iff_critical_line τ hτ).mp _ χ s _hs₀ _hs₁ _hzero
-  intro η hη a ha
-  exact introTrace_combined_limit_extension_analytic τ hτ η hη ha
+  apply (introTrace_cofinal_exterior_cancellation_iff_critical_line τ hτ (Ioi 0)
+    (fun _ ha ↦ ha) (fun δ hδ ↦ ⟨δ, hδ, le_rfl⟩)).mp _ χ s _hs₀ _hs₁ _hzero
+  intro a ha φ hφ
+  simpa only [modulatedFourierMellin, relativeVerticalStrip, Set.preimage_univ, Set.indicator_univ] using
+    traceFormula_exteriorZeros τ hτ φ hφ ha
 
 end RiemannMasullo
