@@ -1708,13 +1708,7 @@ open Filter Function MeasureTheory Topology Set FourierTransform NumberField IsD
 open scoped NumberField.AdeleRing NNReal ENNReal
 namespace LineCardinal
 set_option quotPrecheck false
-attribute [local instance] instIdeleClassMeasurableSpaceSec1 instIdeleClassBorelSpaceSec1
-  instIdeleClassT2Sec1 instIdeleClassLocallyCompactSec1 instIdeleClassSecondCountableSec1
-  instIdeleClassHaarMeasureSec1
 local notation "S" => SchwartzMap ℝ ℂ
-local notation "C𝔽" => IdeleClassGroup (𝓞 F) F
-local notation "C₁" => (ideleClassNorm F).ker
-local notation "μ𝔽" => ideleClassTamagawaMeasure F
 local notation "l" => logIdeleClassNorm F
 local notation "J(" χ ", " a ", " s ")" => SpectralStripJetIndex (F:=F) χ a 0 s
 private abbrev lineSpace (F : Type*) [Field F] [NumberField F] (a : ℝ) {s : ℝ} (hs : 1<s) :=
@@ -1883,13 +1877,7 @@ open Filter Function MeasureTheory Topology Set FourierTransform NumberField IsD
 open scoped NumberField.AdeleRing NNReal ENNReal
 namespace LineCardinal
 set_option quotPrecheck false
-attribute [local instance] instIdeleClassMeasurableSpaceSec1 instIdeleClassBorelSpaceSec1
-  instIdeleClassT2Sec1 instIdeleClassLocallyCompactSec1 instIdeleClassSecondCountableSec1
-  instIdeleClassHaarMeasureSec1
 local notation "S" => SchwartzMap ℝ ℂ
-local notation "C𝔽" => IdeleClassGroup (𝓞 F) F
-local notation "C₁" => (ideleClassNorm F).ker
-local notation "μ𝔽" => ideleClassTamagawaMeasure F
 
 local notation "m𝔽" =>
   (⟨ideleClassNorm F, (isProperMap_ideleClassNorm F).continuous⟩ : C𝔽 →ₜ* ℝ≥0ˣ)
@@ -1914,7 +1902,6 @@ local notation "logNorm" => (logIdeleClassNorm F)
 local notation "D" => spectralSobolevDualEmbedding F a (hStrip(hα)) hs₀(hs)
 local notation "raw(" χ ", " j ")" =>
   spectralZeroJet (F := F) (χ (j).val.1) (j).val.2.1 (j).val.2.2.1 (j).val.2.2.2
-local notation "jet(" z ", " m ")" => ⟨((z).val.1, (z).val.2.1, (z).val.2.2, (m).val), (m).isLt⟩
 local notation "J(" χ ")" => SpectralStripJetIndex (F := F) χ a α s
 
 private def logTest (φ : BruhatCompactSupport C𝔽) (k : ℕ) : BruhatCompactSupport C𝔽 := by
