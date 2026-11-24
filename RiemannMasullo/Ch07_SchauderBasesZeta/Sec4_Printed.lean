@@ -254,6 +254,276 @@ def Printed.archFlatProjectiveTensorEmbedding : Prop :=
             fun v ↦ InfinitePlace.Completion.ringEquivComplexOfIsComplex v.property (x.1 v.val)) *
           g (Multiplicative.ofAdd x.2)
 
+open scoped TensorProduct in
+/-- On a barrelled space identified with an inductive tensor product, the supremum of the
+seminorms `t ↦ P j (slice of t along ε j)` is a continuous seminorm, as soon as every tensor
+has only finitely many slices that are not zero. -/
+private theorem archFlatProjectiveTensorEmbedding_false_seminorm
+    {E V W : Type*} [AddCommGroup E] [Module ℂ E] [TopologicalSpace E]
+    [AddCommGroup V] [Module ℂ V] [TopologicalSpace V]
+    [AddCommGroup W] [Module ℂ W] [TopologicalSpace W] [IsTopologicalAddGroup W]
+    [ContinuousSMul ℂ W] [BarrelledSpace ℂ W]
+    (T : InductiveTensor E V ≃L[ℂ] W) (P : ℕ → Seminorm ℂ E) (hP : ∀ j, Continuous (P j))
+    (ε : ℕ → V →L[ℂ] ℂ)
+    (hfin : ∀ t : E ⊗[ℂ] V, ∃ N : ℕ, ∀ j, N ≤ j →
+      TensorProduct.lift ((LinearMap.lsmul ℂ E).flip.compl₂ (ε j).toLinearMap) t = 0) :
+    ∃ r : Seminorm ℂ W, Continuous r ∧
+      ∀ (j : ℕ) (f : E) (g : V), ‖ε j g‖ * P j f ≤ r (T (f ⊗ₜ[ℂ] g)) := by
+  let S (j : ℕ) : E ⊗[ℂ] V →ₗ[ℂ] E :=
+    TensorProduct.lift ((LinearMap.lsmul ℂ E).flip.compl₂ (ε j).toLinearMap)
+  have hS (j : ℕ) (f : E) (g : V) : S j (f ⊗ₜ[ℂ] g) = ε j g • f := by
+    simp [S]
+  let ρ (j : ℕ) : Seminorm ℂ (E ⊗[ℂ] V) := (P j).comp (S j)
+  have hρv (j : ℕ) (f : E) (g : V) : ρ j (f ⊗ₜ[ℂ] g) = ‖ε j g‖ * P j f := by
+    change P j (S j (f ⊗ₜ[ℂ] g)) = _
+    rw [hS, map_smul_eq_mul]
+  have hsp := withGeneratingSeminorms_spec (E ⊗[ℂ] V)
+    (fun p : {p : Seminorm ℂ (E ⊗[ℂ] V) //
+      (∀ x : E, Continuous (fun y : V ↦ p (x ⊗ₜ[ℂ] y))) ∧
+      (∀ y : V, Continuous (fun x : E ↦ p (x ⊗ₜ[ℂ] y)))} ↦ p.val)
+  have hρ (j : ℕ) : @Continuous (InductiveTensor E V) ℝ _ _ (ρ j) :=
+    hsp.continuous_seminorm ⟨ρ j, fun x ↦ by
+      simp only [hρv]
+      exact ((ε j).continuous.norm).mul continuous_const, fun y ↦ by
+      simp only [hρv]
+      exact continuous_const.mul (hP j)⟩
+  let r (j : ℕ) : Seminorm ℂ W := (ρ j).comp T.symm.toLinearMap
+  have hr (j : ℕ) : Continuous (r j) := (hρ j).comp T.symm.continuous
+  have hb : BddAbove (range r) := Seminorm.bddAbove_range_iff.mpr fun w ↦ by
+    obtain ⟨N, hN⟩ := hfin (T.symm w)
+    refine ⟨∑ j ∈ Finset.range N, r j w, forall_mem_range.mpr fun j ↦ ?_⟩
+    by_cases hj : j < N
+    · exact Finset.single_le_sum (f := fun i ↦ r i w) (fun i _ ↦ apply_nonneg (r i) w)
+        (Finset.mem_range.mpr hj)
+    · have h0 : r j w = 0 := by
+        change P j (S j (T.symm w)) = 0
+        rw [show S j (T.symm w) = 0 from hN j (not_lt.mp hj), map_zero]
+      rw [h0]
+      exact Finset.sum_nonneg fun i _ ↦ apply_nonneg (r i) w
+  refine ⟨⨆ j, r j, ?_, fun j f g ↦ ?_⟩
+  · rw [Seminorm.coe_iSup_eq hb]
+    exact Seminorm.continuous_iSup r hr hb
+  · have h1 : r j (T (f ⊗ₜ[ℂ] g)) = ‖ε j g‖ * P j f :=
+      (congrArg (ρ j) (T.symm_apply_apply (f ⊗ₜ[ℂ] g))).trans (hρv j f g)
+    rw [← h1]
+    exact (le_ciSup hb j : r j ≤ ⨆ i, r i) _
+
+/-- Every neighbourhood of zero in the flat archimedean Schwartz space of `ℚ` contains
+functions with arbitrarily large weighted supremum of one fixed order: a neighbourhood controls
+finitely many weights, and spreading a fixed bump out beats the next one. -/
+private theorem archFlatProjectiveTensorEmbedding_false_unbounded
+    (U : Set (archimedeanFlatSchwartz (ι := {v : InfinitePlace ℚ // v.IsReal})
+      (κ := {v : InfinitePlace ℚ // v.IsComplex})))
+    (hU : U ∈ 𝓝 0) :
+    ∃ j : ℕ, ∀ M : ℝ, ∃ a ∈ U, M ≤ SchwartzMap.seminorm ℂ j 0 a.val := by
+  let Coord := ({v : InfinitePlace ℚ // v.IsReal} → ℝ) × ({v : InfinitePlace ℚ // v.IsComplex} → ℂ)
+  obtain ⟨u, hu, hsub⟩ := (mem_nhds_subtype _ _ _).mp hU
+  obtain ⟨s, δ, hδ, hball⟩ := ((schwartz_withSeminorms ℂ Coord ℂ).mem_nhds_iff _ _).mp hu
+  let c : Coord := (fun _ ↦ 1, fun _ ↦ 1)
+  let b : ContDiffBump c := ⟨1 / 4, 1 / 2, by norm_num, by norm_num⟩
+  let bc : Coord → ℂ := fun x ↦ ((b x : ℝ) : ℂ)
+  have hbc : ContDiff ℝ (⊤ : ℕ∞) bc := Complex.ofRealCLM.contDiff.comp b.contDiff
+  have hbs : HasCompactSupport bc := b.hasCompactSupport.comp_left Complex.ofReal_zero
+  let h₁ : SchwartzMap Coord ℂ := hbs.toSchwartzMap hbc
+  have hc1 : (1 : ℝ) ≤ ‖c‖ := by
+    let i₀ : {v : InfinitePlace ℚ // v.IsReal} := ⟨Rat.infinitePlace, Rat.isReal_infinitePlace⟩
+    have h3 : ‖c.1 i₀‖ ≤ ‖c‖ := (norm_le_pi_norm _ i₀).trans (norm_fst_le _)
+    have h4 : ‖c.1 i₀‖ = 1 := norm_one
+    linarith
+  let K := s.sup Prod.fst
+  let C : ℝ := (∑ i ∈ s, SchwartzMap.seminorm ℂ i.1 i.2 h₁) + 1
+  have hC : 0 < C :=
+    add_pos_of_nonneg_of_pos (Finset.sum_nonneg fun i _ ↦ apply_nonneg _ _) one_pos
+  refine ⟨K + 1, fun M ↦ ?_⟩
+  let μ : ℝ := max 1 (2 * C * M / δ)
+  have hμ1 : 1 ≤ μ := le_max_left _ _
+  have hμ0 : 0 < μ := zero_lt_one.trans_le hμ1
+  let L : Coord ≃L[ℝ] Coord := ContinuousLinearEquiv.equivOfInverse
+    (μ⁻¹ • ContinuousLinearMap.id ℝ Coord) (μ • ContinuousLinearMap.id ℝ Coord)
+    (fun x ↦ by simp [smul_smul, hμ0.ne']) (fun x ↦ by simp [smul_smul, hμ0.ne'])
+  have hL (x : Coord) : L x = μ⁻¹ • x := rfl
+  let hd : SchwartzMap Coord ℂ := SchwartzMap.compCLMOfContinuousLinearEquiv ℂ L h₁
+  have hdv (x : Coord) : hd x = bc (μ⁻¹ • x) := rfl
+  have hLn : ‖(L : Coord →L[ℝ] Coord)‖ ≤ 1 := by
+    refine ContinuousLinearMap.opNorm_le_bound _ zero_le_one fun x ↦ ?_
+    change ‖μ⁻¹ • x‖ ≤ 1 * ‖x‖
+    rw [norm_smul, Real.norm_of_nonneg (inv_nonneg.mpr hμ0.le)]
+    exact mul_le_mul_of_nonneg_right (inv_le_one_of_one_le₀ hμ1) (norm_nonneg x)
+  have hsem (i : ℕ × ℕ) (hi : i ∈ s) :
+      SchwartzMap.seminorm ℂ i.1 i.2 hd ≤ μ ^ K * C := by
+    refine SchwartzMap.seminorm_le_bound ℂ i.1 i.2 hd (by positivity) fun x ↦ ?_
+    have hder : iteratedFDeriv ℝ i.2 (hd : Coord → ℂ) x =
+        (iteratedFDeriv ℝ i.2 (h₁ : Coord → ℂ) (L x)).compContinuousLinearMap
+          fun _ ↦ (L : Coord →L[ℝ] Coord) :=
+      (L : Coord →L[ℝ] Coord).iteratedFDeriv_comp_right (h₁.smooth ⊤) x (mod_cast le_top)
+    have hn : ‖iteratedFDeriv ℝ i.2 (hd : Coord → ℂ) x‖ ≤
+        ‖iteratedFDeriv ℝ i.2 (h₁ : Coord → ℂ) (L x)‖ := by
+      rw [hder]
+      refine (ContinuousMultilinearMap.norm_compContinuousLinearMap_le _ _).trans ?_
+      refine mul_le_of_le_one_right (norm_nonneg _) ?_
+      rw [Finset.prod_const]
+      exact pow_le_one₀ (norm_nonneg _) hLn
+    have hx : ‖x‖ = μ * ‖L x‖ := by
+      rw [hL, norm_smul, Real.norm_of_nonneg (inv_nonneg.mpr hμ0.le), mul_inv_cancel_left₀ hμ0.ne']
+    have hk : i.1 ≤ K := Finset.le_sup (f := Prod.fst) hi
+    calc ‖x‖ ^ i.1 * ‖iteratedFDeriv ℝ i.2 (hd : Coord → ℂ) x‖
+        ≤ (μ * ‖L x‖) ^ i.1 * ‖iteratedFDeriv ℝ i.2 (h₁ : Coord → ℂ) (L x)‖ := by
+          rw [hx]
+          exact mul_le_mul_of_nonneg_left hn (by positivity)
+      _ = μ ^ i.1 * (‖L x‖ ^ i.1 * ‖iteratedFDeriv ℝ i.2 (h₁ : Coord → ℂ) (L x)‖) := by
+          rw [mul_pow, mul_assoc]
+      _ ≤ μ ^ K * (SchwartzMap.seminorm ℂ i.1 i.2 h₁) :=
+          mul_le_mul (pow_le_pow_right₀ hμ1 hk) (SchwartzMap.le_seminorm ℂ i.1 i.2 h₁ (L x))
+            (by positivity) (by positivity)
+      _ ≤ μ ^ K * C := by
+          refine mul_le_mul_of_nonneg_left ?_ (by positivity)
+          exact (Finset.single_le_sum (f := fun i : ℕ × ℕ ↦ SchwartzMap.seminorm ℂ i.1 i.2 h₁)
+            (fun i _ ↦ apply_nonneg _ _) hi).trans (le_add_of_nonneg_right zero_le_one)
+  let t : ℝ := δ / (2 * C * μ ^ K)
+  have ht : 0 < t := by positivity
+  have hflat : hd ∈ archimedeanFlatSchwartz (ι := {v : InfinitePlace ℚ // v.IsReal})
+      (κ := {v : InfinitePlace ℚ // v.IsComplex}) := by
+    apply mem_archimedeanFlatSchwartz_of_tsupport
+    rw [Set.disjoint_left]
+    intro x hx hw
+    have hx1 : L x ∈ tsupport bc := by
+      have h9 := tsupport_comp_eq_preimage bc L.toHomeomorph
+      exact (Set.ext_iff.mp h9 x).mp hx
+    have hx2 : L x ∈ Metric.closedBall c (1 / 2) := by
+      have h10 : tsupport bc ⊆ tsupport (b : Coord → ℝ) :=
+        tsupport_comp_subset Complex.ofReal_zero _
+      rw [b.tsupport_eq] at h10
+      exact h10 hx1
+    rw [Metric.mem_closedBall, dist_eq_norm] at hx2
+    rcases hw with ⟨i, hi⟩ | ⟨j, hj⟩
+    · have h1 : ‖(L x - c).1 i‖ ≤ ‖L x - c‖ := (norm_le_pi_norm _ i).trans (norm_fst_le _)
+      have h2 : (L x - c).1 i = -1 := by
+        change μ⁻¹ • x.1 i - 1 = -1
+        rw [hi, smul_zero, zero_sub]
+      rw [h2, norm_neg, norm_one] at h1
+      linarith
+    · have h1 : ‖(L x - c).2 j‖ ≤ ‖L x - c‖ := (norm_le_pi_norm _ j).trans (norm_snd_le _)
+      have h2 : (L x - c).2 j = -1 := by
+        change μ⁻¹ • x.2 j - 1 = -1
+        rw [hj, smul_zero, zero_sub]
+      rw [h2, norm_neg, norm_one] at h1
+      linarith
+  refine ⟨⟨(t : ℂ) • hd, Submodule.smul_mem _ _ hflat⟩, hsub (hball ?_), ?_⟩
+  · change (s.sup (schwartzSeminormFamily ℂ Coord ℂ)) ((t : ℂ) • hd - 0) < δ
+    rw [sub_zero]
+    refine Seminorm.finset_sup_apply_lt hδ fun i hi ↦ ?_
+    change SchwartzMap.seminorm ℂ i.1 i.2 ((t : ℂ) • hd) < δ
+    rw [map_smul_eq_mul, Complex.norm_real, Real.norm_of_nonneg ht.le]
+    calc t * SchwartzMap.seminorm ℂ i.1 i.2 hd ≤ t * (μ ^ K * C) :=
+          mul_le_mul_of_nonneg_left (hsem i hi) ht.le
+      _ = δ / 2 := by
+          simp only [t]
+          field_simp
+      _ < δ := half_lt_self hδ
+  · change M ≤ SchwartzMap.seminorm ℂ (K + 1) 0 ((t : ℂ) • hd)
+    rw [map_smul_eq_mul, Complex.norm_real, Real.norm_of_nonneg ht.le]
+    have hval : hd (μ • c) = 1 := by
+      rw [hdv, smul_smul, inv_mul_cancel₀ hμ0.ne', one_smul]
+      change ((b c : ℝ) : ℂ) = 1
+      rw [b.one_of_mem_closedBall (Metric.mem_closedBall_self b.rIn_pos.le), Complex.ofReal_one]
+    have hlow := SchwartzMap.norm_pow_mul_le_seminorm ℂ hd (K + 1) (μ • c)
+    rw [hval, norm_one, mul_one, norm_smul, Real.norm_of_nonneg hμ0.le] at hlow
+    have h5 : μ ^ (K + 1) ≤ (μ * ‖c‖) ^ (K + 1) :=
+      pow_le_pow_left₀ hμ0.le (le_mul_of_one_le_right hμ0.le hc1) _
+    have h6 : M ≤ t * μ ^ (K + 1) := by
+      have h7 : 2 * C * M / δ ≤ μ := le_max_right _ _
+      have h8 : t * μ ^ (K + 1) = δ * μ / (2 * C) := by
+        simp only [t]
+        field_simp
+        ring
+      rw [h8, le_div_iff₀ (by positivity)]
+      have h9 := (div_le_iff₀ hδ).mp h7
+      linarith
+    exact h6.trans (mul_le_mul_of_nonneg_left (h5.trans hlow) ht.le)
+
+/-- Points of the finite adeles of `ℚ` leaving every compact set at one place: the negative
+powers of a uniformizer there and one elsewhere. -/
+private theorem archFlatProjectiveTensorEmbedding_false_points :
+    ∃ (v₀ : HeightOneSpectrum (𝓞 ℚ)) (y : ℕ → FiniteAdeleRing (𝓞 ℚ) ℚ),
+      ∀ K : Set (v₀.adicCompletion ℚ), IsCompact K → ∃ N : ℕ, ∀ j, N ≤ j → y j v₀ ∉ K := by
+  let v₀ : HeightOneSpectrum (𝓞 ℚ) := Rat.HeightOneSpectrum.primesEquiv.symm ⟨3, Nat.prime_three⟩
+  have hU := (Valued.v : Valuation (v₀.adicCompletion ℚ)
+    (WithZero (Multiplicative ℤ))).exists_isUniformizer_of_isCyclic_of_nontrivial
+  let π : v₀.adicCompletion ℚ := hU.choose
+  have hπ := hU.choose_spec
+  have hπ0 : π ≠ 0 := hπ.ne_zero
+  have hπ1 : ‖π‖ < 1 := Valued.toNormedField.norm_lt_one_iff.mpr hπ.val_lt_one
+  let y (j : ℕ) : FiniteAdeleRing (𝓞 ℚ) ℚ :=
+    RestrictedProduct.mulSingle (fun w : HeightOneSpectrum (𝓞 ℚ) ↦ w.adicCompletionIntegers ℚ)
+      v₀ (π⁻¹ ^ j)
+  refine ⟨v₀, y, fun K hK ↦ ?_⟩
+  obtain ⟨M, hM⟩ := (hK.image continuous_norm).bddAbove
+  have hgt : 1 < ‖π‖⁻¹ := (one_lt_inv₀ (norm_pos_iff.mpr hπ0)).mpr hπ1
+  obtain ⟨N, hN⟩ := Filter.eventually_atTop.mp
+    ((tendsto_pow_atTop_atTop_of_one_lt hgt).eventually_gt_atTop M)
+  refine ⟨N, fun j hj hmem ↦ ?_⟩
+  have h2 : y j v₀ = π⁻¹ ^ j := RestrictedProduct.mulSingle_eq_same _ _ _
+  have h3 := hM (Set.mem_image_of_mem _ hmem)
+  rw [h2, norm_pow, norm_inv] at h3
+  exact (hN j hj).not_ge h3
+
+open scoped TensorProduct in
+/-- For points of the finite adeles leaving every compact set at one place, every tensor of
+adelic factors has only finitely many slices at these points that are not zero: an adelic
+Schwartz–Bruhat function is a finite sum of archimedean functions times indicators of compact
+rectangles. -/
+private theorem archFlatProjectiveTensorEmbedding_false_slices
+    (T : InductiveTensor (SchwartzBruhat (Multiplicative (InfiniteAdeleRing ℚ)))
+        (SchwartzBruhat (Multiplicative (FiniteAdeleRing (𝓞 ℚ) ℚ))) ≃L[ℂ]
+      SchwartzBruhat (Multiplicative 𝔸[ℚ]))
+    (hT : ∀ (f : SchwartzBruhat (Multiplicative (InfiniteAdeleRing ℚ)))
+      (g : SchwartzBruhat (Multiplicative (FiniteAdeleRing (𝓞 ℚ) ℚ))) (x : 𝔸[ℚ]),
+      T (f ⊗ₜ[ℂ] g) (Multiplicative.ofAdd x) =
+        f (Multiplicative.ofAdd x.1) * g (Multiplicative.ofAdd x.2))
+    (v₀ : HeightOneSpectrum (𝓞 ℚ)) (y : ℕ → FiniteAdeleRing (𝓞 ℚ) ℚ)
+    (hy : ∀ K : Set (v₀.adicCompletion ℚ), IsCompact K → ∃ N : ℕ, ∀ j, N ≤ j → y j v₀ ∉ K)
+    (ε : ℕ → SchwartzBruhat (Multiplicative (FiniteAdeleRing (𝓞 ℚ) ℚ)) →L[ℂ] ℂ)
+    (hε : ∀ j g, ε j g = g (Multiplicative.ofAdd (y j)))
+    (t : SchwartzBruhat (Multiplicative (InfiniteAdeleRing ℚ)) ⊗[ℂ]
+      SchwartzBruhat (Multiplicative (FiniteAdeleRing (𝓞 ℚ) ℚ))) :
+    ∃ N : ℕ, ∀ j, N ≤ j → TensorProduct.lift ((LinearMap.lsmul ℂ
+      (SchwartzBruhat (Multiplicative (InfiniteAdeleRing ℚ)))).flip.compl₂ (ε j).toLinearMap) t =
+        0 := by
+  have hslice (j : ℕ) (s : SchwartzBruhat (Multiplicative (InfiniteAdeleRing ℚ)) ⊗[ℂ]
+      SchwartzBruhat (Multiplicative (FiniteAdeleRing (𝓞 ℚ) ℚ))) (x : InfiniteAdeleRing ℚ) :
+      TensorProduct.lift ((LinearMap.lsmul ℂ
+        (SchwartzBruhat (Multiplicative (InfiniteAdeleRing ℚ)))).flip.compl₂ (ε j).toLinearMap) s
+          (Multiplicative.ofAdd x) = T s (Multiplicative.ofAdd ((x, y j) : 𝔸[ℚ])) := by
+    induction s using TensorProduct.inductionOn with
+    | tmul f g =>
+      rw [TensorProduct.lift.tmul, hT]
+      change (ε j g • f) (Multiplicative.ofAdd x) = _
+      rw [SchwartzBruhat.coe_smul, hε]
+      exact mul_comm _ _
+    | add a b ha hb =>
+      have h1 : T (a + b) = T a + T b := map_add T a b
+      rw [map_add, h1, SchwartzBruhat.coe_add, SchwartzBruhat.coe_add, Pi.add_apply,
+        Pi.add_apply, ha, hb]
+  obtain ⟨r, c, arch, K, φ, -, hφ, hΦ⟩ :=
+    adeleSchwartz_eq_sum_compactOpen_rectangles (F := ℚ) (T t)
+  choose N hN using fun i ↦ hy (K i v₀) ((hφ i).1 v₀).1
+  refine ⟨Finset.univ.sup N, fun j hj ↦ SchwartzBruhat.ext fun z ↦ ?_⟩
+  have hz : z = Multiplicative.ofAdd (Multiplicative.toAdd z) := rfl
+  rw [hz, hslice, hΦ, SchwartzBruhat.coe_zero, Pi.zero_apply]
+  let ev : SchwartzBruhat (Multiplicative 𝔸[ℚ]) →ₗ[ℂ] ℂ :=
+    (LinearMap.proj (Multiplicative.ofAdd ((Multiplicative.toAdd z, y j) : 𝔸[ℚ]))).comp
+      ((schwartzBruhatSubmodule (Multiplicative 𝔸[ℚ])).subtype.comp
+        (SchwartzBruhat.toSubmodule (Multiplicative 𝔸[ℚ])).toLinearMap)
+  change ev (∑ i, c i • φ i) = 0
+  rw [map_sum]
+  refine Finset.sum_eq_zero fun i _ ↦ ?_
+  rw [map_smul]
+  change c i • φ i (Multiplicative.ofAdd ((Multiplicative.toAdd z, y j) : 𝔸[ℚ])) = 0
+  rw [(hφ i).2.2, Set.indicator_of_notMem, mul_zero, smul_zero]
+  intro hmem
+  exact hN i j ((Finset.le_sup (Finset.mem_univ i)).trans hj) (hmem v₀)
+
+open scoped TensorProduct RestrictedProduct in
 /-- Paper: Equation (7.4.3.1), p. 368.
 Over ℚ choose a basis of the finite test space and flat real functions supported
 in (2,3). In the ambient locally convex direct sum one continuous seminorm can
@@ -261,7 +531,79 @@ use derivative order j on basis coordinate j. Projective continuity would
 bound all those orders by one continuous archimedean seminorm with a separate
 constant per coordinate. A fixed bump times exp(i n x) contradicts this bound. -/
 theorem Printed.archFlatProjectiveTensorEmbedding_false :
-    ¬ Printed.archFlatProjectiveTensorEmbedding := by sorry
+    ¬ Printed.archFlatProjectiveTensorEmbedding := by
+  intro hP
+  obtain ⟨e, -, he⟩ := hP ℚ
+  obtain ⟨T, hT⟩ := adeleSchwartz_inductiveTensor_equiv ℚ
+  obtain ⟨J, hJ⟩ := archimedeanSchwartzBruhat_equiv (F := ℚ)
+  obtain ⟨v₀, y, hy⟩ := archFlatProjectiveTensorEmbedding_false_points
+  let : Fact (∀ v : HeightOneSpectrum (𝓞 ℚ),
+      IsOpen (v.adicCompletionIntegers ℚ : Set (v.adicCompletion ℚ))) :=
+    ⟨fun v ↦ Valued.isOpen_valuationSubring _⟩
+  let (v : HeightOneSpectrum (𝓞 ℚ)) : CompactSpace (v.adicCompletionIntegers ℚ) :=
+    compactSpace_adicCompletionIntegers v
+  let : LocallyCompactSpace (Multiplicative (FiniteAdeleRing (𝓞 ℚ) ℚ)) := by
+    change LocallyCompactSpace (Πʳ v : HeightOneSpectrum (𝓞 ℚ),
+      [v.adicCompletion ℚ, v.adicCompletionIntegers ℚ])
+    infer_instance
+  let : T2Space (Multiplicative (FiniteAdeleRing (𝓞 ℚ) ℚ)) := by
+    change T2Space (Πʳ v : HeightOneSpectrum (𝓞 ℚ),
+      [v.adicCompletion ℚ, v.adicCompletionIntegers ℚ])
+    infer_instance
+  -- Point evaluations at the `y j`, and functions equal to one there.
+  choose ε hε' using fun j : ℕ ↦ schwartzBruhat_dirac_support (Multiplicative.ofAdd (y j))
+  have hε (j : ℕ) (f : SchwartzBruhat (Multiplicative (FiniteAdeleRing (𝓞 ℚ) ℚ))) :
+      ε j f = f (Multiplicative.ofAdd (y j)) := (hε' j).1 f
+  have hne (j : ℕ) : ∃ f : SchwartzBruhat (Multiplicative (FiniteAdeleRing (𝓞 ℚ) ℚ)),
+      f (Multiplicative.ofAdd (y j)) ≠ 0 := by
+    by_contra! h
+    have hx : Multiplicative.ofAdd (y j) ∈ schwartzBruhatVanishingLocus (ε j) :=
+      Set.mem_sUnion.mpr ⟨Set.univ, ⟨isOpen_univ, fun f _ ↦ (hε j f).trans (h f)⟩,
+        Set.mem_univ _⟩
+    rw [(hε' j).2.1] at hx
+    exact hx (Set.mem_singleton _)
+  choose f₀ hf₀ using hne
+  let g (j : ℕ) : SchwartzBruhat (Multiplicative (FiniteAdeleRing (𝓞 ℚ) ℚ)) :=
+    (f₀ j (Multiplicative.ofAdd (y j)))⁻¹ • f₀ j
+  have hg (j : ℕ) : g j (Multiplicative.ofAdd (y j)) = 1 := by
+    change ((f₀ j (Multiplicative.ofAdd (y j)))⁻¹ • f₀ j) (Multiplicative.ofAdd (y j)) = 1
+    rw [SchwartzBruhat.coe_smul, Pi.smul_apply, smul_eq_mul, inv_mul_cancel₀ (hf₀ j)]
+  let P (j : ℕ) : Seminorm ℂ (SchwartzBruhat (Multiplicative (InfiniteAdeleRing ℚ))) :=
+    (SchwartzMap.seminorm ℂ j 0).comp J.symm.toLinearMap
+  have hPc (j : ℕ) : Continuous (P j) :=
+    ((schwartz_withSeminorms ℂ _ ℂ).continuous_seminorm (j, 0)).comp J.symm.continuous
+  have hbar : BarrelledSpace ℂ (SchwartzBruhat (Multiplicative 𝔸[ℚ])) := (adeleSchwartz_montel ℚ).2.1
+  obtain ⟨r, hr, hrl⟩ := archFlatProjectiveTensorEmbedding_false_seminorm T P hPc ε
+    (archFlatProjectiveTensorEmbedding_false_slices T hT v₀ y hy ε hε)
+  let : PolynormableSpace ℂ (SchwartzMap (({v : InfinitePlace ℚ // v.IsReal} → ℝ) ×
+      ({v : InfinitePlace ℚ // v.IsComplex} → ℂ)) ℂ) :=
+    (schwartz_withSeminorms ℂ _ ℂ).toPolynormableSpace
+  let : T2Space (SchwartzBruhat (Multiplicative (FiniteAdeleRing (𝓞 ℚ) ℚ))) :=
+    schwartzBruhat_t2_of_stages
+  have hβ := (continuous_projectiveTensor_iff e.toLinearMap).mp e.continuous
+  have hsmall := (hr.comp hβ).continuousAt.preimage_mem_nhds
+    (x := 0) (t := Iio 1) (Iio_mem_nhds (lt_of_eq_of_lt ((congrArg r ((congrArg e
+      (TensorProduct.zero_tmul _ _)).trans (map_zero e))).trans (map_zero r)) one_pos))
+  obtain ⟨U, hU, U', hU', hUU'⟩ := mem_nhds_prod_iff.mp hsmall
+  obtain ⟨j, hj⟩ := archFlatProjectiveTensorEmbedding_false_unbounded U hU
+  obtain ⟨c, hc, hc0⟩ := ((absorbent_nhds_zero (𝕜 := ℂ) hU').eventually_nhdsNE_zero (g j)
+    |>.and eventually_mem_nhdsWithin).exists
+  obtain ⟨a, haU, ha⟩ := hj (1 / ‖c‖)
+  have h1 : r (e (a ⊗ₜ[ℂ] (c • g j))) < 1 := hUU' (show (a, c • g j) ∈ U ×ˢ U' from ⟨haU, hc⟩)
+  have h2 : e (a ⊗ₜ[ℂ] (c • g j)) = T (J a.val ⊗ₜ[ℂ] (c • g j)) :=
+    SchwartzBruhat.ext fun z ↦ by
+      have hz : z = Multiplicative.ofAdd (Multiplicative.toAdd z) := rfl
+      rw [hz, he, hT, hJ]
+      rfl
+  have h3 := hrl j (J a.val) (c • g j)
+  rw [← h2] at h3
+  have h4 : ε j (c • g j) = c := by rw [map_smul, hε, hg, smul_eq_mul, mul_one]
+  have h5 : P j (J a.val) = SchwartzMap.seminorm ℂ j 0 a.val :=
+    congrArg (SchwartzMap.seminorm ℂ j 0) (J.symm_apply_apply a.val)
+  rw [h4, h5] at h3
+  have hcpos : 0 < ‖c‖ := norm_pos_iff.mpr hc0
+  have h6 := (div_le_iff₀' hcpos).mp ha
+  linarith
 
 /-- Paper: Theorem 7.4.3.1(1), p. 368.
 The theta image of the printed unrestricted archimedean-flat tests is a nonzero
@@ -1728,6 +2070,44 @@ def Printed.archNuclearity_polar_codimension_two : Prop :=
         Module.finrank ℂ (GlobalHomogeneousThetaSpace F (ω[F, χ]) ⧸
           globalPolarFreeThetaSubmodule (ω[F, χ])) = 2
 
+/-- The class of the rational idele equal to `-1` at one finite place and `1` elsewhere is
+not the identity: a principal idele with archimedean component one is one. Copied from the
+private lemma `strongCoprimality_false_neg_one_ne` of `Sec5_Printed.lean`. -/
+private theorem archNuclearity_polar_codimension_two_false_neg_one_ne
+    (v : HeightOneSpectrum (𝓞 ℚ)) :
+    IdeleClassGroup.ofAdicCompletion (𝓞 ℚ) ℚ v (-1) ≠ 1 := by
+  intro h
+  obtain ⟨r, hr⟩ := (QuotientGroup.eq_one_iff _).mp h
+  have hval := congrArg Units.val hr
+  have hinf := congrArg (fun x : 𝔸[ℚ] ↦ x.1 Rat.infinitePlace) hval
+  change algebraMap ℚ Rat.infinitePlace.Completion r.val = 1 at hinf
+  have hr₁ : r.val = 1 := (algebraMap ℚ Rat.infinitePlace.Completion).injective
+    (hinf.trans (map_one _).symm)
+  have hfin := congrArg (fun x : 𝔸[ℚ] ↦ x.2 v) hval
+  change algebraMap ℚ (v.adicCompletion ℚ) r.val =
+    RestrictedProduct.mulSingle (fun w : HeightOneSpectrum (𝓞 ℚ) ↦ w.adicCompletionIntegers ℚ) v
+      ((-1 : (v.adicCompletion ℚ)ˣ) : v.adicCompletion ℚ) v at hfin
+  rw [RestrictedProduct.mulSingle_eq_same, hr₁, map_one, Units.val_neg, Units.val_one] at hfin
+  have : (1 : ℚ) = -1 := (algebraMap ℚ (v.adicCompletion ℚ)).injective
+    (by simpa only [map_neg, map_one] using hfin)
+  norm_num at this
+
+/-- When a submodule surjects onto a quotient, the quotient by its image is zero, so its
+rank is not two. -/
+private theorem archNuclearity_polar_codimension_two_false_finrank
+    {M : Type*} [AddCommGroup M] [Module ℂ M] (K P : Submodule ℂ M)
+    (h : Surjective (K.mkQ.comp P.subtype)) :
+    Module.finrank ℂ ((M ⧸ K) ⧸ P.map K.mkQ) ≠ 2 := by
+  have htop : P.map K.mkQ = ⊤ := by
+    rw [eq_top_iff]
+    intro x _
+    obtain ⟨p, rfl⟩ := h x
+    exact Submodule.mem_map_of_mem p.property
+  have hsub : Subsingleton ((M ⧸ K) ⧸ P.map K.mkQ) :=
+    Submodule.Quotient.subsingleton_iff.mpr htop
+  rw [Module.finrank_zero_of_subsingleton]
+  norm_num
+
 /-- Paper: Theorem 7.4.3.1(3)–(5), proof before (7.4.3.12), p. 371.
 Take F = ℚ, S with just the finite place over 5, and the even quadratic
 character modulo 5. The idèle with component 2 at 5 and 1 elsewhere has norm
@@ -1735,7 +2115,33 @@ one and acts by −1 on the homogeneous component. If T is translation by
 this idèle, (f − Tf)/2 has the class of f and both polar moments vanish.
 The polar image is the whole target component, of codimension zero. -/
 theorem Printed.archNuclearity_polar_codimension_two_false :
-    ¬ Printed.archNuclearity_polar_codimension_two := by sorry
+    ¬ Printed.archNuclearity_polar_codimension_two := by
+  intro h
+  let v : HeightOneSpectrum (𝓞 ℚ) := Rat.HeightOneSpectrum.primesEquiv.symm ⟨3, Nat.prime_three⟩
+  let g₀ : C[ℚ] := IdeleClassGroup.ofAdicCompletion (𝓞 ℚ) ℚ v (-1)
+  have hg₀ : g₀ ∈ (ideleClassNorm ℚ).ker := by
+    rw [MonoidHom.mem_ker, ideleClassNorm_ofAdicCompletion]
+    apply Units.ext
+    apply NNReal.coe_injective
+    change ‖((-1 : (v.adicCompletion ℚ)ˣ) : v.adicCompletion ℚ)‖ = 1
+    rw [Units.val_neg, Units.val_one, norm_neg, norm_one]
+  -- Characters separate the points of the idele classes, so one of them moves `g₀`.
+  obtain ⟨χ, hχ⟩ : ∃ χ : U[ℚ], χ g₀ ≠ 1 := by
+    by_contra hall
+    push Not at hall
+    exact archNuclearity_polar_codimension_two_false_neg_one_ne v
+      ((pontryaginDual_pairing_separates (G := C[ℚ])).1
+        (funext fun χ ↦ (hall χ).trans (map_one χ).symm))
+  -- It is unramified outside a finite set, which can be enlarged to kill the Picard group.
+  obtain ⟨S₀, hS₀⟩ : ∃ S : Finset (HeightOneSpectrum (𝓞 ℚ)),
+      ((⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp χ) ∈ unramifiedOutside ℚ S :=
+    mem_iUnion.mp ((iUnion_unramifiedOutside ℚ).symm ▸ mem_univ _)
+  obtain ⟨S, hS, hpic⟩ := (picard_uniformization (F := ℚ) S₀).1
+  have hω : ω[ℚ, χ] ≠ 1 := fun h1 ↦ hχ (DFunLike.congr_fun h1 ⟨g₀, hg₀⟩)
+  have h2 := (h ℚ S χ hpic (fun w hw ↦ hS₀ w fun hw₀ ↦ hw (hS hw₀))).2
+  -- On a norm-one component that is not trivial the polar tests reach every class.
+  exact archNuclearity_polar_codimension_two_false_finrank _ _
+    (globalConverse_nontrivial_exact _ hω).surjective h2
 
 /-- Paper: Theorem 7.4.3.1(3)–(5), proof before (7.4.3.12), p. 371.
 Each class of the flat tensor space displayed in (7.4.3.1) has a unique
@@ -1767,6 +2173,121 @@ def Printed.archNuclearity_existsUnique_localFlatRepresentative : Prop :=
             sLocalHomogeneousThetaToGlobal hω y = x ∧
             sLocalHomogeneousThetaPrincipalValue (Finset.Subset.refl S) ωₛ y = Kₛ.mkQ test
 
+/-- An odd `S`-adelic test has zero `S`-local homogeneous theta transform: in its `S`-unit
+sum the terms of a unit and of its negative cancel. -/
+private theorem archNuclearity_existsUnique_localFlatRepresentative_false_odd
+    (F : Type) [Field F] [NumberField F] (S : Finset (HeightOneSpectrum (𝓞 F)))
+    (ω : PontryaginDual (MonoidHom.ker (sIdeleQuotientNorm F S)))
+    (test : SchwartzBruhat (Multiplicative (SAdeleRing F S)))
+    (hodd : ∀ a : SAdeleRing F S,
+      test (Multiplicative.ofAdd (-a)) = -test (Multiplicative.ofAdd a)) :
+    test ∈ LinearMap.ker (sLocalHomogeneousAdelicThetaLinearMap F S ω) := by
+  have hθ (c : SIdeleQuotient F S) : sLocalAdelicThetaOnClasses F S test c = 0 := by
+    obtain ⟨x, rfl⟩ := QuotientGroup.mk_surjective c
+    rw [sLocalAdelicThetaOnClasses_mk, sLocalAdelicTheta_apply]
+    change ∑' ξ : ((S : Set (HeightOneSpectrum (𝓞 F))).integer F)ˣ,
+      test (Multiplicative.ofAdd (Units.val (sUnitEmbedding F S ξ * x))) = 0
+    have hneg (ξ : ((S : Set (HeightOneSpectrum (𝓞 F))).integer F)ˣ) :
+        test (Multiplicative.ofAdd (Units.val (sUnitEmbedding F S (-ξ) * x))) =
+          -test (Multiplicative.ofAdd (Units.val (sUnitEmbedding F S ξ * x))) := by
+      rw [← hodd]
+      simp
+    have hs := (Equiv.neg ((S : Set (HeightOneSpectrum (𝓞 F))).integer F)ˣ).tsum_eq
+      (fun ξ : ((S : Set (HeightOneSpectrum (𝓞 F))).integer F)ˣ ↦
+        test (Multiplicative.ofAdd (Units.val (sUnitEmbedding F S ξ * x))))
+    simp only [Equiv.neg_apply, hneg, tsum_neg] at hs
+    exact self_eq_neg.mp hs.symm
+  rw [LinearMap.mem_ker]
+  ext g
+  rw [sLocalHomogeneousAdelicThetaLinearMap_apply]
+  simp only [hθ, zero_mul, MeasureTheory.integral_zero]
+  rfl
+
+/-- Over `ℚ` with no finite place, a Schwartz function of the mixed archimedean coordinates
+is a Schwartz–Bruhat function of the `S`-adele. -/
+private theorem archNuclearity_existsUnique_localFlatRepresentative_false_test
+    (k : SchwartzMap (({v : InfinitePlace ℚ // v.IsReal} → ℝ) ×
+      ({v : InfinitePlace ℚ // v.IsComplex} → ℂ)) ℂ) :
+    ∃ test : SchwartzBruhat (Multiplicative (SAdeleRing ℚ ∅)),
+      ∀ a : SAdeleRing ℚ ∅, test (Multiplicative.ofAdd a) =
+        k (InfiniteAdeleRing.ringEquiv_mixedSpace ℚ a.1) := by
+  have hinf := (mem_archimedeanSchwartzBruhat_iff (F := ℚ)
+    (fun x ↦ k (InfiniteAdeleRing.ringEquiv_mixedSpace ℚ x))).mpr ⟨k, fun _ ↦ rfl⟩
+  let fI : SchwartzBruhat (Multiplicative (InfiniteAdeleRing ℚ)) := ⟨_, hinf⟩
+  obtain ⟨e, he⟩ := sAdeleSchwartz_inductiveTensor_equiv (F := ℚ) ∅
+  exact ⟨_, fun a ↦ (he fI (fun _ ↦ 0) a).trans (by simp; rfl)⟩
+
+/-- A Schwartz function of the mixed archimedean coordinates of `ℚ` that is odd, flat along
+the coordinate walls and equal to one at the point with all coordinates one: the difference
+of a bump around that point and its reflection. -/
+private theorem archNuclearity_existsUnique_localFlatRepresentative_false_bump :
+    ∃ k ∈ archimedeanFlatSchwartz (ι := {v : InfinitePlace ℚ // v.IsReal})
+        (κ := {v : InfinitePlace ℚ // v.IsComplex}),
+      (∀ u, k (-u) = -k u) ∧ k (fun _ ↦ 1, fun _ ↦ 1) = 1 := by
+  let Coord := ({v : InfinitePlace ℚ // v.IsReal} → ℝ) × ({v : InfinitePlace ℚ // v.IsComplex} → ℂ)
+  let c : Coord := (fun _ ↦ 1, fun _ ↦ 1)
+  let b : ContDiffBump c := ⟨1 / 4, 1 / 2, by norm_num, by norm_num⟩
+  let k : Coord → ℂ := fun u ↦ ((b u : ℝ) : ℂ) - ((b (-u) : ℝ) : ℂ)
+  have hkc : ContDiff ℝ (⊤ : ℕ∞) k :=
+    (Complex.ofRealCLM.contDiff.comp b.contDiff).sub
+      (Complex.ofRealCLM.contDiff.comp (b.contDiff.comp contDiff_neg))
+  let A : Set Coord := Metric.closedBall c (1 / 2) ∪ Metric.closedBall (-c) (1 / 2)
+  have hzero : ∀ u, u ∉ A → k u = 0 := by
+    intro u hu
+    have h1 : b u = 0 := b.zero_of_le_dist
+      (not_le.mp fun h ↦ hu (Or.inl (Metric.mem_closedBall.mpr h))).le
+    have h2 : b (-u) = 0 := b.zero_of_le_dist (by
+      rw [← dist_neg_neg, neg_neg]
+      exact (not_le.mp fun h ↦ hu (Or.inr (Metric.mem_closedBall.mpr h))).le)
+    simp only [k, h1, h2, Complex.ofReal_zero, sub_zero]
+  have hks : HasCompactSupport k :=
+    HasCompactSupport.intro ((isCompact_closedBall c _).union (isCompact_closedBall (-c) _)) hzero
+  have hts : tsupport k ⊆ A :=
+    closure_minimal (fun u hu ↦ by_contra fun hn ↦ hu (hzero u hn))
+      (Metric.isClosed_closedBall.union Metric.isClosed_closedBall)
+  -- A ball of radius one half around a point with unit coordinates misses every wall.
+  have hwall : ∀ c' : Coord, (∀ i, ‖c'.1 i‖ = 1) → (∀ j, ‖c'.2 j‖ = 1) →
+      ∀ u ∈ Metric.closedBall c' (1 / 2), ¬ ((∃ i, u.1 i = 0) ∨ (∃ j, u.2 j = 0)) := by
+    intro c' hc1 hc2 u hu
+    rw [Metric.mem_closedBall, dist_eq_norm] at hu
+    rintro (⟨i, hi⟩ | ⟨j, hj⟩)
+    · have h1 : ‖(u - c').1 i‖ ≤ ‖u - c'‖ := (norm_le_pi_norm _ i).trans (norm_fst_le _)
+      have h2 : (u - c').1 i = -c'.1 i := by
+        change u.1 i - c'.1 i = -c'.1 i
+        rw [hi, zero_sub]
+      rw [h2, norm_neg, hc1] at h1
+      linarith
+    · have h1 : ‖(u - c').2 j‖ ≤ ‖u - c'‖ := (norm_le_pi_norm _ j).trans (norm_snd_le _)
+      have h2 : (u - c').2 j = -c'.2 j := by
+        change u.2 j - c'.2 j = -c'.2 j
+        rw [hj, zero_sub]
+      rw [h2, norm_neg, hc2] at h1
+      linarith
+  refine ⟨hks.toSchwartzMap hkc, mem_archimedeanFlatSchwartz_of_tsupport _ ?_, fun u ↦ ?_, ?_⟩
+  · rw [Set.disjoint_left]
+    intro u hu hw
+    rcases hts hu with hu' | hu'
+    · exact hwall c (fun _ ↦ norm_one) (fun _ ↦ norm_one) u hu' hw
+    · exact hwall (-c) (fun _ ↦ (norm_neg (1 : ℝ)).trans norm_one)
+        (fun _ ↦ (norm_neg (1 : ℂ)).trans norm_one) u hu' hw
+  · change k (-u) = -k u
+    simp only [k, neg_neg, neg_sub]
+  · change k c = 1
+    have h1 : b c = 1 := b.one_of_mem_closedBall (Metric.mem_closedBall_self b.rIn_pos.le)
+    have h2 : b (-c) = 0 := by
+      apply b.zero_of_le_dist
+      let i₀ : {v : InfinitePlace ℚ // v.IsReal} := ⟨Rat.infinitePlace, Rat.isReal_infinitePlace⟩
+      have h3 : ‖(-c - c).1 i₀‖ ≤ ‖-c - c‖ := (norm_le_pi_norm _ i₀).trans (norm_fst_le _)
+      have h4 : (-c - c).1 i₀ = -2 := by
+        change (-1 : ℝ) - 1 = -2
+        norm_num
+      rw [h4] at h3
+      norm_num at h3
+      change (1 / 2 : ℝ) ≤ dist (-c) c
+      rw [dist_eq_norm]
+      linarith
+    simp only [k, h1, h2, Complex.ofReal_one, Complex.ofReal_zero, sub_zero]
+
 /-- Paper: Theorem 7.4.3.1(3)–(5), proof before (7.4.3.12), p. 371.
 Take F = ℚ, S consisting of the real place, χ = 1 and the zero global class.
 For a nonzero smooth bump h supported in (2, 3), use the local tests 0 and
@@ -1774,7 +2295,40 @@ x ↦ h(x) − h(−x). The latter is flat at zero and has integral zero.
 Its S-unit theta sum at u is f(u) + f(−u) = 0. Finite principal value with
 the empty selection is the identity, so both tests represent the zero class. -/
 theorem Printed.archNuclearity_existsUnique_localFlatRepresentative_false :
-    ¬ Printed.archNuclearity_existsUnique_localFlatRepresentative := by sorry
+    ¬ Printed.archNuclearity_existsUnique_localFlatRepresentative := by
+  intro h
+  have hpic : Subsingleton (CommRing.Pic (((∅ : Finset (HeightOneSpectrum (𝓞 ℚ))) :
+      Set (HeightOneSpectrum (𝓞 ℚ))).integer ℚ)) := by
+    rw [Finset.coe_empty, integer_empty]
+    let e := (Algebra.botEquivOfInjective (IsFractionRing.injective (𝓞 ℚ) ℚ)).toRingEquiv
+    let i := Rat.ringOfIntegersEquiv.symm.trans e.symm
+    let := IsPrincipalIdealRing.of_surjective i i.surjective
+    infer_instance
+  have hχ : ((⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp (1 : U[ℚ])) ∈
+      unramifiedOutside ℚ ∅ := (mem_unramifiedOutside_iff ℚ ∅ _).mpr fun _ _ _ ↦ rfl
+  obtain ⟨k, hflat, hodd, hone⟩ := archNuclearity_existsUnique_localFlatRepresentative_false_bump
+  obtain ⟨test, htest⟩ := archNuclearity_existsUnique_localFlatRepresentative_false_test k
+  have hodd' : ∀ a : SAdeleRing ℚ ∅,
+      test (Multiplicative.ofAdd (-a)) = -test (Multiplicative.ofAdd a) := by
+    intro a
+    rw [htest, htest]
+    change k (InfiniteAdeleRing.ringEquiv_mixedSpace ℚ (-a.1)) = _
+    rw [map_neg, hodd]
+  obtain ⟨f, -, huniq⟩ := h ℚ ∅ 1 hpic hχ 0 (Submodule.zero_mem _)
+  -- The zero function and the odd bump both represent the zero class, through `y = 0`.
+  have e0 := huniq 0 ⟨0, 0, fun _ ↦ rfl, map_zero _, (map_zero _).trans (map_zero _).symm⟩
+  have e1 := huniq ⟨fun a ↦ k (InfiniteAdeleRing.ringEquiv_mixedSpace ℚ a.1),
+      Submodule.subset_span ⟨⟨k, hflat⟩, fun _ ↦ 0, fun a ↦ by simp⟩⟩ (by
+    refine ⟨test, 0, htest, map_zero _, ?_⟩
+    rw [map_zero]
+    exact ((Submodule.Quotient.mk_eq_zero _).mpr
+      (archNuclearity_existsUnique_localFlatRepresentative_false_odd ℚ ∅ _ test hodd')).symm)
+  have hval := congrArg (fun g ↦ g.val
+    ((InfiniteAdeleRing.ringEquiv_mixedSpace ℚ).symm (fun _ ↦ 1, fun _ ↦ 1), 0)) (e1.trans e0.symm)
+  change k (InfiniteAdeleRing.ringEquiv_mixedSpace ℚ
+    ((InfiniteAdeleRing.ringEquiv_mixedSpace ℚ).symm (fun _ ↦ 1, fun _ ↦ 1))) = 0 at hval
+  rw [RingEquiv.apply_symm_apply, hone] at hval
+  exact one_ne_zero hval
 
 open MeasureTheory in
 /-- Paper: Theorem 7.4.3.2(2), proof, equation (7.4.3.15), p. 373.

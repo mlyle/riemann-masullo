@@ -4373,6 +4373,79 @@ private theorem telescope_zero_pi {ι : Type*} [Fintype ι] (a : ι → ℂ) (B 
     rwa [show (∑' n, a none ^ n * B (F.symm (c + n, fun i ↦ m (some i)))) = 0 from
       congrFun (hB' c) _] at this
 
+/-- Weil integration for a discrete kernel with compact quotient. The continuous sum
+of the fibre norms bounds the iterated integral, and the Haar scalar depends only
+on the two measures. -/
+private theorem sLocalHomogeneousTheta_unfold_weil
+    {G Q U : Type*} [CommGroup G] [TopologicalSpace G] [IsTopologicalGroup G]
+    [T2Space G] [LocallyCompactSpace G] [SecondCountableTopology G]
+    [MeasurableSpace G] [BorelSpace G]
+    [CommGroup Q] [TopologicalSpace Q] [IsTopologicalGroup Q] [T2Space Q] [CompactSpace Q]
+    [MeasurableSpace Q] [BorelSpace Q] [Countable U]
+    (p : G →* Q) (hp : IsOpenQuotientMap p) [DiscreteTopology p.ker] (i : U ≃ p.ker)
+    (μ : Measure G) [μ.IsHaarMeasure] (ν : Measure Q) [ν.IsHaarMeasure] :
+    ∃ c : ℂ, c ≠ 0 ∧ ∀ (f : G → ℂ) (A : Q → ℂ), Continuous f →
+      (∀ x, Summable fun u ↦ ‖f (x * (i u).val)‖) →
+      Continuous (fun x ↦ ∑' u, ‖f (x * (i u).val)‖) →
+      (∀ x, A (p x) = ∑' u, f (x * (i u).val)) →
+      (∫ q, A q ∂ν) = c * ∫ x, f x ∂μ := by
+  let H := p.ker
+  have hH : IsClosed (H : Set G) := isClosed_eq hp.continuous continuous_const
+  let : Countable H := i.surjective.countable
+  let : (Measure.count : Measure H).IsHaarMeasure :=
+    { lt_top_of_isCompact := fun _ hs ↦ Measure.count_apply_lt_top.mpr hs.finite_of_discrete
+      open_pos := fun _ _ hs ↦ Measure.count_ne_zero hs }
+  let : LocallyCompactSpace H := hH.locallyCompactSpace
+  let : MeasurableSpace (G ⧸ H) := borel _
+  let : BorelSpace (G ⧸ H) := ⟨rfl⟩
+  let e := QuotientGroup.quotientKerEquivOfSurjective p hp.surjective
+  have he : IsOpenQuotientMap e :=
+    (QuotientGroup.isOpenQuotientMap_mk (N := H)).of_comp_iff.mp hp
+  let E : (G ⧸ H) ≃ₜ Q := e.toEquiv.toHomeomorphOfContinuousOpen he.continuous he.isOpenMap
+  let : CompactSpace (G ⧸ H) := E.symm.compactSpace
+  obtain ⟨ρ, hρ, -⟩ := weilQuotientMeasure_existsUnique H hH μ Measure.count
+  let : ρ.IsHaarMeasure := hρ.1
+  let : SigmaFinite μ := Measure.IsHaarMeasure.sigmaFinite μ
+  let : (ν.map E.symm).IsHaarMeasure := e.symm.isHaarMeasure_map ν E.symm.continuous E.continuous
+  -- Compare the given measure on Q with the quotient measure for counting on H.
+  let d := Measure.haarScalarFactor (ν.map E.symm) ρ
+  have hd : ν.map E.symm = d • ρ := Measure.isMulLeftInvariant_eq_smul _ _
+  refine ⟨(d : ℝ), by exact_mod_cast (Measure.haarScalarFactor_pos_of_isHaarMeasure
+    (ν.map E.symm) ρ).ne', ?_⟩
+  intro f A hf hs hcont hA
+  -- The sum of absolute values is continuous on the compact quotient.
+  let B := QuotientGroup.automorphize (Γ := H) fun x ↦ ‖f x‖
+  have hB (x : G) : B (QuotientGroup.mk x) = ∑' u, ‖f (x * (i u).val)‖ :=
+    ((i.trans H.equivOp).tsum_eq (fun h : H.op ↦ ‖f (x * h.val.unop)‖)).symm
+  have hBc : Continuous B := (QuotientGroup.isQuotientMap_mk H).continuous_iff.mpr
+    (hcont.congr fun x ↦ (hB x).symm)
+  obtain ⟨M, hM⟩ := isCompact_univ.exists_bound_of_continuousOn hBc.continuousOn
+  have hfin : (∫⁻ q : G ⧸ H, ∫⁻ h : H, ‖f (q.out * h.val)‖₊ ∂Measure.count ∂ρ) < ⊤ := by
+    refine (lintegral_mono (g := fun _ ↦ ENNReal.ofReal M) fun q ↦ ?_).trans_lt ?_
+    · rw [lintegral_count, ← i.tsum_eq (fun h : H ↦ (‖f (q.out * h.val)‖₊ : ENNReal))]
+      simp only [← eNorm_eq_nnNorm, ← ofReal_norm]
+      rw [← ENNReal.ofReal_tsum_of_nonneg (fun _ ↦ norm_nonneg _) (hs q.out),
+        ← hB, QuotientGroup.out_eq']
+      exact ENNReal.ofReal_le_ofReal ((le_abs_self _).trans (hM q (Set.mem_univ q)))
+    · rw [lintegral_const]
+      exact ENNReal.mul_lt_top ENNReal.ofReal_lt_top (measure_lt_top _ _)
+  have hweil := (integrable_of_weilNormIntegral H hH μ Measure.count ρ hρ hf.measurable hfin).2
+  have hcoset (q : G ⧸ H) : lcaCosetIntegral H Measure.count f q = A (E q) := by
+    have hi : Integrable (fun h : H ↦ f (q.out * h.val)) Measure.count :=
+      integrable_count_iff.mpr (i.summable_iff.mp (hs q.out))
+    change (∫ h : H, f (q.out * h.val) ∂Measure.count) = A (E q)
+    rw [integral_countable hi]
+    simp only [count_real_singleton, one_smul]
+    rw [← i.tsum_eq, ← hA]
+    exact congrArg (A ∘ E) (Quotient.out_eq' q)
+  rw [hweil]
+  simp_rw [hcoset]
+  have hmap := integral_map_equiv (μ := ν) E.symm.toMeasurableEquiv (fun q ↦ A (E q))
+  change (∫ q, A (E q) ∂ν.map E.symm) = _ at hmap
+  simp only [Homeomorph.toMeasurableEquiv_coe, E.apply_symm_apply] at hmap
+  rw [← hmap, hd, integral_smul_nnreal_measure]
+  exact Complex.real_smul
+
 /-- Paper: Theorem 6.2.2.1(1), p. 299.
 Unfolding: the S-local homogeneous theta transform of a test, integrated over the norm-one
 classes `J₁(S) = Nₛ(S) / (S-units)` against the S-local norm-one character of `ω`, is a fixed
@@ -4387,7 +4460,99 @@ private theorem sLocalHomogeneousTheta_unfold {ω : PontryaginDual C₁}
       sLocalHomogeneousAdelicThetaLinearMap F S (sLocalNormOneCharacter S ω hω) φ
           (QuotientGroup.mk g) =
         c * ∫ h : Nₛ(S), φ (Multiplicative.ofAdd (g * h.val).val) * (χ h.val : ℂ)
-          ∂sNormOneIdeleTamagawaMeasure F S := by sorry
+          ∂sNormOneIdeleTamagawaMeasure F S := by
+  classical
+  let : MeasurableSpace (SAdeleRing F S) := instMeasurableSpaceSAdeleRing F S
+  let : BorelSpace Iₛ(S) := sIdeleGroup_borelSpace
+  let (v : S) : ProperSpace (v.val.adicCompletion F) := properSpace_adicCompletion v.val
+  let (w : InfinitePlace F) : SecondCountableTopology w.Completion :=
+    (InfinitePlace.Completion.isometry_extensionEmbedding w).isEmbedding.secondCountableTopology
+  let : SecondCountableTopology (SAdeleRing F S) := inferInstanceAs (SecondCountableTopology
+    (((w : InfinitePlace F) → w.Completion) × ((v : S) → v.val.adicCompletion F)))
+  let : SecondCountableTopology Iₛ(S) := (sIdeleGroup_description F S).1.secondCountableTopology
+  let : SecondCountableTopology Nₛ(S) := TopologicalSpace.Subtype.secondCountableTopology _
+  let : T2Space Iₛ(S) := (sIdeleGroup_description F S).2.1
+  let : LocallyCompactSpace Iₛ(S) := (sIdeleGroup_description F S).2.2.1
+  have hn : Continuous (sIdeleNorm F S) :=
+    (isProperMap_sIdeleQuotientNorm F S).continuous.comp continuous_quotient_mk'
+  let : LocallyCompactSpace Nₛ(S) := (isClosed_eq hn continuous_const).locallyCompactSpace
+  let : CompactSpace J₁(S) := isCompact_iff_compactSpace.mp
+    ((isProperMap_sIdeleQuotientNorm F S).isCompact_preimage (isCompact_singleton (x := 1)))
+  have hclosed := isClosed_sProjectedDiagonal (F := F) (S := S)
+  let : T2Space Jₛ(S) := inferInstanceAs (T2Space (_ ⧸ _))
+  let : MeasurableSpace J₁(S) := borel _
+  let : BorelSpace J₁(S) := ⟨rfl⟩
+  let μ := sNormOneIdeleTamagawaMeasure F S
+  let ν := sLocalNormOneQuotientMeasure F S
+  let : μ.IsHaarMeasure := (sNormOneIdeleTamagawaMeasure_existsUnique F S).exists.choose_spec.1
+  let : ν.IsHaarMeasure := (sLocalNormOneQuotientMeasure_normProduct (F := F) (S := S)).1
+  let q := QuotientGroup.mk' (sProjectedDiagonal F S)
+  let p : Nₛ(S) →* J₁(S) := (q.comp (Nₛ(S)).subtype).codRestrict _ fun x ↦ x.property
+  have hq : IsOpenQuotientMap q := QuotientGroup.isOpenQuotientMap_mk
+  have hp : IsOpenQuotientMap p := hq.restrictPreimage (J₁(S) : Set Jₛ(S))
+  let U := ((S : Set V).integer F)ˣ
+  let : Countable F := Countable.of_moduleFinite (R := ℚ)
+  let : Countable U := Units.val_injective.countable
+  let d := sUnitEmbedding F S
+  -- Each element of the kernel of the norm-one projection is a unique diagonal S-unit.
+  let j (u : U) : Nₛ(S) := ⟨d u, (sIdeleNorm_spec F S).2 ⟨u, rfl⟩⟩
+  let i (u : U) : p.ker := ⟨j u, Subtype.ext ((sIdeleQuotient_mk_eq_one F S _).mpr ⟨u, rfl⟩)⟩
+  have hi : Bijective i := by
+    constructor
+    · intro u v h
+      apply Units.ext
+      apply (sAdele_additive_quotient F S).1
+      exact congrArg (fun a : p.ker ↦ a.val.val.val) h
+    · intro k
+      have hk : q k.val.val = 1 := congrArg Subtype.val (show p k.val = 1 from k.property)
+      obtain ⟨u, hu⟩ := (sIdeleQuotient_mk_eq_one F S _).mp hk
+      exact ⟨u, Subtype.ext (Subtype.ext hu.symm)⟩
+  let e := Equiv.ofBijective i hi
+  let : DiscreteTopology (sProjectedDiagonal F S) := discreteTopology_sProjectedDiagonal
+  let incl (k : p.ker) : sProjectedDiagonal F S :=
+    ⟨k.val.val, (QuotientGroup.eq_one_iff _).mp
+      (congrArg Subtype.val (show p k.val = 1 from k.property))⟩
+  let : DiscreteTopology p.ker := .of_continuous_injective (f := incl)
+    ((continuous_subtype_val.comp continuous_subtype_val).subtype_mk _)
+    (fun _ _ h ↦ Subtype.ext (Subtype.ext (congrArg (fun z : sProjectedDiagonal F S ↦ z.val) h)))
+  obtain ⟨c, hc, hweil⟩ := sLocalHomogeneousTheta_unfold_weil p hp e μ ν
+  refine ⟨c, hc, fun φ g ↦ ?_⟩
+  let η := sLocalNormOneCharacter S ω hω
+  let f (x : Nₛ(S)) := φ (Multiplicative.ofAdd (g * x.val).val) * (χ x.val : ℂ)
+  let A (y : J₁(S)) := sLocalAdelicThetaOnClasses F S φ (q g * y.val) * (η y : ℂ)
+  let term (u : U) (z : Iₛ(S)) := φ (Multiplicative.ofAdd (d u * z).val)
+  -- The character is constant on each S-unit fibre.
+  have hterm (x : Nₛ(S)) (u : U) :
+      f (x * (e u).val) = term u (g * x.val) * (η (p x) : ℂ) := by
+    have hpx : p (x * (e u).val) = p x := by rw [map_mul, (e u).property, mul_one]
+    have hchar := hχ (x * (e u).val) (p (x * (e u).val)) rfl
+    change φ (Multiplicative.ofAdd (g * (x.val * d u)).val) * (χ (x * (e u).val).val : ℂ) = _
+    rw [hchar, hpx, mul_comm x.val (d u), mul_left_comm]
+  have hnorm (x : Nₛ(S)) (u : U) : ‖f (x * (e u).val)‖ = ‖term u (g * x.val)‖ := by
+    rw [hterm, norm_mul, Circle.norm_coe, mul_one]
+  rw [sLocalHomogeneousAdelicThetaLinearMap_apply]
+  apply hweil f A
+  · exact ((schwartzBruhat_continuous φ).comp (continuous_ofAdd.comp (Units.continuous_val.comp
+      (continuous_const.mul continuous_subtype_val)))).mul
+        (continuous_subtype_val.comp (χ.continuous.comp continuous_subtype_val))
+  · intro x
+    simp only [hnorm]
+    exact (sLocalAdelicTheta_summableUniformlyOn_norm F S φ {g * x.val}
+      isCompact_singleton).summable rfl
+  · simp only [hnorm]
+    have hs : HasSumLocallyUniformly (fun u z ↦ ‖term u z‖) (fun z ↦ ∑' u, ‖term u z‖) :=
+      hasSumLocallyUniformly_of_forall_compact fun K hK ↦
+        (sLocalAdelicTheta_summableUniformlyOn_norm F S φ K hK).hasSumUniformlyOn
+    have ht (u : U) : Continuous (term u) := (schwartzBruhat_continuous φ).comp
+      (continuous_ofAdd.comp (Units.continuous_val.comp (continuous_const.mul continuous_id)))
+    exact (hs.continuous (Eventually.of_forall fun s ↦ continuous_finsetSum s
+      fun u _ ↦ (ht u).norm).frequently).comp (continuous_const.mul continuous_subtype_val)
+  · intro x
+    change sLocalAdelicThetaOnClasses F S φ (q g * q x.val) * (η (p x) : ℂ) = _
+    rw [← map_mul q]
+    simp only [hterm, tsum_mul_right]
+    exact congrArg (· * (η (p x) : ℂ)) ((sLocalAdelicThetaOnClasses_mk F S φ _).trans
+      (sLocalAdelicTheta_apply F S φ _))
 
 open Classical in
 /-- Paper: Theorem 6.2.2.1(1), p. 299.
