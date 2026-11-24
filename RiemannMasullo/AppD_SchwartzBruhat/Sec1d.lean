@@ -4638,7 +4638,8 @@ private theorem compact_comap_openEmbedding (j : H →ₜ* G) (hj : IsOpenEmbedd
   have hr : IsClosed (range j) := j.toMonoidHom.range.isClosed_of_isOpen hj.isOpen_range
   exact (show IsClosedEmbedding j from ⟨hj.isEmbedding, hr⟩).isCompact_preimage hK
 
-private theorem openEmbedding_good_comap (j : H →ₜ* G) (hj : IsOpenEmbedding j) (K : Subgroup G)
+/-- An open embedding detects the Bruhat goodness of a compact subgroup on its preimage. -/
+theorem openEmbedding_good_comap (j : H →ₜ* G) (hj : IsOpenEmbedding j) (K : Subgroup G)
     (hK : IsCompact (K : Set G)) : IsBruhatGoodSubgroup (K.comap j.toMonoidHom) ↔ IsBruhatGoodSubgroup K := by
   have hL := compact_comap_openEmbedding j hj K hK
   have : IsClosed (K : Set G) := hK.isClosed

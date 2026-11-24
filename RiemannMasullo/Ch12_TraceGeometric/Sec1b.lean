@@ -43,7 +43,7 @@ local notation "C𝔽" => IdeleClassGroup (𝓞 F) F
 local notation "μ𝔽" => ideleClassTamagawaMeasure F
 local notation "m𝔽" =>
   (⟨ideleClassNorm F, (isProperMap_ideleClassNorm F).continuous⟩ : C𝔽 →ₜ* ℝ≥0ˣ)
-local notation "logNorm" => (fun g : C𝔽 ↦ Real.log ((ideleClassNorm F g).val : ℝ))
+local notation "logNorm" => (logIdeleClassNorm F)
 local notation "W(" s ")" => CompactIntervalSobolev μ𝔽 logNorm (-(0 : ℝ)) 0 s
 local notation "hline" => (le_refl (0 : ℝ))
 local notation "hbase" => ((neg_nonpos.mpr hline).trans hline)
@@ -1091,11 +1091,11 @@ private theorem ideleClassTamagawaMeasure_univ_eq_top :
     (ideleGroup_quotient.{_, 0} F).2.2.2.2.2.2.2.2.2.1
   obtain ⟨g, hg⟩ := hsur r
   have hlog_g : logNorm g = 2 * B + 1 := by
-    dsimp only
+    dsimp only [logIdeleClassNorm]
     rw [hg]
     exact Real.log_exp (2 * B + 1)
   have hlog_mul (x y : C𝔽) : logNorm (x * y) = logNorm x + logNorm y := by
-    dsimp only
+    dsimp only [logIdeleClassNorm]
     rw [map_mul, Units.val_mul, NNReal.coe_mul]
     exact Real.log_mul (NNReal.coe_pos.mpr (Units.zero_lt _)).ne'
       (NNReal.coe_pos.mpr (Units.zero_lt _)).ne'
@@ -1169,7 +1169,7 @@ private theorem not_memLp_weighted_convolution_kernel (hs' : 0 ≤ s) (_hne : φ
   have hu₀V : u₀ ∈ V := ⟨by simp [c, norm_pos_iff.mpr hu₀], by simp [M]⟩
   have hV_pos : 0 < (μ𝔽) V := hV_open.measure_pos (μ𝔽) ⟨u₀, hu₀V⟩
   have hlog_mul (x y : C𝔽) : logNorm (x * y) = logNorm x + logNorm y := by
-    dsimp only
+    dsimp only [logIdeleClassNorm]
     rw [map_mul, Units.val_mul, NNReal.coe_mul]
     exact Real.log_mul (NNReal.coe_pos.mpr (Units.zero_lt _)).ne'
       (NNReal.coe_pos.mpr (Units.zero_lt _)).ne'

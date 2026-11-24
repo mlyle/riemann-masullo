@@ -151,6 +151,23 @@ def chapter_label(path):
     return m.group(1)[0].lower() + m.group(1)[1:] if m else None
 
 
+# The parts of the paper that were left out of the first pass and are stated as supplementary
+# material (README, "Roadmap"): Chapters 8 and 14, Appendix E, §A.4 and §B.7. Their issues carry
+# the label `supplementary`, so that the progress page can count them apart from the statements
+# the trace formula rests on. A new part is added here and in the README's table.
+SUPPLEMENTARY = (
+    "RiemannMasullo/Ch08_",
+    "RiemannMasullo/Ch14_",
+    "RiemannMasullo/AppE_",
+    "RiemannMasullo/AppA_AlgebraicNT/Sec4",
+    "RiemannMasullo/AppB_AnalyticNT/Sec7",
+)
+
+
+def is_supplementary(path):
+    return path.startswith(SUPPLEMENTARY)
+
+
 def at_main():
     """Whether this checkout is at the tip of origin/main. Applying from an older commit would
     close the issues of every `sorry` added since, and reopen those proved since."""
@@ -248,6 +265,8 @@ def main():
                 cmd += ["--label", "gap"]
             if s["path"].endswith("_Printed.lean"):
                 cmd += ["--label", "refutation"]
+            if is_supplementary(s["path"]):
+                cmd += ["--label", "supplementary"]
             r = run(cmd)
             print("        ", (r.stdout or r.stderr).strip())
             time.sleep(1.5)   # stay under GitHub's limit on creating content
@@ -281,6 +300,10 @@ def main():
             if apply:
                 run(["gh", "issue", "edit", str(number),
                      "--add-label" if is_gap(s["block"]) else "--remove-label", "gap"])
+        if is_supplementary(s["path"]) and "supplementary" not in labels:
+            print(f"  mark #{number} as supplementary  {key}")
+            if apply:
+                run(["gh", "issue", "edit", str(number), "--add-label", "supplementary"])
     ready = unblock(apply)
     if not apply and (new or stale or ready):
         print("dry run; pass --apply to make these changes")

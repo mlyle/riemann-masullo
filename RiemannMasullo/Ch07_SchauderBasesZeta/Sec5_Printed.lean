@@ -13,7 +13,6 @@ open scoped NumberField.AdeleRing
 namespace RiemannMasullo
 
 set_option quotPrecheck false
-set_option Elab.async false
 
 local notation "V[" F "]" => HeightOneSpectrum (𝓞 F)
 local notation "C[" F "]" => IdeleClassGroup (𝓞 F) F
@@ -355,6 +354,107 @@ def Printed.strongCoprimalityPrimaryQuotient_strongDual_subquotient : Prop :=
         IsClosed (W : Set E) ∧ IsClosed (D : Set W) ∧
           Nonempty (StrongDual ℂ (StrongCoprimalityQuotient ω S) ≃L[ℂ] (W ⧸ D))
 
+/-- Applying each coordinate functional to a finite relation gives its coefficient. -/
+private theorem primaryQuotient_not_finite_of_basis {X : Type*} [AddCommGroup X] [Module ℂ X]
+    [TopologicalSpace X] {x : ℕ → X} {d : ℕ → StrongDual ℂ X} (hb : IsSchauderBasis x d) :
+    ¬ FiniteDimensional ℂ X := by
+  intro hfin
+  apply Module.Finite.not_linearIndependent_of_infinite (R := ℂ) x
+  refine linearIndependent_iff'.mpr fun s c h i hi ↦ ?_
+  have hδ (j : ℕ) : d i (x j) = if i = j then 1 else 0 := hb.1 i j
+  simpa [map_sum, hδ, hi] using congrArg (d i) h
+
+/-- The quotient by a single expanding difference has infinitely many Fourier modes. -/
+private theorem primaryQuotient_singleDifference_infinite {G : Type*} [CommGroup G]
+    [TopologicalSpace G] [IsTopologicalGroup G] [T2Space G] [LocallyCompactSpace G]
+    [SecondCountableTopology G] (m : G →ₜ* NNRealˣ) (hm : IsModulation m)
+    (hms : Function.Surjective m) (ω : PontryaginDual m.toMonoidHom.ker) (a : G)
+    (ha : 1 < (m a).val) : ¬ FiniteDimensional ℂ
+      (↥(modulatedDecayIsotype m univ (mem_univ (0 : ℝ)) ω) ⧸
+        fullDecayDifferenceRange m hm hms ω [a]) := by
+  let : MeasurableSpace G := borel _
+  let : BorelSpace G := ⟨rfl⟩
+  let γ : Fin 1 → G := fun _ ↦ a
+  have hγ (k : Fin 1) : 1 < (m (γ k)).val := ha
+  have hcomm : ∃ t : ℝ, 0 < t ∧ ∀ k, ∃ r : ℚ, Real.log ((m (γ k)).val : ℝ) = (r : ℝ) * t :=
+    ⟨_, Real.log_pos (NNReal.coe_lt_coe.mpr ha), fun _ ↦ ⟨1, by simp [γ]⟩⟩
+  obtain ⟨σ⟩ := modulatedPeriodicMomentIndex_enumerable m hm hms ω γ hγ zero_lt_one
+  obtain ⟨ψ, hb, _⟩ :=
+    modulatedQuotientLogMoment_bases m hm hms ω γ hγ MeasureTheory.Measure.haar hcomm σ
+  have hlist : List.ofFn γ = [a] := by simp [List.ofFn_succ, γ]
+  rw [← hlist]
+  exact primaryQuotient_not_finite_of_basis hb
+
+/-- Over ℚ every primary set is a singleton, and the trivial character keeps its difference. -/
+private theorem primaryQuotient_rat_infinite (p : V[ℚ]) :
+    ¬ FiniteDimensional ℂ (StrongCoprimalityQuotient ω[ℚ, 1]
+      (finite_nuclearityPlacesAbove (F := ℚ) p).toFinset) := by
+  classical
+  have hself (v : V[ℚ]) : v.under (𝓞 ℚ) = v := by
+    apply HeightOneSpectrum.ext
+    change Ideal.comap (algebraMap (𝓞 ℚ) (𝓞 ℚ)) v.asIdeal = v.asIdeal
+    have hid : algebraMap (𝓞 ℚ) (𝓞 ℚ) = RingHom.id _ := by ext; simp
+    rw [hid, Ideal.comap_id]
+  have hS : (finite_nuclearityPlacesAbove (F := ℚ) p).toFinset = {p} := by
+    ext v
+    rw [Set.Finite.mem_toFinset, Finset.mem_singleton]
+    exact (congrArg (· = p) (hself v)).to_iff
+  rw [hS]
+  have hU (v : V[ℚ]) := (Valued.v : Valuation (v.adicCompletion ℚ)
+    (WithZero (Multiplicative ℤ))).exists_isUniformizer_of_isCyclic_of_nontrivial
+  let π (v : V[ℚ]) : (v.adicCompletion ℚ)ˣ := Units.mk0 (hU v).choose (hU v).choose_spec.ne_zero
+  apply (not_finiteDimensional_strongCoprimalityQuotient_iff (1 : U[ℚ]) {p} π
+    (fun v _ ↦ (hU v).choose_spec)).mpr
+  have htriv : ideleClassNormTwist (1 : U[ℚ]) 0 = 1 := by
+    ext g
+    change (1 : ℂ) * _ ^ (0 : ℂ) = 1
+    simp
+  have hur : (ideleClassNormTwist (1 : U[ℚ]) 0).IsUnramifiedAt p := by
+    rw [htriv, HeckeCharacter.isUnramifiedAt_iff]
+    intro u
+    simp
+  rw [Finset.filter_singleton, ite_eq_left hur]
+  let : T2Space C[ℚ] := (ideleGroup_quotient.{0, 0} ℚ).2.2.2.2.2.1
+  let : LocallyCompactSpace C[ℚ] := (ideleGroup_quotient.{0, 0} ℚ).2.2.2.2.2.2.1
+  let : SecondCountableTopology C[ℚ] := by
+    let : SecondCountableTopology (IdeleGroup (𝓞 ℚ) ℚ) := idele_secondCountable ℚ
+    exact inferInstanceAs (SecondCountableTopology
+      (IdeleGroup (𝓞 ℚ) ℚ ⧸ IdeleGroup.principalSubgroup (𝓞 ℚ) ℚ))
+  let m : C[ℚ] →ₜ* NNRealˣ := ⟨ideleClassNorm ℚ, (isProperMap_ideleClassNorm ℚ).continuous⟩
+  let a := (IdeleClassGroup.ofAdicCompletion (𝓞 ℚ) ℚ p (π p))⁻¹
+  -- As in the norm calculation of Sec5, the inverse uniformizer expands by the residue cardinality.
+  have ha : 1 < (m a).val := by
+    change 1 < (ideleClassNorm ℚ (_⁻¹)).val
+    rw [map_inv, ideleClassNorm_ofAdicCompletion, Units.coe_map_inv]
+    change 1 < ‖((π p)⁻¹).val‖₊
+    apply NNReal.coe_lt_coe.mp
+    simp only [NNReal.coe_one, coe_nnNorm, Units.val_inv_eq_inv_val, norm_inv]
+    rw [norm_uniformizer_adicCompletion p (π p).val (hU p).choose_spec, inv_inv]
+    exact_mod_cast HeightOneSpectrum.one_lt_absNorm p
+  have hm := strongCoprimalityNorm_isModulation_surjective (F := ℚ)
+  have hrange : strongCoprimalityDifferenceRange ω[ℚ, 1] {p} π =
+      fullDecayDifferenceRange m hm.1 hm.2 ω[ℚ, 1] [a] := by
+    refine Eq.trans ?_ (fullDecayDifferenceRange_eq_span m hm.1 hm.2 ω[ℚ, 1] [a]).symm
+    simp only [strongCoprimalityDifferenceRange, strongCoprimalityDifference,
+      Finset.toList_singleton, List.foldr_cons, List.foldr_nil, a]
+    rfl
+  rw [hrange]
+  exact primaryQuotient_singleDifference_infinite m hm.1 hm.2 _ a ha
+
+/-- A quotient of a closed subspace of a finite product of rapid sequence spaces is Baire. -/
+private theorem primaryQuotient_sequence_model_baire {n : ℕ}
+    (W : Submodule ℂ (Fin n → RapidDecaySequence 1))
+    (hW : IsClosed (W : Set (Fin n → RapidDecaySequence 1))) (D : Submodule ℂ W) :
+    BaireSpace (W ⧸ D) := by
+  obtain ⟨_, _, hmet, hcomplete⟩ := rapidDecaySequence_isFrechet (r := 1)
+  have : CompleteSpace (RapidDecaySequence 1) := by
+    rwa [IsUniformAddGroup.rightUniformSpace_eq] at hcomplete
+  have : (uniformity (RapidDecaySequence 1)).IsCountablyGenerated :=
+    IsUniformAddGroup.uniformity_countably_generated
+  have : TopologicalSpace.IsCompletelyMetrizableSpace W := hW.isCompletelyMetrizableSpace
+  have : BaireSpace W := BaireSpace.of_completelyPseudoMetrizable
+  exact D.isOpenQuotientMap_mkQ.baireSpace
+
 /-- Paper: Remark 7.5.0.2, p. 379.
 Over ℚ with trivial character and p = 2, the primary quotient is the smooth
 periodic space for period log 2. Its Fourier sequence space has strong dual
@@ -363,7 +463,14 @@ the closed sets of sequences bounded by m(1 + |n|)^m, for m ≥ 1, cover it
 and have empty interior. A closed subspace of a finite product of Schwartz
 sequence spaces, quotiented by a closed subspace, is Fréchet and hence Baire. -/
 theorem Printed.strongCoprimalityPrimaryQuotient_strongDual_subquotient_false :
-    ¬ Printed.strongCoprimalityPrimaryQuotient_strongDual_subquotient := by sorry
+    ¬ Printed.strongCoprimalityPrimaryQuotient_strongDual_subquotient := by
+  intro h
+  let p : V[ℚ] := Rat.HeightOneSpectrum.primesEquiv.symm ⟨2, Nat.prime_two⟩
+  obtain ⟨n, W, D, hW, _, ⟨e⟩⟩ := h ℚ ω[ℚ, 1] p
+  have hF := strongCoprimalityPrimaryQuotient_nuclearFrechet.{0, 0} ω[ℚ, 1] p
+  apply not_bairespace_strongDual _ hF.1 hF.2 (primaryQuotient_rat_infinite p)
+  have : BaireSpace (W ⧸ D) := primaryQuotient_sequence_model_baire W hW D
+  exact e.toHomeomorph.isOpenEmbedding.baireSpace
 
 /-- Paper: Theorem 7.5.0.1, proof, equation (7.5.0.8), p. 377.
 At each reciprocal Euler zero for a place in the primary set S₀ = Sₚ of

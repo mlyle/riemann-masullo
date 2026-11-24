@@ -4,9 +4,11 @@ public import RiemannMasullo.Ch04_PeriodicSchauderBases.Sec2
 public import RiemannMasullo.Ch04_PeriodicSchauderBases.Sec5
 
 import Mathlib.Algebra.Polynomial.Taylor
-import all RiemannMasullo.AppC_LCTVS.Sec2b
+import RiemannMasullo.AppC_LCTVS.Sec2b
 import all RiemannMasullo.AppD_SchwartzBruhat.Sec3a
 import all RiemannMasullo.AppD_SchwartzBruhat.Sec3a_part2
+import RiemannMasullo.ForMathlib.Analysis.Complex.PeriodicStrip
+import RiemannMasullo.ForMathlib.Analysis.LocallyConvex.InfiniteSum
 import RiemannMasullo.ForMathlib.Analysis.SpecialFunctions.Pow.Complex
 import RiemannMasullo.ForMathlib.Topology.Algebra.Module.ContinuousLinearMap.Quotient
 import RiemannMasullo.ForMathlib.Topology.Algebra.Module.OpenMapping
@@ -1095,7 +1097,10 @@ private theorem integral_difference_polynomial (ξ : PontryaginDual G) (g : G)
 
 open scoped Classical in
 open Polynomial in
-private theorem integral_differenceProduct_polynomial (ξ : PontryaginDual G)
+/-- A log-polynomial moment of an iterated cyclic difference vanishes whenever
+the polynomial degree is less than the number of factors on whose generator
+the character is trivial in the selected norm-one isotype. -/
+theorem integral_differenceProduct_polynomial (ξ : PontryaginDual G)
     (v : List G → G → ℂ)
     (hdiff : ∀ g l x, v (g :: l) x = v l x - v l (g * x))
     (hint : ∀ l r, Integrable (fun x ↦ v l x * (ξ x : ℂ) * (period x : ℂ) ^ (r : ℕ)) μ)
@@ -1325,6 +1330,1081 @@ theorem modulatedPeriodicMomentIndex_enumerable (hN : 0 < N) :
 
 variable (hcomm : ∃ a : ℝ, 0 < a ∧ ∀ k, ∃ r : ℚ, Real.log ((m (γs k)).val : ℝ) = (r : ℝ) * a)
 
+section
+
+open Filter
+
+-- The finite-jet division and triangular interpolation arguments are adapted from
+-- StripInterpolation in Ch10_TraceSpectral/Sec2.
+/-- Removing some of a finite-order zero within the entire Schwartz–Bergman space
+preserves the orders at every other point. -/
+private theorem moment_divide_at_point {f : ℂ → ℂ} (hf : f ∈ schwartzBergmanSubmodule univ)
+    (w : ℂ) {n k : ℕ} (horder : analyticOrderAt f w = n) (hk : k ≤ n) :
+    ∃ q : ℂ → ℂ, q ∈ schwartzBergmanSubmodule univ ∧ analyticOrderAt q w = k ∧
+      ∀ v ≠ w, analyticOrderAt q v = analyticOrderAt f v := by
+  classical
+  have hd : Differentiable ℂ f := differentiableOn_univ.mp (by simpa using hf.2.1)
+  obtain ⟨g, hg, hgw, hnear⟩ := (hd.analyticAt w).analyticOrderAt_eq_natCast.mp horder
+  let d := n - k
+  have hnk : d + k = n := Nat.sub_add_cancel hk
+  let q (z : ℂ) := if z = w then (z - w)^k * g z else f z / (z - w)^d
+  have hlocal : q =ᶠ[𝓝 w] fun z ↦ (z - w)^k * g z := by
+    filter_upwards [hnear] with z he
+    by_cases hz : z = w
+    · simp [q, hz]
+    · simp only [q, ite_eq_right hz]
+      rw [div_eq_iff (pow_ne_zero _ (sub_ne_zero.mpr hz)), he, ← hnk, pow_add]
+      simp only [smul_eq_mul]
+      ring
+  have ha : AnalyticAt ℂ q w :=
+    ((analyticAt_id.sub analyticAt_const).pow k |>.mul hg).congr hlocal.symm
+  have hother {v : ℂ} (hv : v ≠ w) :
+      q =ᶠ[𝓝 v] fun z ↦ f z / (z - w)^d := by
+    filter_upwards [eventually_ne_nhds hv] with z hz using ite_eq_right hz
+  have hdq : Differentiable ℂ q := by
+    intro z
+    by_cases hz : z = w
+    · simpa [hz] using ha.differentiableAt
+    · have hh : DifferentiableAt ℂ (fun u : ℂ ↦ f u / (u - w)^d) z :=
+        (hd z).div ((differentiableAt_id.sub_const w).pow d) (pow_ne_zero d (sub_ne_zero.mpr hz))
+      exact hh.congr_of_eventuallyEq (hother hz)
+  refine ⟨q, ⟨by simp, by simpa using hdq.differentiableOn (s := univ), ?_⟩,
+    ha.analyticOrderAt_eq_natCast.mpr ⟨g, hg, hgw, hlocal⟩, ?_⟩
+  · intro a b hab hI N
+    obtain ⟨B, hB⟩ := hf.2.2 a b hab hI N
+    have hc : Continuous (fun z : ℂ ↦ ‖z^N * q z‖) :=
+      ((continuous_id.pow N).mul hdq.continuous).norm
+    obtain ⟨C, hC⟩ := (isCompact_closedBall w 1).bddAbove_image hc.continuousOn
+    refine ⟨max C B, ?_⟩
+    rintro _ ⟨z, hz, rfl⟩
+    by_cases hdist : z ∈ Metric.closedBall w 1
+    · exact (hC ⟨z, hdist, rfl⟩).trans (le_max_left _ _)
+    · have hnorm : 1 < ‖z - w‖ := by simpa [Metric.mem_closedBall, dist_eq_norm] using hdist
+      have hne : z ≠ w := by rintro rfl; norm_num at hnorm
+      change ‖z^N * q z‖ ≤ max C B
+      rw [show q z = f z / (z - w)^d from ite_eq_right hne, ← mul_div_assoc, norm_div, norm_pow]
+      exact (div_le_self (norm_nonneg _) (one_le_pow₀ hnorm.le)).trans
+        ((hB ⟨z, hz, rfl⟩).trans (le_max_right _ _))
+  · intro v hv
+    have hmul : f =ᶠ[𝓝 v] fun z ↦ (z - w)^d * q z := by
+      filter_upwards [hother hv, eventually_ne_nhds hv] with z hq hz
+      rw [hq]
+      field_simp
+    have hor : analyticOrderAt (fun z : ℂ ↦ (z - w)^d) v = 0 :=
+      (AnalyticAt.analyticOrderAt_eq_zero (by fun_prop)).mpr (pow_ne_zero _ (sub_ne_zero.mpr hv))
+    rw [analyticOrderAt_congr hmul, analyticOrderAt_fun_mul (by fun_prop) (hdq.analyticAt v), hor, zero_add]
+
+/-- Gaussian damping converts an entire function bounded on closed vertical substrips
+to an entire Schwartz–Bergman function without changing any vanishing orders. -/
+private theorem moment_gaussian_of_strip_bound {f : ℂ → ℂ} (hd : Differentiable ℂ f)
+    (hb : ∀ a b : ℝ, a ≤ b → ∃ C : ℝ, ∀ z : ℂ, z.re ∈ Icc a b → ‖f z‖ ≤ C) :
+    (fun z ↦ Complex.exp (z^2) * f z) ∈ schwartzBergmanSubmodule univ ∧
+    ∀ z, analyticOrderAt (fun u ↦ Complex.exp (u^2) * f u) z = analyticOrderAt f z := by
+  let e (z : ℂ) := Complex.exp (z^2)
+  have ha : Differentiable ℂ e := by dsimp [e]; fun_prop
+  have he : e ∈ schwartzBergmanSubmodule univ := by
+    simpa [e] using gaussian_mem_schwartzBergmanSubmodule univ isOpen_univ
+  refine ⟨⟨by simp, (ha.mul hd).differentiableOn, ?_⟩, ?_⟩
+  · intro a b hab hI N
+    obtain ⟨A, hA⟩ := he.2.2 a b hab hI N
+    obtain ⟨C, hC⟩ := hb a b hab
+    refine ⟨max A 0 * max C 0, ?_⟩
+    rintro _ ⟨z, hz, rfl⟩
+    change ‖z^N * (e z * f z)‖ ≤ _
+    rw [← mul_assoc, norm_mul]
+    exact mul_le_mul ((hA ⟨z, hz, rfl⟩).trans (le_max_left _ _))
+      ((hC z hz).trans (le_max_left _ _)) (norm_nonneg _) (le_max_right _ _)
+  · intro z
+    have h0 := (ha.analyticAt z).analyticOrderAt_eq_zero.mpr (Complex.exp_ne_zero _)
+    change analyticOrderAt (fun u ↦ e u * f u) z = _
+    rw [analyticOrderAt_fun_mul (ha.analyticAt z) (hd.analyticAt z), h0, zero_add]
+
+/-- A triangular collection in a linear subspace interpolates all the coordinates
+of one finite jet. -/
+private theorem moment_finite_interpolation {n : ℕ} (V₀ : Submodule ℂ (Fin n → ℂ))
+    (hpivot : ∀ j : Fin n, ∃ v ∈ V₀, (∀ i < j, v i = 0) ∧ v j ≠ 0)
+    (c : Fin n → ℂ) : c ∈ V₀ := by
+  have he (k : ℕ) (hk : k ≤ n) : ∃ v ∈ V₀, ∀ i : Fin n, (i : ℕ) < k → v i = c i := by
+    induction k with
+    | zero => exact ⟨0, V₀.zero_mem, by simp⟩
+    | succ k ih =>
+      obtain ⟨v, hv, hvi⟩ := ih (by omega)
+      let j : Fin n := ⟨k, by omega⟩
+      obtain ⟨u, hu, hu0, huj⟩ := hpivot j
+      let d := (c j - v j) / u j
+      refine ⟨v + d • u, V₀.add_mem hv (V₀.smul_mem d hu), ?_⟩
+      intro i hi
+      by_cases hik : (i : ℕ) < k
+      · simp only [Pi.add_apply, Pi.smul_apply, smul_eq_mul, hu0 i hik, mul_zero, add_zero, hvi i hik]
+      · have hij : i = j := Fin.ext (by change (i : ℕ) = k; omega)
+        subst i
+        change v j + (c j - v j) / u j * u j = c j
+        rw [div_mul_cancel₀ _ huj]
+        ring
+  obtain ⟨v, hv, hvc⟩ := he n le_rfl
+  exact (funext fun i ↦ hvc i i.isLt) ▸ hv
+
+/-- Exact order at one zero and the required vanishing at other zeros produce an
+entire Schwartz–Bergman transform with arbitrary prescribed finite jet at that point. -/
+private theorem moment_interpolate_transform {f : ℂ → ℂ} (hd : Differentiable ℂ f)
+    (hb : ∀ a b : ℝ, a ≤ b → ∃ C : ℝ, ∀ z : ℂ, z.re ∈ Icc a b → ‖f z‖ ≤ C)
+    (w : ℂ) (n : ℕ) (horder : analyticOrderAt f w = n) (c : Fin n → ℂ) :
+    ∃ H : schwartzBergmanSubmodule univ,
+      (∀ i : Fin n, iteratedDeriv i.val H.val w = c i) ∧
+      ∀ v ≠ w, ∀ m : ℕ, (∀ k < m, iteratedDeriv k f v = 0) →
+        ∀ k < m, iteratedDeriv k H.val v = 0 := by
+  let B := schwartzBergmanSubmodule univ
+  have han (H : B) : Differentiable ℂ H.val := differentiableOn_univ.mp (by simpa using H.property.2.1)
+  let ev (z : ℂ) (i : ℕ) : B →ₗ[ℂ] ℂ := {
+    toFun H := iteratedDeriv i H.val z
+    map_add' u v := iteratedDeriv_fun_add ((han u).analyticAt z).contDiffAt ((han v).analyticAt z).contDiffAt
+    map_smul' c u := iteratedDeriv_fun_const_smul_field c u.val }
+  let index := {p : ℂ × ℕ × ℕ //
+    p.1 ≠ w ∧ p.2.2 < p.2.1 ∧ (∀ k < p.2.1, iteratedDeriv k f p.1 = 0)}
+  let V : Submodule ℂ B := ⨅ p : index, (ev p.val.1 p.val.2.2).ker
+  let A : B →ₗ[ℂ] (Fin n → ℂ) := LinearMap.pi fun i ↦ ev w i.val
+  have hV (v : B) : v ∈ V ↔ ∀ p : index, iteratedDeriv p.val.2.2 v.val p.val.1 = 0 := by
+    simp only [V, Submodule.mem_iInf, LinearMap.mem_ker, ev, LinearMap.coe_mk, AddHom.coe_mk]
+  let g (z : ℂ) := Complex.exp (z^2) * f z
+  obtain ⟨hg, hgo⟩ := moment_gaussian_of_strip_bound hd hb
+  have hs := moment_finite_interpolation (V.map A) (fun (i : Fin n) ↦ ?_) c
+  · obtain ⟨H, hH, hc⟩ := hs
+    refine ⟨H, fun i ↦ congrFun hc i, fun v hv m hm k hk ↦ ?_⟩
+    exact (hV H).mp hH ⟨(v, m, k), hv, hk, hm⟩
+  · obtain ⟨q, hq, hw, haway⟩ := moment_divide_at_point (f := g) hg w ((hgo w).trans horder) i.isLt.le
+    let Q : B := ⟨q, hq⟩
+    have hpivot := (analyticOrderAt_eq_nat_iff_iteratedDeriv_eq_zero ((han Q).analyticAt w)).mp hw
+    refine ⟨A Q, ⟨Q, (hV Q).mpr ?_, rfl⟩, fun j hj ↦ hpivot.1 j hj, hpivot.2⟩
+    intro ⟨⟨v, m, k⟩, hv, hk, hm⟩
+    have ho := (natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero (hd.analyticAt v)).mpr hm
+    rw [← hgo v, ← haway v hv] at ho
+    exact (natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero ((han Q).analyticAt v)).mp ho k hk
+
+/-- The zeros of the finite exponential product have precisely the multiplicities
+given by the number of its vanishing factors. -/
+private theorem moment_exponential_product {n : ℕ} (L : Fin n → ℝ) (hL : ∀ k, L k < 0)
+    (a : Fin n → Circle) :
+    let P := fun z : ℂ ↦ ∏ k, (1 - (a k : ℂ) * Complex.exp ((L k : ℂ) * z))
+    Differentiable ℂ P ∧
+      (∀ l r : ℝ, l ≤ r → ∃ C : ℝ, ∀ z : ℂ, z.re ∈ Icc l r → ‖P z‖ ≤ C) ∧
+      ∀ z : ℂ, analyticOrderAt P z =
+        ((Finset.univ.filter fun k ↦ (a k : ℂ) * Complex.exp ((L k : ℂ) * z) = 1).card : ℕ∞) := by
+  classical
+  intro P
+  let b (k : Fin n) (z : ℂ) := 1 - (a k : ℂ) * Complex.exp ((L k : ℂ) * z)
+  have hd (k : Fin n) : Differentiable ℂ (b k) := by dsimp [b]; fun_prop
+  refine ⟨Differentiable.fun_finsetProd (fun k _ ↦ hd k), fun l r _ ↦ ?_, fun z ↦ ?_⟩
+  · refine ⟨∏ k, (1 + Real.exp (L k * l)), fun z hz ↦ ?_⟩
+    change ‖∏ k, b k z‖ ≤ _
+    rw [norm_prod]
+    apply Finset.prod_le_prod₀ (fun k _ ↦ norm_nonneg _)
+    intro k _
+    apply (norm_sub_le _ _).trans
+    simp only [norm_one, norm_mul, Circle.norm_coe, one_mul, Complex.norm_exp,
+      Complex.mul_re, Complex.ofReal_re, Complex.ofReal_im, zero_mul, sub_zero]
+    exact add_le_add_right (Real.exp_le_exp.mpr (mul_le_mul_of_nonpos_left hz.1 (hL k).le)) 1
+  · have hord (k : Fin n) : analyticOrderAt (b k) z = if b k z = 0 then 1 else 0 := by
+      split_ifs with hk
+      · apply ((hd k).analyticAt z).analyticOrderAt_eq_one_of_zero_deriv_ne_zero hk
+        have h := ((hasDerivAt_id z).const_mul (L k : ℂ)).cexp.const_mul (a k : ℂ)
+        have h' := h.const_sub 1
+        change deriv (fun z : ℂ ↦ 1 - (a k : ℂ) * Complex.exp ((L k : ℂ) * z)) z ≠ 0
+        apply h'.deriv.trans_ne
+        exact neg_ne_zero.mpr (mul_ne_zero (Circle.coe_ne_zero _) (mul_ne_zero
+          (Complex.exp_ne_zero _) (mul_ne_zero (Complex.ofReal_ne_zero.mpr (hL k).ne) one_ne_zero)))
+      · exact ((hd k).analyticAt z).analyticOrderAt_eq_zero.mpr hk
+    have hprod (s : Finset (Fin n)) : analyticOrderAt (fun w ↦ ∏ k ∈ s, b k w) z =
+        ∑ k ∈ s, analyticOrderAt (b k) z := by
+      induction s using Finset.induction_on with
+      | empty => simp
+      | insert k s hk ih =>
+        simp only [Finset.prod_insert hk, Finset.sum_insert hk]
+        rw [analyticOrderAt_fun_mul ((hd k).analyticAt z)
+          ((Differentiable.fun_finsetProd (fun i (_ : i ∈ s) ↦ hd i)).analyticAt z), ih]
+    rw [show P = (fun w ↦ ∏ k, b k w) from rfl, hprod]
+    simp only [hord, b, sub_eq_zero, eq_comm (a := (1 : ℂ)), Finset.sum_boole]
+
+
+-- Scalar Mellin differentiation as in Ch07_SchauderBasesZeta/Sec1b.
+/-- Log-moment profiles of a decay profile are bounded by every power. -/
+private theorem moment_mellin_bound (g : logExponentialDecaySubmodule (univ : Set ℝ)) (a : ℝ) (k : ℕ) :
+    ∃ C : ℝ, ∀ t : ℝ, 0 < t →
+      ‖(Real.log t : ℂ) ^ k * g.val (Real.log t)‖ ≤ C * t ^ (-a) := by
+  let twist := logExponentialDecayTwist (univ : Set ℝ) ⟨a, trivial⟩ g
+  refine ⟨SchwartzMap.seminorm ℂ k 0 twist, fun t ht ↦ ?_⟩
+  have hS := SchwartzMap.norm_pow_mul_le_seminorm ℂ twist k (Real.log t)
+  rw [logExponentialDecayTwist_apply] at hS
+  have he : Real.exp (a * Real.log t) = t ^ a := by
+    rw [Real.rpow_def_of_pos ht, mul_comm]
+  rw [norm_mul, Complex.norm_real, he, Real.norm_of_nonneg (Real.rpow_nonneg ht.le _)] at hS
+  have htp : 0 < t ^ a := Real.rpow_pos_of_pos ht a
+  rw [Real.rpow_neg ht.le, ← div_eq_mul_inv, le_div_iff₀ htp, norm_mul, norm_pow,
+    Complex.norm_real]
+  calc ‖Real.log t‖ ^ k * ‖g.val (Real.log t)‖ * t ^ a
+      = ‖Real.log t‖ ^ k * (t ^ a * ‖g.val (Real.log t)‖) := by ring
+    _ ≤ _ := hS
+
+private theorem moment_mellin_cont (g : logExponentialDecaySubmodule (univ : Set ℝ)) :
+    Continuous g.val := by
+  let twist := logExponentialDecayTwist (univ : Set ℝ) ⟨0, trivial⟩ g
+  have : g.val = twist := by
+    funext x
+    rw [logExponentialDecayTwist_apply]
+    simp
+  rw [this]
+  exact twist.continuous
+
+private theorem moment_mellin_props (g : logExponentialDecaySubmodule (univ : Set ℝ)) (k : ℕ) (s : ℂ) :
+    let f := fun t : ℝ ↦ (Real.log t : ℂ) ^ k * g.val (Real.log t)
+    MellinConvergent f s ∧ HasDerivAt (mellin f)
+      (mellin (fun t : ℝ ↦ (Real.log t : ℂ) ^ (k + 1) * g.val (Real.log t)) s) s := by
+  intro f
+  have hc : ContinuousOn f (Ioi 0) := by
+    intro t ht
+    have hl : ContinuousAt Real.log t := Real.continuousAt_log (ne_of_gt ht)
+    exact (((Complex.continuous_ofReal.continuousAt.comp hl).pow k).mul
+      ((moment_mellin_cont g).continuousAt.comp hl)).continuousWithinAt
+  have hfc : LocallyIntegrableOn f (Ioi 0) := hc.locallyIntegrableOn measurableSet_Ioi
+  have hO (a : ℝ) (l : Filter ℝ) (hl : ∀ᶠ t in l, 0 < t) : Asymptotics.IsBigO l f (· ^ (-a)) := by
+    obtain ⟨C, hC⟩ := moment_mellin_bound g a k
+    refine Asymptotics.IsBigO.of_bound C ?_
+    filter_upwards [hl] with t ht
+    rw [Real.norm_of_nonneg (Real.rpow_nonneg ht.le _)]
+    exact hC t ht
+  have htop : ∀ᶠ t : ℝ in atTop, 0 < t := eventually_gt_atTop 0
+  have hbot : ∀ᶠ t : ℝ in 𝓝[>] 0, 0 < t := self_mem_nhdsWithin
+  have h1 := mellinConvergent_of_isBigO_rpow hfc (hO (s.re + 1) atTop htop) (by linarith)
+    (hO (s.re - 1) _ hbot) (by linarith)
+  have h2 := (mellin_hasDerivAt_of_isBigO_rpow hfc (hO (s.re + 1) atTop htop) (by linarith)
+    (hO (s.re - 1) _ hbot) (by linarith)).2
+  refine ⟨h1, ?_⟩
+  convert h2 using 2
+  funext t
+  simp only [f, Complex.real_smul, pow_succ]
+  ring
+
+private theorem moment_mellin_iter (g : logExponentialDecaySubmodule (univ : Set ℝ)) (m : ℕ) :
+    iteratedDeriv m (mellin fun t : ℝ ↦ g.val (Real.log t)) =
+      mellin (fun t : ℝ ↦ (Real.log t : ℂ) ^ m * g.val (Real.log t)) := by
+  induction m with
+  | zero => simp
+  | succ m ih =>
+    rw [iteratedDeriv_succ, ih]
+    funext s
+    exact (moment_mellin_props g m s).2.deriv
+
+include hm hms in
+/-- Pull a scalar profile back along the modulation and twist by the inverse
+character, placing it in the matching isotype. -/
+private theorem moment_profile_lift (τ : ℝ≥0ˣ →ₜ* G) (hτ : RightInverse τ m)
+    (χ₀ : PontryaginDual G) (hK : ∀ k : K, χ₀ k.val = ω k)
+    (p : PositiveRealExponentialDecay univ) :
+    ∃ f : H₀[ω], ∀ x, f.val.val x = (χ₀ x : ℂ)⁻¹ * p.val (period x) := by
+  let : CompactSpace K := isCompact_iff_compactSpace.mp hm.isCompact_ker
+  obtain ⟨u, hu⟩ := compact_schwartzBruhat_one (H := K)
+  obtain ⟨v, hv⟩ := split_pure_decay_mem m univ hm ordConnected_univ univ_nonempty τ hτ u p
+  obtain ⟨T, hT⟩ := modulatedExponentialDecay_mul_unitaryCharacter m univ hm hms
+    ordConnected_univ univ_nonempty χ₀⁻¹
+  have he (x : G) : (T v).val x = (χ₀ x : ℂ)⁻¹ * p.val (period x) := by
+    rw [hT]
+    apply congrArg₂ (· * ·) (Circle.coe_inv _)
+    let k : K := ⟨x / τ (m x), by change m (x / τ (m x)) = 1; rw [map_div, hτ, div_self']⟩
+    have hp := hv k (m x)
+    rw [hu, one_mul] at hp
+    simpa only [k, div_mul_cancel] using hp
+  refine ⟨⟨T v, (mem_modulatedDecayIsotype_iff m ω univ (mem_univ _) _).mpr ?_⟩, he⟩
+  intro k x
+  simp only [he, map_mul, map_inv, Circle.coe_mul, Circle.coe_inv, hK,
+    show m k.val = 1 from k.property, inv_one, one_mul, mul_inv_rev, inv_inv]
+  ring
+
+include hm hms in
+/-- Pushing Haar measure forward along the modulation introduces one positive
+scalar, common to all log-moment orders and characters. -/
+private theorem moment_haar_scale :
+    ∃ c : ℝ≥0, 0 < c ∧ μ.map m = c • positiveRealHaar := by
+  let : BorelSpace ℝ≥0ˣ := borelSpace_units_of_continuousInv₀ ℝ≥0
+  let : SecondCountableTopology ℝ≥0ˣ := Units.isEmbedding_val₀.secondCountableTopology
+  let : (μ.map m).IsHaarMeasure := Measure.isHaarMeasure_map μ m.toMonoidHom
+    m.continuous hms (isProperMap_iff_tendsto_cocompact.mp hm.1).2
+  let : positiveRealHaar.IsHaarMeasure := positiveRealHaar_isHaarMeasure
+  exact ⟨_, Measure.haarScalarFactor_pos_of_isHaarMeasure _ _,
+    Measure.isMulLeftInvariant_eq_smul _ _⟩
+
+/-- For a lifted scalar profile, every moment on the compact-character component
+is a derivative of the ordinary Mellin transform at the section frequency. -/
+private theorem moment_profile_pairing (χ₀ ξ : PontryaginDual G) (s : ℝ)
+    (hξ : ∀ x, ξ x = χ₀ x * Circle.exp (s * period x))
+    (p : PositiveRealExponentialDecay univ) (f : H₀[ω])
+    (hf : ∀ x, f.val.val x = (χ₀ x : ℂ)⁻¹ * p.val (period x))
+    (c : ℝ≥0) (hc : μ.map m = c • positiveRealHaar) (r : ℕ) :
+    (∫ x, f.val.val x * (ξ x : ℂ) * (period x : ℂ)^r ∂μ) =
+      ((c : ℝ) : ℂ) * iteratedDeriv r (mellin fun t : ℝ ↦ p.val (Real.log t)) (s * Complex.I) := by
+  let : BorelSpace ℝ≥0ˣ := borelSpace_units_of_continuousInv₀ ℝ≥0
+  let g (x : ℝ) := (x : ℂ)^r * p.val x
+  let q (t : ℝ≥0ˣ) := g (Real.log (t.val : ℝ)) * ((t.val : ℝ) : ℂ) ^ ((s : ℂ) * Complex.I)
+  have hq : Continuous q := by
+    have hlog : Continuous (fun t : ℝ≥0ˣ ↦ Real.log (t.val : ℝ)) :=
+      (NNReal.continuous_coe.comp Units.continuous_val).log fun t ↦ (NNReal.coe_pos.mpr (Units.zero_lt t)).ne'
+    have hg : Continuous g := (Complex.continuous_ofReal.pow r).mul (moment_mellin_cont p)
+    have he (t : ℝ≥0ˣ) := coe_circleExp_mul_log s t
+    change Continuous fun t : ℝ≥0ˣ ↦ g (Real.log (t.val : ℝ)) * _
+    simp_rw [← he]
+    exact (hg.comp hlog).mul (continuous_subtype_val.comp
+      (Circle.exp.continuous.comp (continuous_const.mul hlog)))
+  calc
+    _ = ∫ x, q (m x) ∂μ := integral_congr_ae (.of_forall fun x ↦ by
+      rw [hf, hξ, Circle.coe_mul, coe_circleExp_mul_log]
+      dsimp only [q, g]
+      field_simp [Circle.coe_ne_zero])
+    _ = ∫ t, q t ∂μ.map m := (integral_map_of_stronglyMeasurable m.continuous.measurable
+      hq.stronglyMeasurable).symm
+    _ = _ := by
+      rw [hc, integral_smul_nnreal_measure, NNReal.smul_def, Complex.real_smul]
+      exact congrArg (((c : ℝ) : ℂ) * ·) ((scalar_mellin_integral g _).trans
+        (congrFun (moment_mellin_iter p r) _).symm)
+
+/-- Parametrize all the moment characters on the Mellin line of one compact isotype. -/
+private theorem moment_chart (τ : ℝ≥0ˣ →ₜ* G) (hτ : RightInverse τ m) :
+    ∃ (χ₀ : PontryaginDual G) (s : J → ℝ),
+      (∀ k : K, χ₀ k.val = ω k) ∧ (∀ t, χ₀ (τ t) = 1) ∧
+      ∀ (j : J) x, j.val.1 x = χ₀ x * Circle.exp (s j * period x) := by
+  classical
+  obtain ⟨χ₀, hK, h₀, hsplit⟩ := exists_baseCharacter_of_section m ω τ hτ
+  have hres (j : J) : ∀ k : K, j.val.1 k.val = ω k := by
+    obtain ⟨k, hk⟩ := mem_iUnion.mp ((mem_modulatedPeriodicSpectrum_iff m ω γs _).mpr
+      (lt_of_le_of_lt (Nat.zero_le _) j.property))
+    exact ((mem_modulatedCyclicAnnihilatorFiber_iff m ω (γs k) _).mp hk).2
+  choose s hs using fun j : J ↦ (existsUnique_positiveRealCharacter_freq (j.val.1.comp τ)).exists
+  exact ⟨χ₀, s, hK, h₀, fun j x ↦
+    (hsplit _ (hres j) x).trans (congrArg (χ₀ x * ·) (hs j (m x)))⟩
+
+/-- The number of vanishing Mellin multiplier factors is the multiplicity of the
+corresponding character, including repeated cyclic generators. -/
+private theorem moment_chart_multiplicity (χ₀ : PontryaginDual G)
+    (hK : ∀ k : K, χ₀ k.val = ω k) (χ : PontryaginDual G) (t : ℝ)
+    (hc : ∀ x, χ x = χ₀ x * Circle.exp (t * period x)) :
+    modulatedPeriodicMultiplicity m ω γs χ =
+      (Finset.univ.filter fun k ↦ (χ₀ (γs k) : ℂ)⁻¹ *
+        Complex.exp ((-(period (γs k)) : ℝ) * ((t : ℂ) * Complex.I)) = 1).card := by
+  classical
+  apply congrArg Finset.card
+  apply Finset.filter_congr
+  intro k _
+  have hres (u : K) : χ u.val = ω u := by
+    rw [hc, show m u.val = 1 from u.property]
+    simp [hK]
+  rw [mem_modulatedCyclicAnnihilatorFiber_iff, and_iff_left hres, hc, ← Circle.coe_inj,
+    Circle.coe_mul, Circle.coe_exp, Circle.coe_one]
+  push_cast
+  rw [neg_mul, Complex.exp_neg, ← mul_inv, inv_eq_one]
+  ring_nf
+
+end
+
+include hcomm in
+/-- Paper: Theorem 4.6.1.5, p. 212. There is a family of vectors of the difference quotient on
+which the descended log-moments take the values of the Kronecker delta. Interpolating
+the Mellin derivatives at one frequency while preserving the vanishing orders at all
+other frequencies gives a representative for each vector. -/
+private theorem modulatedQuotientLogMoment_bases_biorthogonal :
+    ∃ ψ : J → U, (∀ j, D j (ψ j) = 1) ∧ ∀ j k, j ≠ k → D j (ψ k) = 0 := by
+  classical
+  obtain ⟨τ, hτ⟩ := exists_surjectiveModulation_section m hm hms
+  obtain ⟨χ₀, s, hK, _, hξ⟩ := moment_chart m ω γs τ hτ
+  let w (j : J) : ℂ := (s j : ℂ) * Complex.I
+  let d (j : J) := modulatedPeriodicMultiplicity m ω γs j.val.1
+  let L (k : Fin N) := -(period (γs k))
+  let a (k : Fin N) := (χ₀ (γs k))⁻¹
+  let P (z : ℂ) := ∏ k, (1 - (a k : ℂ) * Complex.exp ((L k : ℂ) * z))
+  obtain ⟨hP, hbound, horder⟩ := moment_exponential_product L
+    (fun k ↦ neg_lt_zero.mpr (Real.log_pos (by exact_mod_cast hγs k))) a
+  have hord (j : J) : analyticOrderAt P (w j) = d j :=
+    (horder (w j)).trans (congrArg Nat.cast (moment_chart_multiplicity m ω γs χ₀ hK _ _ (hξ j)).symm)
+  obtain ⟨c, hc, hμ⟩ := moment_haar_scale m hm hms μ
+  have hc' : ((c : ℝ) : ℂ) ≠ 0 := by exact_mod_cast hc.ne'
+  have lift (i : J) : ∃ v : U, ∀ j : J, D j v = if j = i then 1 else 0 := by
+    let values (k : Fin (d i)) : ℂ := if k.val = i.val.2 then ((c : ℝ) : ℂ)⁻¹ else 0
+    obtain ⟨H, hHi, hHj⟩ := moment_interpolate_transform hP hbound (w i) (d i) (hord i) values
+    let M := positiveRealFourierMellin univ isOpen_univ ordConnected_univ univ_nonempty
+    let p := M.symm H
+    obtain ⟨f, hf⟩ := moment_profile_lift m hm hms ω τ hτ χ₀ hK p
+    have hM : (mellin fun t : ℝ ↦ p.val (Real.log t)) = H.val := by
+      funext z
+      exact (positiveRealFourierMellin_apply univ isOpen_univ ordConnected_univ univ_nonempty p z
+        (mem_univ _)).symm.trans (congrArg (fun u : SchwartzBergman univ ↦ u.val z) (M.apply_symm_apply H))
+    refine ⟨(R).mkQ f, fun j ↦ ?_⟩
+    rw [modulatedQuotientLogMoment_mkQ, moment_profile_pairing m ω μ χ₀ _ _ (hξ j) p f hf c hμ,
+      hM]
+    change ((c : ℝ) : ℂ) * iteratedDeriv j.val.2 H.val (w j) = _
+    by_cases hw : w j = w i
+    · have hs : s j = s i := by simpa [w] using congrArg Complex.im hw
+      have hχ : j.val.1 = i.val.1 := PontryaginDual.ext fun x ↦ by rw [hξ j, hs, ← hξ i]
+      have hj : j.val.2 < d i := j.property.trans_eq (congrArg (modulatedPeriodicMultiplicity m ω γs) hχ)
+      have hij : j = i ↔ j.val.2 = i.val.2 :=
+        ⟨fun e ↦ congrArg (fun l : J ↦ l.val.2) e, fun e ↦ Subtype.ext (Prod.ext hχ e)⟩
+      rw [hw, hHi ⟨_, hj⟩]
+      by_cases e : j.val.2 = i.val.2 <;> simp [values, hij, e, hc']
+    · have hji : j ≠ i := fun he ↦ hw (congrArg w he)
+      rw [hHj (w j) hw (d j)
+        ((analyticOrderAt_eq_nat_iff_iteratedDeriv_eq_zero (hP.analyticAt _)).mp (hord j)).1
+        j.val.2 j.property, mul_zero, ite_eq_right hji]
+  choose ψ hψ using lift
+  exact ⟨ψ, fun j ↦ (hψ j j).trans (ite_eq_left rfl), fun j k hjk ↦ (hψ k j).trans (ite_eq_right hjk)⟩
+
+include hγs in
+/-- Paper: Theorem 4.1.2.6(2), p. 161, applied to Theorem 4.6.1.5, p. 212. The difference quotient
+is a separable nuclear Frechet space (by `modulatedIsotypicDifferenceProduct_quotient`), and every
+Schauder basis of a nuclear Frechet space is absolute. -/
+private theorem modulatedQuotientLogMoment_bases_absolute (σ : ℕ ≃ J) (ψ : J → U)
+    (hb : IsSchauderBasis (ψ ∘ σ) (D ∘ σ)) :
+    SchauderBasis.IsAbsolute (ψ ∘ σ) (D ∘ σ) := by
+  have hS₀ : ∀ g ∈ List.ofFn γs, 1 < (m g).val := by
+    intro g hg
+    obtain ⟨k, rfl⟩ := List.mem_ofFn.mp hg
+    exact hγs k
+  obtain ⟨-, hN, hF⟩ := modulatedIsotypicDifferenceProduct_quotient (m := m) (hm := hm)
+    (hms := hms) (ω := ω) (List.ofFn γs) hS₀
+  exact SchauderBasis.isAbsolute_of_nuclear_frechet.{_, 0} hN hF hb
+
+section
+open Filter
+
+/-- A continuous linear bijection of Fréchet spaces has continuous inverse. -/
+private theorem moment_open_equiv {X Y : Type*} [AddCommGroup X] [Module ℂ X]
+    [TopologicalSpace X] [IsTopologicalAddGroup X] [ContinuousSMul ℂ X]
+    [AddCommGroup Y] [Module ℂ Y] [TopologicalSpace Y] [IsTopologicalAddGroup Y]
+    [ContinuousSMul ℂ Y] (hX : IsFrechetTVS X) (hY : IsFrechetTVS Y)
+    (A : X →L[ℂ] Y) (hA : Bijective A) : ∃ e : X ≃L[ℂ] Y, ∀ x, e x = A x := by
+  let : UniformSpace X := IsTopologicalAddGroup.rightUniformSpace X
+  let : IsUniformAddGroup X := isUniformAddGroup_of_addCommGroup
+  let : MetrizableSpace X := hX.choose_spec.2.1
+  let : CompleteSpace X := hX.choose_spec.2.2
+  let : UniformSpace Y := IsTopologicalAddGroup.rightUniformSpace Y
+  let : IsUniformAddGroup Y := isUniformAddGroup_of_addCommGroup
+  let : MetrizableSpace Y := hY.choose_spec.2.1
+  let : CompleteSpace Y := hY.choose_spec.2.2
+  let : (uniformity Y).IsCountablyGenerated := IsUniformAddGroup.uniformity_countably_generated
+  let : BaireSpace Y := BaireSpace.of_completelyPseudoMetrizable
+  have ho : IsOpenMap A := by
+    apply isOpenMap_of_not_isMeagre_range A
+    rw [hA.2.range_eq]
+    exact not_isMeagre_of_isOpen isOpen_univ univ_nonempty
+  let e := LinearEquiv.ofBijective A.toLinearMap hA
+  exact ⟨{ e with continuous_toFun := A.continuous,
+                  continuous_invFun := e.toEquiv.continuous_symm_iff.mpr ho }, fun _ ↦ rfl⟩
+
+include hm hms in
+/-- Restrict each ordinary Schwartz twist to the section. In logarithmic
+coordinates these restrictions are exactly the twists defining scalar decay. -/
+private theorem moment_section_profile (τ : ℝ≥0ˣ →ₜ* G) (hτ : RightInverse τ m) :
+    ∃ B : E →L[ℂ] PositiveRealExponentialDecay univ, ∀ f (t : ℝ≥0ˣ),
+      (B f).val (Real.log (t.val : ℝ)) = f.val (τ t) := by
+  let Γ := m.toMonoidHom.range
+  let d : Γ ≃ₜ* ℝ≥0ˣ := {
+    toFun := Subtype.val
+    invFun := fun t ↦ ⟨t, MonoidHom.mem_range.mpr (hms t)⟩
+    map_mul' := fun _ _ ↦ rfl
+    left_inv := fun _ ↦ rfl
+    right_inv := fun _ ↦ rfl
+    continuous_toFun := continuous_subtype_val
+    continuous_invFun := continuous_id.subtype_mk _ }
+  let : LocallyCompactSpace Γ := hm.isClosed_range.locallyCompactSpace
+  let : SecondCountableTopology ℝ≥0ˣ := Units.isEmbedding_val₀.secondCountableTopology
+  let : SecondCountableTopology Γ := TopologicalSpace.Subtype.secondCountableTopology _
+  let logCoord := d.trans positiveRealLogEquiv
+  obtain ⟨v, hv⟩ := schwartzBruhat_realCoordinate_equiv logCoord
+  let inc : Γ →ₜ* ℝ≥0ˣ := ⟨m.toMonoidHom.range.subtype, continuous_subtype_val⟩
+  obtain ⟨res, hres⟩ := schwartzBruhat_modulation_section_restriction m hm (τ.comp inc)
+    (fun t ↦ hτ t.val)
+  let A := v.symm.toContinuousLinearMap.comp res
+  let g (x : ℝ) := logCoord.symm (Multiplicative.ofAdd x)
+  have hlog (x : ℝ) : Real.log ((g x).val.val : ℝ) = x := by
+    have e := congrArg Multiplicative.toAdd (logCoord.apply_symm_apply (Multiplicative.ofAdd x))
+    exact (positiveRealLogEquiv_apply (d (g x))).symm.trans e
+  have hA (f : SchwartzBruhat G) (x : ℝ) : A f x = f (τ (g x).val) := by
+    have h := hv (v.symm (res f)) (g x)
+    rw [v.apply_symm_apply, logCoord.apply_symm_apply] at h
+    exact h.symm.trans (hres f (g x))
+  let W (a : (univ : Set ℝ)) : E →L[ℂ] SchwartzMap ℝ ℂ :=
+    A.comp ⟨modulatedExponentialDecayTwist m univ a, continuous_decay_twist m univ a⟩
+  have hW (a : (univ : Set ℝ)) (f : E) (x : ℝ) : W a f x =
+      (Real.exp (a.val*x) : ℂ) * f.val (τ (g x).val) := by
+    change A (modulatedExponentialDecayTwist m univ a f) x = _
+    rw [hA]
+    change (((((m (τ (g x).val)).val : ℝ) ^ a.val : ℝ) : ℂ) * f.val (τ (g x).val)) = _
+    rw [hτ, identityWeight_log, positiveRealLogEquiv_apply, hlog]
+  let L : E →ₗ[ℂ] (ℝ → ℂ) := {
+    toFun := fun f x ↦ f.val (τ (g x).val)
+    map_add' := fun _ _ ↦ rfl
+    map_smul' := fun _ _ ↦ rfl }
+  let B : E →ₗ[ℂ] PositiveRealExponentialDecay univ := L.codRestrict (logExponentialDecaySubmodule univ) (fun f ↦
+    (Submodule.mem_iInf _).mpr fun a ↦ ⟨W a f, funext (hW a f)⟩)
+  have hBc : Continuous B := by
+    apply (positiveRealExponentialDecay_isEmbedding univ univ_nonempty).isInducing.continuous_iff.mpr
+    apply continuous_pi
+    intro a
+    exact (W a).continuous.congr fun f ↦ SchwartzMap.ext fun x ↦
+      (hW a f x).trans (logExponentialDecayTwist_apply univ a (B f) x).symm
+  refine ⟨⟨B,hBc⟩, fun f t ↦ ?_⟩
+  let u := d.symm t
+  have h := congrArg Multiplicative.ofAdd (positiveRealLogEquiv_apply t)
+  have hu : g (Real.log (t.val : ℝ)) = u := logCoord.injective
+    ((logCoord.apply_symm_apply _).trans h.symm)
+  change f.val (τ (g _).val) = f.val (τ t)
+  rw [hu]
+  rfl
+
+include hm hms in
+/-- The scalar profile on a splitting determines an isotypic function everywhere. -/
+private theorem moment_profile_equiv (τ : ℝ≥0ˣ →ₜ* G) (hτ : RightInverse τ m)
+    (χ₀ : PontryaginDual G) (hK : ∀ k : K, χ₀ k.val = ω k) (h₀ : ∀ t, χ₀ (τ t) = 1)
+    (hF : IsFrechetTVS H₀[ω]) :
+    ∃ e : H₀[ω] ≃L[ℂ] PositiveRealExponentialDecay univ, ∀ f x,
+      f.val.val x = (χ₀ x : ℂ)⁻¹ * (e f).val (period x) := by
+  obtain ⟨A,hA⟩ := moment_section_profile m hm hms τ hτ
+  let B := A.comp (H₀[ω]).subtypeL
+  have htrans (f : H₀[ω]) (k : K) (x : G) :
+      f.val.val (k.val * x) = (χ₀ k.val : ℂ)⁻¹ * f.val.val x := by
+    simpa only [Subgroup.coe_inv, inv_inv, map_inv, Circle.coe_inv, hK] using
+      (mem_modulatedDecayIsotype_iff m ω univ (mem_univ _) _).mp f.property k⁻¹ x
+  have hres (f : H₀[ω]) (t : ℝ≥0ˣ) : (B f).val (Real.log (t.val : ℝ)) = f.val.val (τ t) :=
+    hA f.val t
+  have hrep (f : H₀[ω]) (x : G) : f.val.val x = (χ₀ x : ℂ)⁻¹ * (B f).val (period x) := by
+    let k : K := ⟨x / τ (m x), by change m (x / τ (m x)) = 1; rw [map_div, hτ, div_self']⟩
+    simpa only [k, div_mul_cancel, map_div, h₀, div_one, hres] using htrans f k (τ (m x))
+  have hb : Bijective B := by
+    constructor
+    · intro f g he
+      exact Subtype.ext (Subtype.ext (funext fun x ↦ (hrep f x).trans (by rw [he, ← hrep])))
+    · intro p
+      obtain ⟨f, hf⟩ := moment_profile_lift m hm hms ω τ hτ χ₀ hK p
+      refine ⟨f, Subtype.ext (funext fun x ↦ ?_)⟩
+      let t : ℝ≥0ˣ := Units.mk0 (Real.exp x).toNNReal (by positivity)
+      have ht : Real.log (t.val : ℝ) = x := by
+        change Real.log ((Real.exp x).toNNReal : ℝ) = x
+        rw [Real.coe_toNNReal _ (Real.exp_pos x).le, Real.log_exp]
+      rw [← ht, hres, hf, h₀, Circle.coe_one, inv_one, one_mul, hτ]
+  obtain ⟨e, he⟩ := moment_open_equiv hF
+    (positiveRealExponentialDecay_frechet univ ordConnected_univ univ_nonempty) B hb
+  exact ⟨e, fun f x ↦ (he f).symm ▸ hrep f x⟩
+
+/-- In the scalar Mellin chart the restricted difference product acts by a
+product of elementary exponential factors. -/
+private theorem moment_product_action (τ : ℝ≥0ˣ →ₜ* G) (hτ : RightInverse τ m)
+    (χ₀ : PontryaginDual G) (h₀ : ∀ t, χ₀ (τ t) = 1)
+    (e : H₀[ω] ≃L[ℂ] PositiveRealExponentialDecay univ)
+    (he : ∀ (f : H₀[ω]) x, f.val.val x = (χ₀ x : ℂ)⁻¹ * (e f).val (period x))
+    (gs : List G) (f : H₀[ω]) (z : ℂ) :
+    let M := positiveRealFourierMellin univ isOpen_univ ordConnected_univ univ_nonempty
+    (M (e (P[ω,gs] f))).val z =
+      (gs.map fun g ↦ 1 - (χ₀ g : ℂ)⁻¹ * Complex.exp ((-(period g) : ℝ) * (z : ℂ))).prod *
+        (M (e f)).val z := by
+  intro M
+  induction gs with
+  | nil => simp only [List.map_nil, List.prod_nil, one_mul]; rfl
+  | cons g gs ih =>
+    let v := P[ω,gs] f
+    let w := P[ω,g :: gs] f
+    have hdiff (x : G) : w.val.val x = v.val.val x - v.val.val (g * x) :=
+      modulatedCyclicDifference_apply m g hm hms univ ordConnected_univ univ_nonempty v.val x
+    have hsec (u : H₀[ω]) (t : ℝ≥0ˣ) : u.val.val (τ t) = (e u).val (Real.log (t.val : ℝ)) := by
+      rw [he, h₀, Circle.coe_one, inv_one, one_mul, hτ]
+    have hshift (x : ℝ) : ((e v - e w).val x) =
+        (χ₀ (τ (m g) * g⁻¹) : ℂ) * (e v).val ((period g) + x) := by
+      let t : ℝ≥0ˣ := Units.mk0 (Real.exp x).toNNReal (by positivity)
+      have ht : Real.log (t.val : ℝ) = x := by
+        change Real.log ((Real.exp x).toNNReal : ℝ) = x
+        rw [Real.coe_toNNReal _ (Real.exp_pos x).le, Real.log_exp]
+      change (e v).val x - (e w).val x = _
+      rw [← ht, ← hsec, ← hsec, hdiff, sub_sub_cancel, he v (g * τ t)]
+      simp only [map_mul, map_inv, h₀, mul_one, one_mul, hτ _, Circle.coe_inv,
+        Units.val_mul, NNReal.coe_mul, Real.log_mul (NNReal.coe_pos.mpr (Units.zero_lt _)).ne'
+          (NNReal.coe_pos.mpr (Units.zero_lt _)).ne']
+    have hs := modulatedMellin_profile_translate m g univ isOpen_univ ordConnected_univ
+      univ_nonempty τ χ₀ (e v) (e v - e w) hshift z (mem_univ _)
+    have hp : 0 < ((m g).val : ℝ) := NNReal.coe_pos.mpr (Units.zero_lt _)
+    rw [map_mul, map_inv, h₀, one_mul, Circle.coe_inv, Complex.cpow_def_of_ne_zero
+      (Complex.ofReal_ne_zero.mpr hp.ne'), ← Complex.ofReal_log hp.le, mul_neg,
+      ← neg_mul, ← Complex.ofReal_neg] at hs
+    have hmellin := congrArg (fun H : SchwartzBergman univ ↦ H.val z) (M.map_sub (e v) (e w))
+    change (M (e v - e w)).val z = (M (e v)).val z - (M (e w)).val z at hmellin
+    change (M (e w)).val z = _
+    simp only [List.map_cons, List.prod_cons, mul_assoc, ← ih]
+    change (M (e w)).val z = (1 - _) * (M (e v)).val z
+    linear_combination hmellin - hs
+
+/-- Clearing the rational denominators gives one imaginary period for every factor. -/
+private theorem moment_common_period {n : ℕ} (L : Fin n → ℝ)
+    (h : ∃ d > (0 : ℝ), ∀ k, ∃ q : ℚ, L k = q * d) :
+    ∃ T > (0 : ℝ), ∀ k, Complex.exp ((L k : ℂ) * ((T : ℂ) * Complex.I)) = 1 := by
+  obtain ⟨d, hd, h⟩ := h
+  choose q hq using h
+  let b := ∏ k, (q k).den
+  have hb : 0 < b := Finset.prod_pos fun k _ ↦ (q k).den_pos
+  refine ⟨2 * Real.pi * b / d, by positivity, fun k ↦ ?_⟩
+  obtain ⟨v, hv⟩ := Finset.dvd_prod_of_mem (fun j ↦ (q j).den) (Finset.mem_univ k)
+  have he : L k * (2 * Real.pi * b / d) = ((q k).num * (v : ℤ) : ℤ) * (2 * Real.pi) := by
+    rw [hq, Rat.cast_def, show b = (q k).den * v from hv]
+    push_cast
+    field_simp [(q k).den_nz, hd.ne']
+  rw [← mul_assoc, ← Complex.ofReal_mul, he]
+  push_cast
+  rw [mul_assoc]
+  simpa only [Int.cast_mul, Int.cast_natCast] using Complex.exp_int_mul_two_pi_mul_I ((q k).num * v)
+
+include hγs in
+/-- All indicated jets at a common zero are indexed by the character on its
+vertical line. Conversely the frequency and the jet order identify that index. -/
+private theorem moment_chart_coverage (τ : ℝ≥0ˣ →ₜ* G) (hτ : RightInverse τ m)
+    (χ₀ : PontryaginDual G) (hK : ∀ k : K, χ₀ k.val = ω k) (h₀ : ∀ t, χ₀ (τ t) = 1)
+    (s : J → ℝ) (hξ : ∀ (j : J) x, j.val.1 x = χ₀ x * Circle.exp (s j * period x)) :
+    let d := fun z : ℂ ↦ (Finset.univ.filter fun k ↦
+      (χ₀ (γs k) : ℂ)⁻¹ * Complex.exp ((-(period (γs k)) : ℝ) * z) = 1).card
+    Injective (fun j : J ↦ (s j,j.val.2)) ∧
+      (∀ j : J, j.val.2 < d ((s j : ℂ) * Complex.I)) ∧
+      ∀ (z : ℂ) (r : ℕ), r < d z → ∃ j : J, z = (s j : ℂ) * Complex.I ∧ r = j.val.2 := by
+  classical
+  intro d
+  refine ⟨?_, fun j ↦ j.property.trans_eq (moment_chart_multiplicity m ω γs χ₀ hK _ _ (hξ j)), fun z r hr ↦ ?_⟩
+  · intro i j hij
+    apply Subtype.ext
+    obtain ⟨hs, hr⟩ := Prod.mk.inj hij
+    exact Prod.ext (PontryaginDual.ext fun x ↦ by rw [hξ i, hs, ← hξ j]) hr
+  have hpos : 0 < d z := by omega
+  obtain ⟨k, hk⟩ := Finset.card_pos.mp hpos
+  have he := (Finset.mem_filter.mp hk).2
+  have hn := congrArg norm he
+  simp only [norm_mul, norm_inv, Circle.norm_coe, inv_one, one_mul, Complex.norm_exp,
+    Complex.mul_re, Complex.ofReal_re, Complex.ofReal_im, zero_mul, sub_zero, norm_one,
+    Real.exp_eq_one_iff, mul_eq_zero] at hn
+  have hL : 0 < period (γs k) := Real.log_pos (by exact_mod_cast hγs k)
+  have hz : z = (z.im : ℂ) * Complex.I := by
+    apply Complex.ext <;> simp [hn.resolve_left (neg_ne_zero.mpr hL.ne')]
+  obtain ⟨ψ, hψ⟩ := exists_positiveRealCharacter z.im
+  let χ := χ₀ * PontryaginDual.map m ψ
+  have hc (x : G) : χ x = χ₀ x * Circle.exp (z.im * period x) := congrArg (χ₀ x * ·) (hψ (m x))
+  let j : J := ⟨(χ,r), hr.trans_eq ((congrArg d hz).trans (moment_chart_multiplicity m ω γs χ₀ hK _ _ hc).symm)⟩
+  obtain ⟨_, _, huniq⟩ := existsUnique_positiveRealCharacter_freq (χ.comp τ)
+  have hfreq (u : ℝ) (hu : ∀ x, χ x = χ₀ x * Circle.exp (u * period x)) :
+      ∀ t : ℝ≥0ˣ, χ (τ t) = Circle.exp (u * Real.log (t.val : ℝ)) := by
+    intro t
+    rw [hu, h₀, one_mul, hτ]
+  exact ⟨j, hz.trans (by rw [(huniq _ (hfreq _ hc)).trans (huniq _ (hfreq _ (hξ j))).symm]), rfl⟩
+
+/-- Entire division at zeros of the prescribed orders, followed by periodic
+strip bounds. The removable-singularity argument uses the meromorphic normal
+form, as in ForMathlib/Analysis/Complex/BlaschkeFactorization. -/
+private theorem moment_periodic_division {P : ℂ → ℂ} (hP : Differentiable ℂ P)
+    (hnz : ∃ z, P z ≠ 0) {T : ℝ} (hT : 0 < T) (hper : Periodic P ((T : ℂ) * Complex.I))
+    (H : SchwartzBergman univ) (d : ℂ → ℕ) (hd : ∀ z, analyticOrderAt P z = d z)
+    (hzero : ∀ z r, r < d z → iteratedDeriv r H.val z = 0) :
+    ∃ F : SchwartzBergman univ, ∀ z, P z * F.val z = H.val z := by
+  have ha : Differentiable ℂ H.val := differentiableOn_univ.mp (by simpa using H.property.2.1)
+  let F := toMeromorphicNFOn (H.val / P) univ
+  have hm : MeromorphicOn (H.val / P) univ := fun z _ ↦
+    (ha.analyticAt z).meromorphicAt.div (hP.analyticAt z).meromorphicAt
+  have hnorm : MeromorphicNFOn F univ := meromorphicNFOn_toMeromorphicNFOn _ _
+  have hp (z : ℂ) : meromorphicOrderAt P z = ((d z : ℤ) : WithTop ℤ) := by
+    rw [(hP.analyticAt z).meromorphicOrderAt_eq, hd]; simp
+  have hF (z : ℂ) : AnalyticAt ℂ F z := by
+    apply (hnorm (mem_univ z)).meromorphicOrderAt_nonneg_iff_analyticAt.mp
+    change 0 ≤ meromorphicOrderAt (toMeromorphicNFOn _ _) _
+    rw [meromorphicOrderAt_toMeromorphicNFOn hm (mem_univ z),
+      meromorphicOrderAt_div (ha.analyticAt z).meromorphicAt (hP.analyticAt z).meromorphicAt,
+      hp, (ha.analyticAt z).meromorphicOrderAt_eq]
+    have hle := (natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero (ha.analyticAt z)).mpr (hzero z)
+    cases he : analyticOrderAt H.val z with
+    | top => simp
+    | coe n =>
+      rw [he] at hle
+      have : d z ≤ n := by exact_mod_cast hle
+      exact WithTop.coe_le_coe.mpr (show (0 : ℤ) ≤ (n : ℤ) - (d z : ℤ) by omega)
+  have he (z : ℂ) : P z * F z = H.val z := by
+    have hne := (meromorphicOrderAt_ne_top_iff_eventually_ne_zero (hP.analyticAt z).meromorphicAt).mp
+      (by simp [hp])
+    have hev : (fun u ↦ P u * F u) =ᶠ[𝓝[≠] z] H.val := by
+      filter_upwards [hm.toMeromorphicNFOn_eq_self_on_nhdsNE (mem_univ z), hne] with u hq hu
+      change F u = H.val u / P u at hq
+      rw [hq, mul_div_cancel₀ _ hu]
+    exact tendsto_nhds_unique (((hP.continuous.continuousAt.mul (hF z).continuousAt).tendsto.mono_left
+      (nhdsWithin_le_nhds (s := {z}ᶜ))).congr' hev)
+      ((ha z).continuousAt.tendsto.mono_left nhdsWithin_le_nhds)
+  have hdiff : Differentiable ℂ F := fun z ↦ (hF z).differentiableAt
+  refine ⟨⟨F, fun z hz ↦ (hz (mem_univ _)).elim, hdiff.differentiableOn, ?_⟩, he⟩
+  intro a b _ _ k
+  apply bddAbove_strip_of_periodic_mul hP hnz hT hper ((differentiable_id.pow k).mul hdiff) _ a b
+  intro u v huv
+  simpa only [Pi.pow_apply, Pi.mul_apply, id_eq, mul_left_comm (P _), he] using
+    H.property.2.2 u v huv (subset_univ _) k
+
+/-- Choose one frequency in a half-open period for each orbit, retaining its
+jet order. The compact fundamental interval contains only finitely many zeros. -/
+private theorem moment_period_orbits {ι : Type*} (s : ι → ℝ) (r : ι → ℕ)
+    (hinj : Injective fun j ↦ (s j,r j)) {T : ℝ} (hT : 0 < T)
+    (d : ℂ → ℕ) (hper : Periodic d ((T : ℂ) * Complex.I))
+    (hj : ∀ j, r j < d ((s j : ℂ) * Complex.I))
+    (hcover : ∀ z k, k < d z → ∃ j, z = (s j : ℂ) * Complex.I ∧ k = r j)
+    {P : ℂ → ℂ} (hP : Differentiable ℂ P) (hne : ∃ z, P z ≠ 0)
+    (ho : ∀ z, analyticOrderAt P z = d z) {N : ℕ} (hN : ∀ z, d z ≤ N) :
+    let A := {j // s j ∈ Ico 0 T}
+    Finite A ∧ ∃ e : (A × ℤ) ≃ ι, ∀ a n,
+      s (e (a,n)) = s a.val + n * T ∧ r (e (a,n)) = r a.val := by
+  classical
+  intro A
+  let v (t : ℝ) := (t : ℂ) * Complex.I
+  have hv (x : ℝ) : (v x).im = x := by simp [v]
+  have lift (j : ι) (n : ℤ) : ∃ i, s i = s j + n*T ∧ r i = r j := by
+    have he : v (s j + n*T) = v (s j) + n * ((T : ℂ) * Complex.I) := by
+      dsimp [v]; push_cast; ring
+    obtain ⟨i, hi, hk⟩ := hcover (v (s j + n*T)) (r j) (by rw [he, hper.int_mul n]; exact hj j)
+    exact ⟨i, (hv _).symm.trans ((congrArg Complex.im hi.symm).trans (hv _)), hk.symm⟩
+  choose tr htr hr using lift
+  have hext {i j : ι} (h : s i = s j) (h' : r i = r j) : i = j := hinj (Prod.ext h h')
+  let base (a : A × ℤ) := tr a.1.val a.2
+  have hfloor (a : A) (n : ℤ) : ⌊(s a.val + n*T)/T⌋ = n := by
+    rw [add_div, mul_div_cancel_right₀ _ hT.ne', Int.floor_add_intCast, Int.floor_eq_zero_iff.mpr,
+      zero_add]
+    exact ⟨div_nonneg a.property.1 hT.le, (div_lt_one hT).mpr a.property.2⟩
+  have hbij : Bijective base := by
+    constructor
+    · rintro ⟨a,n⟩ ⟨b,k⟩ h
+      change tr a.val n = tr b.val k at h
+      have hs := (htr _ _).symm.trans ((congrArg s h).trans (htr _ _))
+      have hnk : n = k := (hfloor a n).symm.trans ((congrArg (fun x ↦ ⌊x/T⌋) hs).trans (hfloor b k))
+      subst k
+      have hh : r a.val = r b.val := (hr a.val n).symm.trans ((congrArg r h).trans (hr b.val n))
+      exact Prod.ext (Subtype.ext (hext (add_right_cancel hs) hh)) rfl
+    · intro j
+      let n := ⌊s j/T⌋
+      have hlo := (le_div_iff₀ hT).mp (Int.floor_le (s j/T))
+      have hhi := (div_lt_iff₀ hT).mp (Int.lt_floor_add_one (s j/T))
+      have hb : s (tr j (-n)) ∈ Ico 0 T := by
+        rw [htr, Int.cast_neg, neg_mul]
+        dsimp only [n]
+        constructor <;> linarith
+      refine ⟨(⟨_,hb⟩,n), hext ?_ ((hr _ _).trans (hr _ _))⟩
+      change s (tr (tr j (-n)) n) = _
+      rw [htr, htr, Int.cast_neg]; ring
+  refine ⟨?_, Equiv.ofBijective base hbij, fun a n ↦ ⟨htr _ _, hr _ _⟩⟩
+  obtain ⟨z, hz⟩ := hne
+  have ha : AnalyticOnNhd ℂ P univ := fun x _ ↦ hP.analyticAt x
+  have hdisc := (ha.eqOn_zero_or_eventually_ne_zero_of_preconnected isPreconnected_univ).resolve_left
+    (fun h ↦ hz (h (mem_univ z)))
+  let Z := Metric.closedBall (0 : ℂ) T \ {z | P z ≠ 0}
+  have hfin : Z.Finite := (isCompact_closedBall (0 : ℂ) T).finite_sdiff_of_mem_codiscreteWithin
+    ((Filter.codiscreteWithin_mono (subset_univ _)) hdisc)
+  let : Finite Z := hfin
+  have hzA (a : A) : v (s a.val) ∈ Z := by
+    refine ⟨mem_closedBall_zero_iff.mpr (by simpa [v, abs_of_nonneg a.property.1] using
+      a.property.2.le), fun hn ↦ ?_⟩
+    have he := (hP.analyticAt _).analyticOrderAt_eq_zero.mpr hn
+    rw [ho, Nat.cast_eq_zero] at he
+    exact (Nat.zero_lt_of_lt (hj a.val)).ne' he
+  let f (a : A) : Z × Fin N := (⟨_, hzA a⟩, ⟨_, (hj a.val).trans_le (hN _)⟩)
+  apply Finite.of_injective f
+  intro a b h
+  apply Subtype.ext
+  apply hext
+  · exact (hv _).symm.trans ((congrArg (fun i : Z × Fin N ↦ i.1.val.im) h).trans (hv _))
+  · exact congrArg (fun i : Z × Fin N ↦ i.2.val) h
+
+/-- Imaginary translation preserves the polynomial bounds on each vertical strip. -/
+private def moment_translate (F : SchwartzBergman univ) (t : ℝ) : SchwartzBergman univ := by
+  let c : ℂ := t * Complex.I
+  have hd : Differentiable ℂ F.val := differentiableOn_univ.mp (by simpa using F.property.2.1)
+  refine ⟨fun z ↦ F.val (z-c), fun z hz ↦ (hz (mem_univ _)).elim,
+    (hd.comp (differentiable_id.sub_const c)).differentiableOn, ?_⟩
+  intro a b hab hi k
+  obtain ⟨B, hB⟩ := F.property.2.2 a b hab hi k
+  obtain ⟨C, hC⟩ := F.property.2.2 a b hab hi 0
+  refine ⟨(1 + ‖c‖)^k * max B C, ?_⟩
+  rintro _ ⟨z, hz, rfl⟩
+  have hw : (z-c).re ∈ Icc a b := by simpa [c] using hz
+  have htri : ‖z‖ ≤ ‖z-c‖ + ‖c‖ := by simpa using norm_add_le (z-c) c
+  change ‖z^k * F.val (z-c)‖ ≤ _
+  rw [norm_mul, norm_pow]
+  by_cases hl : 1 ≤ ‖z-c‖
+  · have h : ‖z‖ ≤ (1 + ‖c‖) * ‖z-c‖ := by nlinarith [mul_nonneg (norm_nonneg c) (sub_nonneg.mpr hl)]
+    calc ‖z‖ ^ k * ‖F.val (z-c)‖ ≤ ((1 + ‖c‖) * ‖z-c‖)^k * ‖F.val (z-c)‖ := by gcongr
+      _ = (1 + ‖c‖)^k * ‖(z-c)^k * F.val (z-c)‖ := by simp only [mul_pow, norm_mul, norm_pow, mul_assoc]
+      _ ≤ _ := by gcongr; exact (hB ⟨_,hw,rfl⟩).trans (le_max_left _ _)
+  · have h : ‖z‖ ≤ 1 + ‖c‖ := by linarith
+    exact mul_le_mul (pow_le_pow_left₀ (norm_nonneg z) h _) ((show ‖F.val (z-c)‖ ≤ C by
+      simpa using hC (mem_image_of_mem _ hw)).trans (le_max_right _ _)) (norm_nonneg _) (by positivity)
+
+/-- The Schwartz estimates for the logarithmic line, with the full weight
+`(1+|x|)^p`, apply to complex derivatives of every fixed order. -/
+private theorem moment_jet_decay (H : SchwartzBergman univ) (k p : ℕ) :
+    ∃ C ≥ (0 : ℝ), ∀ x : ℝ, (1 + |x|)^p * ‖iteratedDeriv k H.val (x * Complex.I)‖ ≤ C := by
+  let a : (univ : Set ℝ) := ⟨0, mem_univ _⟩
+  let F := bergmanLine isOpen_univ ordConnected_univ a H
+  refine ⟨2^p * (Finset.Iic (p,k)).sup (fun i ↦ SchwartzMap.seminorm ℂ i.1 i.2) F,
+    by positivity, fun x ↦ ?_⟩
+  have h := SchwartzMap.one_add_le_sup_seminorm_apply (𝕜 := ℂ) (m := (p,k)) le_rfl le_rfl F x
+  rw [norm_iteratedFDeriv_eq_norm_iteratedDeriv, Real.norm_eq_abs] at h
+  change (1 + |x|)^p * ‖iteratedDeriv k (fun y : ℝ ↦ H.val ((a.val : ℂ) + y * Complex.I)) x‖ ≤ _ at h
+  rw [iteratedDeriv_vertical isOpen_univ a H.property.2.1] at h
+  simpa only [norm_mul,
+    norm_pow, Complex.norm_I, one_pow, one_mul, a, Complex.ofReal_zero, zero_add] using h
+
+/-- A translated cardinal function grows only polynomially in each of the
+Schwartz seminorms of any line. -/
+private theorem moment_translate_bound (F : SchwartzBergman univ) (a : (univ : Set ℝ)) (p k : ℕ) :
+    ∃ C ≥ (0 : ℝ), ∀ t : ℝ, SchwartzMap.seminorm ℂ p k
+      (bergmanLine isOpen_univ ordConnected_univ a (moment_translate F t)) ≤ (1 + |t|)^p * C := by
+  let g := bergmanLine isOpen_univ ordConnected_univ a F
+  let C := 2^p * (Finset.Iic (p,k)).sup (fun i ↦ SchwartzMap.seminorm ℂ i.1 i.2) g
+  have hC : 0 ≤ C := by dsimp [C]; positivity
+  refine ⟨C,hC,fun t ↦ SchwartzMap.seminorm_le_bound' ℂ _ _ _ (by positivity) fun x ↦ ?_⟩
+  have he : (bergmanLine isOpen_univ ordConnected_univ a (moment_translate F t) : ℝ → ℂ) =
+      fun y : ℝ ↦ g (y-t) := by
+    funext y
+    change F.val ((a.val : ℂ) + y * Complex.I - t * Complex.I) =
+      F.val ((a.val : ℂ) + ((y-t : ℝ) : ℂ) * Complex.I)
+    apply congrArg F.val
+    push_cast; ring
+  rw [he, iteratedDeriv_comp_sub_const]
+  have hx : |x| ≤ (1 + |t|)*(1 + |x-t|) := by
+    have hh := abs_add_le (x-t) t
+    rw [sub_add_cancel] at hh
+    nlinarith [abs_nonneg t, abs_nonneg (x-t), mul_nonneg (abs_nonneg t) (abs_nonneg (x-t))]
+  have hg := SchwartzMap.one_add_le_sup_seminorm_apply (𝕜 := ℂ) (m := (p,k)) le_rfl le_rfl g (x-t)
+  rw [norm_iteratedFDeriv_eq_norm_iteratedDeriv, Real.norm_eq_abs] at hg
+  calc |x|^p * _ ≤ ((1+|t|)*(1+|x-t|))^p * ‖iteratedDeriv k g (x-t)‖ :=
+        mul_le_mul_of_nonneg_right (pow_le_pow_left₀ (abs_nonneg x) hx _) (norm_nonneg _)
+    _ ≤ _ := by rw [mul_pow, mul_assoc]; gcongr
+
+/-- A Schwartz jet sampled on an affine lattice absorbs any polynomial
+growth of a translated vector and still leaves an inverse square. -/
+private theorem moment_sample_summable (H : SchwartzBergman univ) (r p : ℕ)
+    (b T : ℝ) (hT : 0 < T) : Summable fun n : ℤ ↦
+      ‖iteratedDeriv r H.val (((b + n*T : ℝ) : ℂ) * Complex.I)‖ * (1 + |(n : ℝ)*T|)^p := by
+  obtain ⟨C, hC, hd⟩ := moment_jet_decay H r (p+2)
+  let A := 1 + |b|
+  have hA : 0 < A := by dsimp [A]; positivity
+  have hsum := Real.summable_one_div_int_pow.mpr (by decide : 1 < (2 : ℕ))
+  refine (hsum.mul_left ((A^(p+2) * C)/T^2)).of_norm_bounded_eventually ?_
+  filter_upwards [Filter.eventually_cofinite_ne (0 : ℤ)] with n hn
+  let x := b + (n : ℝ)*T
+  let u := ‖iteratedDeriv r H.val ((x : ℂ) * Complex.I)‖
+  have hu : 0 ≤ u := norm_nonneg _
+  have hnx : |(n : ℝ)*T| ≤ |x| + |b| := by simpa only [x, add_sub_cancel_left] using abs_sub x b
+  have hweight : 1 + |(n : ℝ)*T| ≤ A * (1+|x|) := by
+    dsimp [A]; nlinarith [mul_nonneg (abs_nonneg b) (abs_nonneg x)]
+  have hw := pow_le_pow_left₀ (by positivity) hweight (p+2)
+  have hn' : (n : ℝ) ≠ 0 := by exact_mod_cast hn
+  change ‖u * (1 + |(n : ℝ)*T|)^p‖ ≤ _
+  rw [Real.norm_of_nonneg (by positivity), mul_one_div, le_div_iff₀ (sq_pos_of_ne_zero hn'),
+    le_div_iff₀ (sq_pos_of_pos hT)]
+  calc u * (1+|(n : ℝ)*T|)^p * (n : ℝ)^2 * T^2 =
+        u * ((1+|(n : ℝ)*T|)^p * |(n : ℝ)*T|^2) := by rw [sq_abs]; ring
+    _ ≤ u * (1+|(n : ℝ)*T|)^(p+2) := by
+      rw [pow_add]; gcongr; linarith
+    _ ≤ u * (A * (1+|x|))^(p+2) := mul_le_mul_of_nonneg_left hw hu
+    _ = A^(p+2) * ((1+|x|)^(p+2) * u) := by rw [mul_pow]; ring
+    _ ≤ A^(p+2) * C := mul_le_mul_of_nonneg_left (hd x) (by positivity)
+
+/-- On a finite union of lattice orbits, a series of translates weighted by
+the corresponding jets of a Schwartz–Bergman function converges in that space. -/
+private theorem moment_translate_series {A : Type*} [Finite A] (H : SchwartzBergman univ)
+    (F : A → SchwartzBergman univ) (b : A → ℝ) (r : A → ℕ) (T : ℝ) (hT : 0 < T) :
+    Summable fun i : A × ℤ ↦ iteratedDeriv (r i.1) H.val
+      (((b i.1 + i.2*T : ℝ) : ℂ) * Complex.I) • moment_translate (F i.1) (i.2*T) := by
+  let lines := LinearMap.pi (bergmanLine isOpen_univ ordConnected_univ)
+  let hB := schwartzBergman_frechet univ isOpen_univ ordConnected_univ univ_nonempty
+  let : CompleteSpace (SchwartzBergman univ) := hB.choose_spec.2.2
+  have h := lines.withSeminorms_induced (withSeminorms_pi fun _ : (univ : Set ℝ) ↦
+    schwartz_withSeminorms ℂ ℝ ℂ)
+  have htop : (inferInstance : TopologicalSpace (SchwartzBergman univ)) = induced lines inferInstance :=
+    (bergman_embedding isOpen_univ ordConnected_univ).eq_induced
+  let family := (SeminormFamily.sigma fun a : (univ : Set ℝ) ↦
+    (schwartzSeminormFamily ℂ ℝ ℂ).comp (LinearMap.proj a)).comp lines
+  have hs : WithSeminorms family := (congrArg (fun t ↦ WithSeminorms (topology := t) family) htop).mpr h
+  apply summable_of_summable_seminorms hs
+  rintro ⟨a,p,k⟩
+  apply (summable_prod_of_nonneg (fun i ↦ apply_nonneg _ _)).mpr
+  refine ⟨fun i ↦ ?_, .of_finite⟩
+  obtain ⟨C,hC,hg⟩ := moment_translate_bound (F i) a p k
+  apply ((moment_sample_summable H (r i) p (b i) T hT).mul_right C).of_norm_bounded
+  intro n
+  change ‖SchwartzMap.seminorm ℂ p k (bergmanLine isOpen_univ ordConnected_univ a (_ • _))‖ ≤ _
+  rw [map_smul, map_smul_eq_mul, Real.norm_of_nonneg (mul_nonneg (norm_nonneg _) (apply_nonneg _ _)),
+    mul_assoc]
+  exact mul_le_mul_of_nonneg_left (hg _) (norm_nonneg _)
+
+/-- A biorthogonal family is determined by its jets on a separating quotient.
+Representatives at the finitely many base points generate the other vectors
+by translation, so the lattice sum reconstructs every quotient class. -/
+private theorem moment_lattice_basis {X ι A : Type*} [AddCommGroup X] [Module ℂ X]
+    [TopologicalSpace X] [IsTopologicalAddGroup X] [ContinuousSMul ℂ X] [Finite A]
+    (e : (A × ℤ) ≃ ι) (b : A → ℝ) (r : A → ℕ) {T : ℝ} (hT : 0 < T)
+    (Q : SchwartzBergman univ →L[ℂ] X) (hsur : Surjective Q) (c : ℂ)
+    (d : ι → StrongDual ℂ X) (ψ : ι → X)
+    (he : ∀ H a (n : ℤ), d (e (a,n)) (Q H) =
+      c * iteratedDeriv (r a) H.val (((b a + n*T : ℝ) : ℂ)*Complex.I))
+    (hsep : ∀ u, (∀ j, d j u = 0) → u = 0)
+    (hbi : (∀ j, d j (ψ j) = 1) ∧ ∀ j k, j ≠ k → d j (ψ k) = 0)
+    (σ : ℕ ≃ ι) : IsSchauderBasis (ψ ∘ σ) (d ∘ σ) := by
+  classical
+  have hdelta (i j : ι) : d i (ψ j) = if i = j then 1 else 0 := by
+    by_cases h : i = j
+    · subst j; simp [hbi.1]
+    · simp [h,hbi.2 _ _ h]
+  have hext {u v : X} (h : ∀ j, d j u = d j v) : u = v :=
+    sub_eq_zero.mp (hsep (u-v) fun j ↦ (map_sub (d j) _ _).trans (sub_eq_zero.mpr (h j)))
+  choose F hF using fun a : A ↦ hsur (ψ (e (a,0)))
+  have htr (a : A) (n : ℤ) : Q (moment_translate (F a) (n*T)) = ψ (e (a,n)) := by
+    apply hext
+    intro j
+    obtain ⟨⟨a',k⟩,rfl⟩ := e.surjective j
+    rw [he]
+    change c * iteratedDeriv (r a') (fun z : ℂ ↦ (F a).val (z - ((n*T : ℝ) : ℂ)*Complex.I)) _ = _
+    rw [iteratedDeriv_comp_sub_const]
+    have harg : ((b a' + k*T : ℝ) : ℂ)*Complex.I - ((n*T : ℝ) : ℂ)*Complex.I =
+        ((b a' + (k-n : ℤ)*T : ℝ) : ℂ)*Complex.I := by push_cast; ring
+    dsimp only
+    rw [harg, ← he, hF, hdelta, hdelta]
+    simp only [e.injective.eq_iff, Prod.mk.injEq, sub_eq_zero]
+  constructor
+  · intro i j
+    simpa only [Function.comp_apply, ContinuousLinearMap.coe_coe, σ.injective.eq_iff] using
+      hdelta (σ i) (σ j)
+  · intro u
+    obtain ⟨H, hu⟩ := hsur u
+    let v := fun i : A × ℤ ↦ iteratedDeriv (r i.1) H.val
+      (((b i.1 + i.2*T : ℝ) : ℂ)*Complex.I) • moment_translate (F i.1) (i.2*T)
+    have hs := (moment_translate_series H F b r T hT).hasSum.mapL (c • Q)
+    have hterm (i : A × ℤ) : (c • Q) (v i) = d (e i) u • ψ (e i) := by
+      rcases i with ⟨a,n⟩
+      rw [← hu, he, ← htr]
+      simp only [v, smul_apply, map_smul, smul_smul, mul_comm c]
+    obtain ⟨w, hw⟩ : Summable (fun j : ι ↦ d j u • ψ j) :=
+      e.summable_iff.mp ⟨_, hs.congr_fun fun i ↦ (hterm i).symm⟩
+    have hwu : w = u := by
+      apply hext
+      intro j
+      have hh : HasSum (fun i : ι ↦ if i = j then d j u else 0) (d j w) :=
+        (hw.mapL (d j)).congr_fun fun i ↦ by
+          rw [map_smul, hdelta]
+          by_cases h : i = j <;> simp [h, Ne.symm]
+      exact hh.unique (hasSum_ite_eq j _)
+    subst w
+    exact (σ.hasSum_iff.mpr hw).mono_left (SummationFilter.conditional ℕ).le_atTop
+
+end
+
+include hcomm in
+/-- Paper: Theorem 4.6.1.5 and Equation (4.6.1.15), p. 212. Under every enumeration of the
+moment family, the biorthogonal vectors are a Schauder basis of the difference quotient with
+the descended log-moments as coefficient functionals. This is the expansion step: the coordinate
+series of a quotient representative converges to it because the coefficients decay faster than
+any power of the lattice frequency. Absoluteness is
+`modulatedQuotientLogMoment_bases_absolute`. -/
+private theorem modulatedQuotientLogMoment_bases_quotient (σ : ℕ ≃ J) (ψ : J → U)
+    (hbi : (∀ j, D j (ψ j) = 1) ∧ ∀ j k, j ≠ k → D j (ψ k) = 0) :
+    IsSchauderBasis (ψ ∘ σ) (D ∘ σ) := by
+  classical
+  obtain ⟨τ, hτ⟩ := exists_surjectiveModulation_section m hm hms
+  obtain ⟨χ₀, s, hK, h₀, hξ⟩ := moment_chart m ω γs τ hτ
+  obtain ⟨p, hp⟩ := moment_profile_equiv m hm hms ω τ hτ χ₀ hK h₀ (isotype_frechet m hm hms ω)
+  let M := positiveRealFourierMellin univ isOpen_univ ordConnected_univ univ_nonempty
+  let e := p.trans M
+  let Q := (R).mkQL.comp e.symm.toContinuousLinearMap
+  have hsur : Surjective Q := (R).mkQ_surjective.comp e.symm.surjective
+  obtain ⟨c, hc, hμ⟩ := moment_haar_scale m hm hms μ
+  have hc' : ((c : ℝ) : ℂ) ≠ 0 := by exact_mod_cast hc.ne'
+  have hjet (H : SchwartzBergman univ) (j : J) : D j (Q H) =
+      ((c : ℝ) : ℂ) * iteratedDeriv j.val.2 H.val ((s j : ℂ) * Complex.I) := by
+    change D j ((R).mkQ (e.symm H)) = _
+    rw [modulatedQuotientLogMoment_mkQ, moment_profile_pairing m ω μ χ₀ _ _ (hξ j) _ _
+      (hp (e.symm H)) c hμ]
+    congr 2
+    funext z
+    exact (positiveRealFourierMellin_apply univ isOpen_univ ordConnected_univ univ_nonempty _ z
+      (mem_univ _)).symm.trans (congrArg (fun H : SchwartzBergman univ ↦ H.val z) (e.apply_symm_apply H))
+  let L (k : Fin N) := -(period (γs k))
+  let a (k : Fin N) := (χ₀ (γs k))⁻¹
+  let factor (k : Fin N) (z : ℂ) := (a k : ℂ) * Complex.exp ((L k : ℂ) * z)
+  let P (z : ℂ) := ∏ k, (1 - factor k z)
+  let d (z : ℂ) := (Finset.univ.filter (fun k ↦ factor k z = 1)).card
+  have hL (k : Fin N) : L k < 0 := neg_lt_zero.mpr (Real.log_pos (by exact_mod_cast hγs k))
+  obtain ⟨hP, _, ho⟩ := moment_exponential_product L hL a
+  change Differentiable ℂ P at hP
+  change ∀ z, analyticOrderAt P z = d z at ho
+  have hnz : ∃ z, P z ≠ 0 := by
+    by_contra! h
+    have htop : analyticOrderAt P 0 = ⊤ := analyticOrderAt_eq_top.mpr (.of_forall h)
+    rw [ho] at htop
+    exact ENat.natCast_ne_top _ htop
+  obtain ⟨T,hT,hperiod⟩ := moment_common_period L (by
+    obtain ⟨t,ht,ht'⟩ := hcomm
+    refine ⟨t,ht,fun k ↦ ?_⟩
+    obtain ⟨q,hq⟩ := ht' k
+    exact ⟨-q, by simp only [L,hq,Rat.cast_neg,neg_mul]⟩)
+  have hf (k : Fin N) : Function.Periodic (factor k) ((T : ℂ)*Complex.I) := by
+    intro z
+    simp only [factor, mul_add, Complex.exp_add, hperiod, mul_one]
+  have hper : Function.Periodic P ((T : ℂ)*Complex.I) := fun z ↦ by simp only [P,hf _ z]
+  have hdper : Function.Periodic d ((T : ℂ)*Complex.I) := fun z ↦ by simp only [d,hf _ z]
+  obtain ⟨hinj,hj,hcover⟩ := moment_chart_coverage m ω γs hγs τ hτ χ₀ hK h₀ s hξ
+  change ∀ j : J, j.val.2 < d ((s j : ℂ)*Complex.I) at hj
+  change ∀ z k, k < d z → ∃ j : J, z = (s j : ℂ)*Complex.I ∧ k = j.val.2 at hcover
+  have hsep (u : U) (hu : ∀ j, D j u = 0) : u = 0 := by
+    obtain ⟨H,rfl⟩ := hsur u
+    obtain ⟨F,hF⟩ := moment_periodic_division hP hnz hT hper H d ho (by
+      intro z k hk
+      obtain ⟨j, rfl, rfl⟩ := hcover z k hk
+      exact (mul_eq_zero.mp ((hjet H j).symm.trans (hu j))).resolve_left hc')
+    change (R).mkQ (e.symm H) = 0
+    apply (Submodule.Quotient.mk_eq_zero _).mpr
+    refine ⟨e.symm F, e.injective ?_⟩
+    rw [e.apply_symm_apply]
+    apply Subtype.ext
+    funext z
+    have he := moment_product_action m hm hms ω τ hτ χ₀ h₀ p hp S (e.symm F) z
+    rw [List.map_ofFn, List.prod_ofFn] at he
+    exact he.trans ((congrArg (P z * ·) (congrArg (fun H : SchwartzBergman univ ↦ H.val z)
+      (e.apply_symm_apply F))).trans (hF z))
+  obtain ⟨hfin, enum, henum⟩ := moment_period_orbits s (fun j : J ↦ j.val.2) hinj hT d hdper
+    hj hcover hP hnz ho (N := N) (fun z ↦ (Finset.card_filter_le _ _).trans (by simp))
+  let A := {j : J // s j ∈ Ico 0 T}
+  let : Finite A := hfin
+  exact moment_lattice_basis enum (fun a : A ↦ s a.val) (fun a : A ↦ a.val.val.2) hT Q hsur
+    (c : ℝ) D ψ (fun H a n ↦ by rw [hjet, (henum a n).1, (henum a n).2]) hsep hbi σ
+
+include hcomm in
+/-- Paper: Theorem 4.6.1.5 and Equation (4.6.1.16), p. 212, via Lemma 4.1.2.4, p. 159. Once
+the descended log-moments are the coefficient functionals of an absolute Schauder basis of the
+difference quotient, they form an unconditional Schauder basis of the strong dual, whose
+coordinates are the evaluations at the basis vectors. -/
+private theorem modulatedQuotientLogMoment_bases_dual (σ : ℕ ≃ J) (ψ : J → U)
+    (hb : IsSchauderBasis (ψ ∘ σ) (D ∘ σ))
+    (ha : SchauderBasis.IsAbsolute (ψ ∘ σ) (D ∘ σ)) :
+    let d := D ∘ σ
+    let ev : ℕ → StrongDual ℂ (StrongDual ℂ U) :=
+      fun n ↦ ContinuousLinearMap.applyₗ ℂ (RingHom.id ℂ) ((ψ ∘ σ) n)
+    IsSchauderBasis d ev ∧ SchauderBasis.IsUnconditional d ev := by
+  have hS : ∀ g ∈ List.ofFn γs, 1 < (m g).val := by
+    intro g hg
+    obtain ⟨k, rfl⟩ := List.mem_ofFn.mp hg
+    exact hγs k
+  obtain ⟨_, hN, hF⟩ := modulatedIsotypicDifferenceProduct_quotient.{_, 0} m hm hms ω
+    (List.ofFn γs) hS
+  let : PolynormableSpace ℂ U := hF.choose_spec.1
+  let : MetrizableSpace U := hF.choose_spec.2.1
+  let : BarrelledSpace ℂ U := frechet_barrelled U hF
+  let : UniformSpace U := IsTopologicalAddGroup.rightUniformSpace U
+  let : IsUniformAddGroup U := isUniformAddGroup_of_addCommGroup
+  let : CompleteSpace U := hF.choose_spec.2.2
+  let : MontelSpace ℂ U := ⟨fun B hc hb ↦ by
+    simpa only [hc.closure_eq] using isCompact_closure_of_isNuclearTVS U hN hb⟩
+  have href : IsHomeomorph (ContinuousLinearMap.applyₗ («E» := U) ℂ (RingHom.id ℂ)) :=
+    isHomeomorph_iff_isEmbedding_surjective.mpr
+      ⟨isEmbedding_strongBidual_eval, surjective_strongBidual_eval⟩
+  exact ⟨SchauderBasis.isShrinking_of_isAbsolute hF.choose_spec.2.2 href hb ha,
+    SchauderBasis.strongDual_isUnconditional_of_isAbsolute hF.choose_spec.2.2 href hb ha⟩
+
 include hcomm in
 /-- Paper: Theorem 4.6.1.5 and Equations (4.6.1.15)–(4.6.1.16), p. 212.
 Every enumeration of the moment family is an unconditional basis of the
@@ -1338,7 +2418,15 @@ theorem modulatedQuotientLogMoment_bases (σ : ℕ ≃ J) :
       let ev : ℕ → StrongDual ℂ (StrongDual ℂ U) :=
         fun n ↦ ContinuousLinearMap.applyₗ ℂ (RingHom.id ℂ) (e n)
       IsSchauderBasis e d ∧ SchauderBasis.IsAbsolute e d ∧
-        IsSchauderBasis d ev ∧ SchauderBasis.IsUnconditional d ev := by sorry
+        IsSchauderBasis d ev ∧ SchauderBasis.IsUnconditional d ev := by
+  obtain ⟨ψ, hbi⟩ := modulatedQuotientLogMoment_bases_biorthogonal (m := m) (hm := hm)
+    (hms := hms) (ω := ω) (γs := γs) (hγs := hγs) (μ := μ) (hcomm := hcomm)
+  obtain hb := modulatedQuotientLogMoment_bases_quotient (m := m) (hm := hm)
+    (hms := hms) (ω := ω) (γs := γs) (hγs := hγs) (μ := μ) (hcomm := hcomm) σ ψ hbi
+  have ha := modulatedQuotientLogMoment_bases_absolute (m := m) (hm := hm) (hms := hms)
+    (ω := ω) (γs := γs) (hγs := hγs) (μ := μ) σ ψ hb
+  exact ⟨ψ, hb, ha, modulatedQuotientLogMoment_bases_dual (m := m) (hm := hm)
+    (hms := hms) (ω := ω) (γs := γs) (hγs := hγs) (μ := μ) (hcomm := hcomm) σ ψ hb ha⟩
 
 include hχ hcomm in
 /-- Paper: Theorem 4.6.1.5(1), p. 212. A continuous seminorm of the
@@ -1353,6 +2441,73 @@ theorem modulatedQuotientLogMoment_biorthogonal_growth (ψ : J → U)
       ∀ (n : ℤ) (j : J), j.val.1 = freq[k, n] →
         q (ψ j) ≤ C * (1 + |(n : ℝ)|) ^ d := by sorry
 
+/-- A logarithmic moment along a one-parameter family of characters is the Fourier
+transform of a single Schwartz function on the logarithmic coordinate. -/
+private theorem modulatedLogMoment_logFourier (τ : ℝ≥0ˣ →ₜ* G) (hτ : RightInverse τ m)
+    (μ₁ : Measure m.toMonoidHom.ker) [μ₁.IsHaarMeasure] [CompactSpace m.toMonoidHom.ker]
+    (ν : Measure G) (hν : ν = (μ₁.prod positiveRealHaar).map
+      (fun z : m.toMonoidHom.ker × ℝ≥0ˣ ↦ z.1.val * τ z.2))
+    (χ₀ : PontryaginDual G) (b : ℝ) (hb : ∀ t : ℝ≥0ˣ, χ₀ (τ t) = Circle.exp (b * Real.log (t.val : ℝ)))
+    (φ : G → ℂ) (p : PositiveRealExponentialDecay univ)
+    (hp : ∀ t : ℝ≥0ˣ, p.val (Real.log (t.val : ℝ)) =
+      ∫ k : m.toMonoidHom.ker, (χ₀ k.val : ℂ) * φ (k.val * τ t) ∂μ₁) (r : ℕ) :
+    ∃ H : SchwartzMap ℝ ℂ, ∀ (q : ℝ) (ξ : PontryaginDual G),
+      (∀ x, ξ x = χ₀ x * Circle.exp (q * period x)) →
+      Integrable (fun x ↦ φ x * (ξ x : ℂ) * (period x : ℂ)^r) ν →
+      (∫ x, φ x * (ξ x : ℂ) * (period x : ℂ)^r ∂ν) = H (-(q+b)/(2*Real.pi)) := by
+  let s₀ := logExponentialDecayTwist univ ⟨0, mem_univ _⟩ p
+  have hs₀ (x : ℝ) : s₀ x = p.val x := by
+    change (logExponentialDecayTwist univ ⟨0, mem_univ _⟩ p) x = _
+    simpa only [zero_mul, Real.exp_zero, Complex.ofReal_one, one_mul] using
+      logExponentialDecayTwist_apply univ ⟨0, mem_univ _⟩ p x
+  let w (x : ℝ) := (x : ℂ)^r
+  have hw : w.HasTemperateGrowth := by dsimp [w]; fun_prop
+  let s := SchwartzMap.smulLeftCLM ℂ w s₀
+  have hs (x : ℝ) : s x = (x : ℂ)^r * p.val x := by
+    change (SchwartzMap.smulLeftCLM ℂ w s₀) x = _
+    rw [SchwartzMap.smulLeftCLM_apply hw]
+    exact congrArg ((x : ℂ)^r * ·) (hs₀ x)
+  refine ⟨FourierTransform.fourier s, fun q ξ hξ hi ↦ ?_⟩
+  let : BorelSpace ℝ≥0ˣ := borelSpace_units_of_continuousInv₀ ℝ≥0
+  let : SecondCountableTopology ℝ≥0ˣ := Units.isEmbedding_val₀.secondCountableTopology
+  let : SFinite positiveRealHaar := by unfold positiveRealHaar; infer_instance
+  let split (z : K × ℝ≥0ˣ) := z.1.val * τ z.2
+  have hsplit : Continuous split :=
+    (continuous_subtype_val.comp continuous_fst).mul (τ.continuous.comp continuous_snd)
+  let F (x : G) := φ x * (ξ x : ℂ) * (period x : ℂ)^r
+  have hi' : Integrable F ((μ₁.prod positiveRealHaar).map split) := hν ▸ hi
+  have hprod := hi'.comp_measurable hsplit.measurable
+  have hfiber (t : ℝ≥0ˣ) : (∫ k : K, (F ∘ split) (k,t) ∂μ₁) =
+      (Circle.exp ((q+b)*Real.log (t.val : ℝ)) : ℂ) * (Real.log (t.val : ℝ) : ℂ)^r *
+        p.val (Real.log (t.val : ℝ)) := by
+    rw [hp, ← integral_const_mul]
+    apply integral_congr_ae (.of_forall fun k ↦ ?_)
+    change φ (k.val * τ t) * (ξ (k.val * τ t) : ℂ) * (period (k.val * τ t) : ℂ)^r = _
+    rw [hξ, map_mul χ₀, map_mul m, show m k.val = 1 from k.property, hτ t, one_mul, hb]
+    rw [add_mul, Circle.exp_add]
+    simp only [Circle.coe_mul]
+    ring
+  let ex : ℝ ≃ₜ ℝ≥0ˣ := Real.expOrderIso.toHomeomorph.trans (Nonneg.unitsHomeomorphPos ℝ).symm
+  have hval (x : ℝ) : ((ex x).val : ℝ) = Real.exp x := rfl
+  have hex : positiveRealHaar = Measure.map ex volume := by
+    unfold positiveRealHaar
+    congr 1
+    funext x
+    apply Units.ext
+    apply NNReal.eq
+    exact (Real.coe_toNNReal _ (Real.exp_pos x).le).trans (hval x).symm
+  change (∫ x, F x ∂ν) = _
+  rw [hν, integral_map hsplit.measurable.aemeasurable hi'.aestronglyMeasurable]
+  change (∫ z, (F ∘ split) z ∂μ₁.prod positiveRealHaar) = _
+  rw [integral_prod_symm (F ∘ split) hprod]
+  simp_rw [hfiber]
+  rw [hex, ex.measurableEmbedding.integral_map, SchwartzMap.fourier_coe, Real.fourier_eq]
+  apply integral_congr_ae (.of_forall fun x ↦ ?_)
+  rw [hval, Real.log_exp, Real.fourierChar_apply', Circle.smul_def, smul_eq_mul, hs, Real.inner_apply]
+  have hphase : 2 * Real.pi * -(x * (-(q+b) / (2*Real.pi))) = (q+b)*x := by
+    field_simp
+  rw [hphase, mul_assoc]
+
 include hχ in
 /-- Paper: Theorem 4.6.1.5(2), p. 212. At each fixed moment order, the
 coefficients on each cyclic lattice give a Schwartz sequence.
@@ -1365,7 +2520,46 @@ theorem modulatedLogMoment_lattice_schwartz (f : H₀[ω]) (r : Fin N) (k : Fin 
     ∃ v : SchwartzBruhat (Multiplicative ℤ), ∀ n : ℤ, v (Multiplicative.ofAdd n) =
       if r.val < modulatedPeriodicMultiplicity m ω γs (freq[k, n]) then
         modulatedLogMoment (m := m) (hm := hm) (hms := hms) (ω := ω) (μ := μ) (freq[k, n]) r.val f
-      else 0 := by sorry
+      else 0 := by
+  classical
+  obtain ⟨τ, hτ⟩ := exists_surjectiveModulation_section m hm hms
+  obtain ⟨b, hb⟩ := exists_circleExp_freq ((χ ω).comp τ)
+  let : CompactSpace K := isCompact_iff_compactSpace.mp hm.isCompact_ker
+  let μ₁ : Measure K := Measure.haarMeasure (⊤ : TopologicalSpace.PositiveCompacts K)
+  let ν := canonicalModulatedHaar m hm
+  let : ν.IsHaarMeasure := (Classical.choose_spec (existsUnique_canonicalModulatedHaar m hm).exists).1
+  have hν := canonicalModulatedHaar_eq_map_prod m hm τ hτ μ₁ Measure.haarMeasure_self
+  obtain ⟨A, _, _, _, hA, _⟩ := modulatedMellin_isotypicDiagram m hm hms univ
+    isOpen_univ ordConnected_univ univ_nonempty τ hτ μ₁ ν hν (χ ω) b hb
+  obtain ⟨H, hH⟩ := modulatedLogMoment_logFourier m τ hτ μ₁ ν hν (χ ω) b hb
+    f.val.val (A f.val) (hA f.val) r.val
+  let L := Real.log ((m (γs k)).val : ℝ)
+  have hL : 0 < L := Real.log_pos (by exact_mod_cast hγs k)
+  let q (n : ℤ) := -(t₀ k ω - 2 * Real.pi * (n : ℝ) / L)
+  have hξ (n : ℤ) (x : G) : freq[k, n] x = χ ω x * Circle.exp (q n * period x) := by
+    change (modulatedCyclicCharacter m (γs k) (hγs k) χ (t₀ k) (ht₀ k) (ω, n)
+      (QuotientGroup.mk x))⁻¹ = _
+    rw [modulatedCyclicCharacter_mk, show q n * (period x) =
+      -((t₀ k ω - 2 * Real.pi * (n : ℝ) / L) * period x) from neg_mul _ _, Circle.exp_neg, mul_inv, inv_inv]
+  let c := Measure.haarScalarFactor μ ν
+  have hscale : μ = c • ν := Measure.isMulLeftInvariant_eq_smul μ ν
+  let a : ℝ := -1 / L
+  let d := (t₀ k ω - b) / (2 * Real.pi)
+  have hsample (n : ℤ) : modulatedLogMoment (m := m) (hm := hm) (hms := hms)
+      (ω := ω) (μ := μ) (freq[k, n]) r.val f = (((c : ℝ) : ℂ) • H) (a*n+d) := by
+    change (∫ x, f.val.val x * (freq[k, n] x : ℂ) * (period x : ℂ)^r.val ∂μ) = _
+    rw [hscale, integral_smul_nnreal_measure, hH (q n) (freq[k, n]) (hξ n)
+      (integrable_logMoment m ω ν (freq[k, n]) r.val f)]
+    have heq : -(q n + b)/(2*Real.pi) = a*n+d := by
+      dsimp [q, a, d]
+      field_simp
+      ring
+    rw [heq]
+    rfl
+  let mask (n : ℤ) := r.val < modulatedPeriodicMultiplicity m ω γs (freq[k, n])
+  obtain ⟨v, hv⟩ := schwartzBruhat_of_affine_integer_samples (((c : ℝ) : ℂ) • H) a d
+    (div_ne_zero (by norm_num) hL.ne') mask
+  exact ⟨v, fun n ↦ (hv n).trans (by simp only [mask, hsample])⟩
 
 end Moments
 
@@ -1588,6 +2782,112 @@ variable (S : List G) (hS : S ≠ []) (hγS : ∀ g ∈ S, 1 < (m g).val)
 -- TODO(paper-gap): On p. 219 the window needs 2 log b′₁ > log |γ₁|. The
 -- support enlargement uses γ₁⁻¹, and the final shift must have module below one.
 
+/-- A radial cutoff gives an isotypic representative in a negative window
+modulo a single expanding difference. -/
+private theorem modulatedDifferenceProduct_supported_single (ω : PontryaginDual m.toMonoidHom.ker) (g : G) (hg : 1 < (m g).val) :
+    ∃ B : Set ℝ≥0ˣ, IsCompact B ∧ (∀ t ∈ B, t.val < 1) ∧ ∀ f : H₀[ω],
+      ∃ v a : H₀[ω], (∀ x, m x ∉ B → v.val.val x = 0) ∧ f = v + P[ω, [g]] a := by
+  obtain ⟨B, c, hB, hneg, hc, hlift⟩ := modulatedPeriodization_compact_lift m g hm hms hg
+  refine ⟨B, hB, hneg, fun f ↦ ?_⟩
+  let per := modulatedPeriodizationCLM m g hm hms hg
+  let q := QuotientGroup.mk' (Subgroup.zpowers g)
+  obtain ⟨v, hv, he⟩ := hlift (per f.val)
+  have hf := (mem_modulatedDecayIsotype_iff m ω univ (mem_univ _) f.val).mp f.property
+  have hiso : v ∈ H₀[ω] := by
+    apply (mem_modulatedDecayIsotype_iff m ω univ (mem_univ _) v).mpr
+    intro u x
+    have ha := modulatedPeriodization_hasSum m g hm hms hg f.val x
+    have hb := modulatedPeriodization_hasSum m g hm hms hg f.val (u.val⁻¹ * x)
+    have hc' : per f.val (q (u.val⁻¹ * x)) = (ω u : ℂ) * per f.val (q x) := by
+      apply hb.unique
+      refine ((ha.mul_left (ω u : ℂ)).congr_fun fun n ↦ ?_)
+      rw [mul_left_comm (g ^ n) _ x, hf]
+    have hm' : m (u.val⁻¹ * x) = m x := by rw [map_mul, map_inv, show m u.val = 1 from u.property, inv_one, one_mul]
+    rw [he, he, hm', hc']
+    change c (m x) * ((ω u : ℂ) * per f.val (q x)) = (ω u : ℂ) * (c (m x) * per f.val (q x))
+    ring
+  let v' : H₀[ω] := ⟨v, hiso⟩
+  let δ := modulatedCyclicDifference m g hm hms univ ordConnected_univ univ_nonempty
+  have hclosed : IsClosed (δ.range : Set E) := modulatedCyclicDifference_isClosed_range m g hm hms hg
+  have hk : per.ker = δ.range :=
+    (modulatedPeriodization_ker_eq_closure m g hm hms hg).trans hclosed.submodule_topologicalClosure_eq
+  have harr : f.val - v ∈ δ.range := by
+    rw [← hk]
+    change per (f.val - v) = 0
+    rw [map_sub, hv, sub_self]
+  have hi := cyclicDifference_range_inf_isotype m hm hms ω g
+  have him : f.val - v ∈ (H₀[ω]).map δ.toLinearMap :=
+    hi ▸ (show f.val - v ∈ δ.range ⊓ H₀[ω] from ⟨harr, (H₀[ω]).sub_mem f.property hiso⟩)
+  obtain ⟨a, ha, heq⟩ := him
+  refine ⟨v', ⟨a, ha⟩, fun x hx ↦ (he x).trans (by rw [hc _ hx, zero_mul]), ?_⟩
+  apply Subtype.ext
+  change f.val = v + δ a
+  change δ a = f.val - v at heq
+  rw [heq]
+  abel
+
+/-- Induction localizes a product of differences. Applying the next expanding
+difference enlarges a window only in the direction of smaller modules. -/
+private theorem modulatedDifferenceProduct_supported_list (ω : PontryaginDual m.toMonoidHom.ker) (s : List G)
+    (hs : ∀ g ∈ s, 1 < (m g).val) :
+    ∃ B : Set ℝ≥0ˣ, IsCompact B ∧ (∀ t ∈ B, t.val < 1) ∧ ∀ f : H₀[ω],
+      ∃ v a : H₀[ω], (∀ x, m x ∉ B → v.val.val x = 0) ∧ f = v + P[ω, s] a := by
+  induction s with
+  | nil =>
+    refine ⟨∅, isCompact_empty, fun _ h ↦ False.elim h, fun f ↦ ⟨0, f, fun _ _ ↦ rfl, ?_⟩⟩
+    change f = 0 + f
+    rw [zero_add]
+  | cons g s ih =>
+    have hg := hs g List.mem_cons_self
+    obtain ⟨B, hB, hneg, hsingle⟩ := modulatedDifferenceProduct_supported_single m hm hms ω g hg
+    obtain ⟨C, hC, hCneg, htail⟩ := ih (fun x hx ↦ hs x (List.mem_cons_of_mem _ hx))
+    let tr := Homeomorph.mulLeft (m g)
+    refine ⟨B ∪ (C ∪ tr ⁻¹' C), hB.union (hC.union (tr.isCompact_preimage.mpr hC)), ?_, fun f ↦ ?_⟩
+    · rintro t (h | h | h)
+      · exact hneg _ h
+      · exact hCneg _ h
+      · have hlt := hCneg _ h
+        change (m g).val * t.val < 1 at hlt
+        exact (le_mul_of_one_le_left (by positivity : 0 ≤ t.val) hg.le).trans_lt hlt
+    obtain ⟨v, u, hv, he⟩ := hsingle f
+    obtain ⟨w, a, hw, hu⟩ := htail u
+    refine ⟨v + P[ω, [g]] w, a, fun x hx ↦ ?_, ?_⟩
+    · have h₁ := hv x fun h ↦ hx (Or.inl h)
+      have h₂ := hw x fun h ↦ hx (Or.inr (Or.inl h))
+      have h₃ := hw (g * x) fun h ↦ hx (Or.inr (Or.inr (show m g * m x ∈ C from map_mul m g x ▸ h)))
+      change v.val.val x + (modulatedCyclicDifference m g hm hms univ ordConnected_univ univ_nonempty w.val).val x = 0
+      rw [modulatedCyclicDifference_apply, h₁, h₂, h₃, sub_self, add_zero]
+    · rw [he, hu, map_add, add_assoc]
+      rfl
+
+/-- A surjection from a closed part of a Fréchet space onto a Hausdorff quotient
+identifies the target with the quotient by the restricted kernel. -/
+private theorem modulatedDifferenceProduct_supported_quotient {X : Type*} [AddCommGroup X]
+    [Module ℂ X] [TopologicalSpace X] (hX : IsFrechetTVS X) (W R : Submodule ℂ X)
+    (hW : IsClosed (W : Set X)) (hR : IsClosed (R : Set X))
+    (hs : Surjective (R.mkQ ∘ W.subtype)) :
+    ∃ F : (W ⧸ R.comap W.subtype) ≃L[ℂ] (X ⧸ R),
+      ∀ f : W, F ((R.comap W.subtype).mkQ f) = R.mkQ f.val := by
+  obtain ⟨hg, hp, hm, hc⟩ := hX
+  let : UniformSpace X := IsTopologicalAddGroup.rightUniformSpace X
+  let : IsUniformAddGroup X := isUniformAddGroup_of_addCommGroup
+  let : CompleteSpace X := hc
+  let : UniformSpace W := UniformSpace.comap Subtype.val inferInstance
+  let : IsUniformAddGroup W := W.toAddSubgroup.isUniformAddGroup
+  let : MetrizableSpace W := IsEmbedding.subtypeVal.metrizableSpace
+  let : CompleteSpace W := hW.completeSpace_coe
+  have hFW : IsFrechetTVS W := by
+    refine ⟨inferInstance, inferInstance, inferInstance, ?_⟩
+    rw [IsUniformAddGroup.rightUniformSpace_eq]
+    infer_instance
+  have hQ := isFrechetTVS_quotient ⟨hg, hp, hm, hc⟩ R hR
+  let A : W →L[ℂ] (X ⧸ R) := R.mkQL.comp W.subtypeL
+  have ho : IsOpenMap A := isOpenMap_of_surjective_toLF (isLFSpace_of_isFrechetTVS hQ)
+    (X := fun _ : ℕ ↦ W) (fun _ ↦ hFW) (fun _ ↦ ContinuousLinearMap.id ℂ W)
+    (fun _ ↦ subset_rfl) (fun x ↦ ⟨0, x, rfl⟩) A hs
+  apply exists_quotient_equiv_of_kernel A (ho.isQuotientMap A.continuous hs)
+  exact SetLike.ext fun f ↦ Submodule.Quotient.mk_eq_zero R
+
 include hS hγS in
 /-- Paper: Theorem 4.6.2.1, p. 218. Each isotype has a compact norm-one-stable
 support set of module below one. The supported functions surject onto the
@@ -1601,7 +2901,43 @@ theorem modulatedDifferenceProduct_compactSupport_quotient :
       let M := R.comap W.subtype
       Surjective (R.mkQ ∘ W.subtype) ∧
       ∃ F : (W ⧸ M) ≃L[ℂ] (H₀[ω] ⧸ R),
-        ∀ f : W, F (M.mkQ f) = R.mkQ f.val := by sorry
+        ∀ f : W, F (M.mkQ f) = R.mkQ f.val := by
+  let : MeasurableSpace G := borel G
+  let : BorelSpace G := ⟨rfl⟩
+  obtain ⟨B, hB, hneg, hlift⟩ := modulatedDifferenceProduct_supported_list m hm hms ω S hγS
+  refine ⟨B, hB, hneg, ?_⟩
+  let W := (modulatedCompactSupportSubmodule m B).comap (H₀[ω]).subtype
+  let R := (P[ω, S]).range
+  have hmem (f : H₀[ω]) : f ∈ W ↔ ∀ x, m x ∉ B → f.val.val x = 0 := by
+    change f.val ∈ modulatedCompactSupportSubmodule m B ↔ _
+    rw [mem_modulatedCompactSupportSubmodule_iff m B hB.isClosed]
+    constructor
+    · intro h x hx
+      exact notMem_support.mp fun h' ↦ hx (h.2 (subset_tsupport _ h'))
+    · intro h
+      have hsupp : support f.val.val ⊆ m ⁻¹' B := fun x hx ↦ by
+        by_contra hh
+        exact hx (h x hh)
+      have hk := hm.1.isCompact_preimage hB
+      exact ⟨HasCompactSupport.of_support_subset_isCompact hk hsupp,
+        closure_minimal hsupp (hB.isClosed.preimage m.continuous)⟩
+  have hs : Surjective (R.mkQ ∘ W.subtype) := by
+    intro z
+    obtain ⟨f, rfl⟩ := R.mkQ_surjective z
+    obtain ⟨v, a, hv, he⟩ := hlift f
+    refine ⟨⟨v, (hmem _).mpr hv⟩, ?_⟩
+    change R.mkQ v = R.mkQ f
+    rw [he, map_add, show R.mkQ (P[ω, S] a) = 0 from (Submodule.Quotient.mk_eq_zero R).mpr ⟨a,rfl⟩, add_zero]
+  have hW : IsClosed (W : Set H₀[ω]) := by
+    let ev (x : G) (f : H₀[ω]) := f.val.val x
+    have he : (W : Set H₀[ω]) = ⋂ x : {x : G // m x ∉ B}, (ev x.val) ⁻¹' {0} := by
+      ext f
+      rw [SetLike.mem_coe, hmem, Set.mem_iInter]
+      exact ⟨fun h x ↦ h x.val x.property, fun h x hx ↦ h ⟨x,hx⟩⟩
+    rw [he]
+    exact isClosed_iInter fun x ↦ isClosed_singleton.preimage (isotype_eval_continuous m hm hms ω x.val)
+  exact ⟨hs, modulatedDifferenceProduct_supported_quotient (isotype_frechet m hm hms ω) W R hW
+    (modulatedIsotypicDifferenceProduct_isClosed_range m hm hms ω S hγS) hs⟩
 
 /-! ## 4.6.3 The case of an interval containing zero -/
 

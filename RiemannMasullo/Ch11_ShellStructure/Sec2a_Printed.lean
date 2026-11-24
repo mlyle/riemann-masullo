@@ -33,7 +33,7 @@ local notation "restriction(" F ")" =>
   (⟨(ideleClassNorm F).ker.subtype, continuous_subtype_val⟩ : C₁(F) →ₜ* C𝔽(F))
 local notation "μ(" F ")" => ideleClassTamagawaMeasure F
 local notation "logNorm(" F ")" =>
-  (fun g : C𝔽(F) ↦ Real.log ((ideleClassNorm F g).val : ℝ))
+  (logIdeleClassNorm F)
 local notation "μ'(" F ", " s ")" => (μ(F)).withDensity (fun g ↦
   ENNReal.ofReal (intervalSobolevDensity 0 0 (s) (logNorm(F) g))⁻¹)
 local notation "W(" F ", " s ")" => CompactIntervalSobolev (μ(F)) logNorm(F) 0 0 s

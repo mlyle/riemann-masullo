@@ -4,7 +4,7 @@ public import RiemannMasullo.Ch04_PeriodicSchauderBases.Sec5
 import all RiemannMasullo.Ch04_PeriodicSchauderBases.Sec5
 import RiemannMasullo.ForMathlib.MeasureTheory.Group.Arithmetic
 import all RiemannMasullo.AppD_SchwartzBruhat.Sec3a_part2
-import all RiemannMasullo.AppC_LCTVS.Sec2b
+import RiemannMasullo.AppC_LCTVS.Sec2b
 
 /-! # §4.5: statements that are false as printed -/
 

@@ -139,7 +139,7 @@ private theorem hasSum_diagonal_of_zeroSet (φ : BruhatCompactSupport C𝔽)
   let g := diagonal(hα.le, hs, φ, hK, U)
   let v (j : closedPoints(χ, α)) := closedTerm(φ, χ, α, s, j)
   have h : Integrable g μ𝔽 ∧ Summable (fun j ↦ ‖v j‖) ∧ HasSum v (-(∫ x, g x ∂μ𝔽)) :=
-    hasSum_stripZeros_neg_integral_smoothenedDiagonal (F := F) (hone_lt_three := hone_lt_three)
+    hasSum_stripZeros_neg_integral_smoothenedDiagonal (F := F)
       φ hφ χ hχ hα hs hK U hU hm
   exact ⟨h.1,hasSum_heckeZeros_of_closedStripJetSum (α := α) (s := s) (r := -(∫ x, g x ∂μ𝔽))
     φ χ S hS hint h.2.1 h.2.2⟩

@@ -5,7 +5,7 @@ public import Mathlib.Analysis.Fourier.AddCircle
 public import Mathlib.Analysis.Normed.Module.Bases
 public import Mathlib.Topology.Algebra.Equicontinuity
 public import Mathlib.Topology.Algebra.Module.Complement
-import all RiemannMasullo.AppC_LCTVS.Sec2b  -- for the Hilbert domination lemma
+import RiemannMasullo.AppC_LCTVS.Sec2b  -- for the Hilbert domination lemma
 import Mathlib.Analysis.InnerProductSpace.GramSchmidtOrtho
 import Mathlib.Analysis.LocallyConvex.StrongTopology
 import Mathlib.Analysis.PSeries

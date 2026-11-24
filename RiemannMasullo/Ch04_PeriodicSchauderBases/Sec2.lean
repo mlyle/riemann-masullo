@@ -1797,12 +1797,15 @@ theorem cyclicPeriodization_hasSection :
   obtain ⟨s, hs⟩ := compactIntervalSection γ hγ γ 1 (by linarith [Real.log_pos hγ])
   exact ⟨(compactLogProfileInclusion _).comp s, hs⟩
 
-private abbrev latticeIndex : ℕ ≃ (Fin 1 → ℤ) :=
+/-- The enumeration of the rank-one lattice `Fin 1 → ℤ` by `ℕ`, through `Equiv.intEquivNat`. -/
+abbrev latticeIndex : ℕ ≃ (Fin 1 → ℤ) :=
   (freq).trans (Equiv.funUnique (Fin 1) ℤ).symm
 
-private def latticeWeight (n : ℕ) : ℝ := 1 + |((freq n : ℤ) : ℝ)|
+/-- The weight `1 + |k|` of the `n`-th lattice point `k` in the enumeration `latticeIndex`. -/
+def latticeWeight (n : ℕ) : ℝ := 1 + |((freq n : ℤ) : ℝ)|
 
-private theorem latticeWeight_bounds (n : ℕ) :
+/-- The lattice weight of the `n`-th point is between `(n + 1) / 2` and `n + 1`, and at least `1`. -/
+theorem latticeWeight_bounds (n : ℕ) :
     1 ≤ latticeWeight n ∧ latticeWeight n ≤ n + 1 ∧ (n : ℝ) + 1 ≤ 2 * latticeWeight n := by
   obtain ⟨m, rfl⟩ := Equiv.intEquivNat.surjective n
   rw [latticeWeight, Equiv.symm_apply_apply]
@@ -1836,7 +1839,9 @@ private theorem rapidBound_eq (a : (Fin 1 → ℤ) → ℂ) (j : ℕ) :
   rw [← ofReal_norm, EuclideanSpace.norm_eq]
   simp [latticeIndex, Real.norm_eq_abs, Real.sqrt_sq_eq_abs]
 
-private theorem rapidSequence_mem_iff (a : (Fin 1 → ℤ) → ℂ) :
+/-- A sequence on the rank-one lattice decays rapidly exactly when it is summable against every
+power of the lattice weight. -/
+theorem rapidSequence_mem_iff (a : (Fin 1 → ℤ) → ℂ) :
     a ∈ rapidDecaySequenceSubmodule 1 ↔
       ∀ j : ℕ, Summable (fun n ↦ latticeWeight n ^ j * ‖a (latticeIndex n)‖) := by
   change (∀ j, rapidDecaySequenceBound j a < ⊤) ↔ _
@@ -1858,7 +1863,8 @@ private theorem rapidSeminorm_eq (a : RapidDecaySequence 1) (j : ℕ) :
   intro n
   exact ENNReal.toReal_ofReal (mul_nonneg (pow_nonneg (zero_le_one.trans (latticeWeight_bounds n).1) _)
     (norm_nonneg _))
-private theorem rapidCoordinate_continuous (n : ℕ) :
+/-- Each coordinate of a rapidly decaying sequence on the rank-one lattice is continuous. -/
+theorem rapidCoordinate_continuous (n : ℕ) :
     Continuous (fun a : RapidDecaySequence 1 ↦ a (latticeIndex n)) := by
   let L : RapidDecaySequence 1 →ₗ[ℂ] ℂ :=
     { toFun a := a (latticeIndex n), map_add' _ _ := rfl, map_smul' _ _ := rfl }

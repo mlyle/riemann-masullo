@@ -290,6 +290,406 @@ theorem relativeIntegralIdeleUnits_isCompact :
 -- two theta spaces as quotients by the theta kernels. Remark 5.2.3.4 concerns
 -- the separate comparison with closures of principal translation differences.
 
+section TransitionInvariants
+
+open scoped Classical TensorProduct
+open TensorProduct
+
+local notation "B(" A ")" => SchwartzBruhat (Multiplicative (SAdeleRing F A))
+local notation "D" => ↥(T \ S)
+local notation "q(" A ")" => (LinearMap.ker (sLocalAdelicTheta F A)).mkQ
+local notation "H" => relativeIntegralIdeleUnits F S T
+local notation "Γ" => WithZero (Multiplicative ℤ)
+
+/-- A fixed class has a fixed lift when the orbit of a representative is finite. -/
+private theorem fixedLift_of_finite_orbit {G E Q : Type*} [Group G] [AddCommGroup E] [Module ℂ E]
+    [AddCommGroup Q] [Module ℂ Q] (r : G →* Module.End ℂ E) (q : E →ₗ[ℂ] Q) (f : E)
+    (hf : (Set.range fun g ↦ r g f).Finite) (h : ∀ g, q (r g f) = q f) :
+    ∃ a : E, q a = q f ∧ ∀ g, r g a = a := by
+  classical
+  let O := hf.toFinset
+  have hO : O.Nonempty := ⟨r 1 f, hf.mem_toFinset.mpr ⟨1, rfl⟩⟩
+  have hn : (O.card : ℂ) ≠ 0 := by exact_mod_cast hO.card_ne_zero
+  refine ⟨(O.card : ℂ)⁻¹ • ∑ a ∈ O, a, ?_, fun g ↦ ?_⟩
+  · rw [map_smul, map_sum, Finset.sum_congr rfl (g := fun _ ↦ q f) (fun a ha ↦ ?_),
+      Finset.sum_const, ← Nat.cast_smul_eq_nsmul ℂ, smul_smul, inv_mul_cancel₀ hn, one_smul]
+    obtain ⟨g, rfl⟩ := hf.mem_toFinset.mp ha
+    exact h g
+  · -- Each group element permutes the orbit (cf. Ch05 §2, sum_orbit_invariant).
+    have he (a b : G) (x : E) : r (a * b) x = r a (r b x) := DFunLike.congr_fun (r.map_mul a b) x
+    have hc (a : G) (x : E) (hx : x ∈ O) : r a x ∈ O := by
+      obtain ⟨b, rfl⟩ := hf.mem_toFinset.mp hx
+      exact hf.mem_toFinset.mpr ⟨a*b, he _ _ _⟩
+    have hi (a : G) (x : E) : r a⁻¹ (r a x) = x := by rw [← he, inv_mul_cancel, map_one]; rfl
+    rw [map_smul, map_sum]
+    congr 1
+    exact Finset.sum_bij' (fun a _ ↦ r g a) (fun a _ ↦ r g⁻¹ a)
+      (fun a ha ↦ hc _ _ ha) (fun a ha ↦ hc _ _ ha) (fun a _ ↦ hi g a)
+      (fun a _ ↦ by simp [← he]) (fun _ _ ↦ rfl)
+
+private theorem prod_old_new {ι : Type*} {S T : Finset ι} (hST : S ⊆ T) (c : T → ℂ) :
+    ∏ w, c w = (∏ w : S, c ⟨w.val, hST w.property⟩) *
+      ∏ w : ↥(T \ S), c ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩ := by
+  let f (v : ι) := if h : v ∈ T then c ⟨v, h⟩ else 1
+  have h := (Finset.prod_sdiff (f := f) hST).symm
+  rw [mul_comm, ← Finset.prod_coe_sort S f, ← Finset.prod_coe_sort (T \ S) f,
+    ← Finset.prod_coe_sort T f] at h
+  have hf (w : T) : f w.val = c w := dite_eq_left w.property
+  exact (Finset.prod_congr rfl fun w _ ↦ (hf w).symm).trans (h.trans
+    (congrArg₂ (· * ·) (Finset.prod_congr rfl fun w _ ↦ hf ⟨w.val, hST w.property⟩)
+      (Finset.prod_congr rfl fun w _ ↦ hf ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩)))
+
+/-- To test membership in a submodule of the enlarged space, it suffices to test
+products of one old test and one local test at each new place. -/
+private theorem relativeUnit_pure_induction (hST : S ⊆ T) (N : Submodule ℂ B(T))
+    (hpure : ∀ (a : B(S)) (φ : ∀ w : D, ℬᵥ(w.val)) (b : B(T)),
+      (∀ x : SAdeleRing F T, b (Multiplicative.ofAdd x) =
+        a (Multiplicative.ofAdd (x.1, fun w : S ↦ x.2 ⟨w.val, hST w.property⟩)) *
+          ∏ w : D, φ w (Multiplicative.ofAdd (x.2 ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩))) →
+      b ∈ N) (b : B(T)) : b ∈ N := by
+  let A := ℬ(InfiniteAdeleRing F)
+  let V := FinestLocallyConvex (⨂[ℂ] w : T, ℬᵥ(w.val))
+  obtain ⟨e, he⟩ := sAdeleSchwartz_inductiveTensor_equiv F T
+  obtain ⟨eS, heS⟩ := sAdeleSchwartz_inductiveTensor_equiv F S
+  obtain ⟨t, rfl⟩ := e.surjective b
+  refine TensorProduct.inductionOn (motive := fun t ↦ e t ∈ N) t ?_
+    (fun _ _ h₁ h₂ ↦ (N.comap e.toLinearMap).add_mem h₁ h₂)
+  intro a v
+  let L : V →ₗ[ℂ] B(T) := e.toLinearMap.comp (TensorProduct.mk ℂ A V a)
+  refine PiTensorProduct.induction_on (motive := fun v ↦ L v ∈ N) v ?_
+    (fun _ _ h₁ h₂ ↦ (N.comap L).add_mem h₁ h₂)
+  intro r φ
+  apply (N.comap L).smul_mem r
+  let i (w : S) : T := ⟨w.val, hST w.property⟩
+  let j (w : D) : T := ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩
+  let aS := eS (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, φ (i w)))
+  refine hpure aS (fun w ↦ φ (j w)) (e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, φ w))) fun x ↦ ?_
+  let xS : SAdeleRing F S := (x.1, fun w ↦ x.2 (i w))
+  let c (w : T) := φ w (Multiplicative.ofAdd (x.2 w))
+  have hS := heS a (fun w ↦ φ (i w)) xS
+  calc
+    _ = a (Multiplicative.ofAdd x.1) * ∏ w, c w := he a φ x
+    _ = _ := ((congrArg (a (Multiplicative.ofAdd x.1) * ·) (prod_old_new hST c)).trans
+      (mul_assoc _ _ _).symm).trans (congrArg (· * ∏ w : D, c (j w)) hS.symm)
+
+/-- Relative units only translate the new finite factors, where each test has finite orbit. -/
+private theorem relativeUnit_finite_orbit (hST : S ⊆ T) (f : B(T)) :
+    (range fun g : H ↦ schwartzBruhatUnitTranslate g.val f).Finite := by
+  let r := (unitTranslateEnd (R := SAdeleRing F T)).comp (relativeIntegralIdeleUnits F S T).subtype
+  let N : Submodule ℂ B(T) :=
+    { carrier := {f | (range fun g : H ↦ r g f).Finite}
+      zero_mem' := by simp
+      add_mem' := fun {a b} ha hb ↦ (ha.image2 (· + ·) hb).subset <| by
+        rintro _ ⟨g, rfl⟩
+        exact ⟨_, ⟨g, rfl⟩, _, ⟨g, rfl⟩, ((r g).map_add a b).symm⟩
+      smul_mem' := fun c a ha ↦ (ha.image (c • ·)).subset <| by
+        rintro _ ⟨g, rfl⟩
+        exact ⟨_, ⟨g, rfl⟩, ((r g).map_smul c a).symm⟩ }
+  refine relativeUnit_pure_induction hST N (fun a φ b hb ↦ ?_) f
+  let O (w : D) := (finitePlaceSchwartz_average_dilation w.val (φ w)).choose
+  have hO (w : D) := (finitePlaceSchwartz_average_dilation w.val (φ w)).choose_spec.1
+  let j (w : D) : T := ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩
+  let toFun (ψ : ∀ w : D, ↥(O w)) (x : SAdeleRing F T) :=
+    a (Multiplicative.ofAdd (x.1, fun w : S ↦ x.2 ⟨w.val, hST w.property⟩)) *
+      ∏ w : D, (ψ w).val (Multiplicative.ofAdd (x.2 (j w)))
+  let ev (b : B(T)) (x : SAdeleRing F T) := b (Multiplicative.ofAdd x)
+  apply Set.Finite.of_finite_image (f := ev) _ (fun _ _ _ _ h ↦ SchwartzBruhat.ext fun x ↦ congrFun h x.toAdd)
+  refine (Set.finite_range toFun).subset ?_
+  rintro _ ⟨_, ⟨g, rfl⟩, rfl⟩
+  have h := (mem_relativeIntegralIdeleUnits_iff g.val).mp g.property
+  have hi := (mem_relativeIntegralIdeleUnits_iff (g⁻¹ : H).val).mp (g⁻¹ : H).property
+  let u (w : D) := Units.map ((Pi.evalRingHom (fun t : T ↦ L(t.val)) (j w)).comp
+    (RingHom.snd _ _)).toMonoidHom g.val
+  have hu (w : D) : u w ∈ U(w.val) := h.2.2 (j w) (Finset.mem_sdiff.mp w.property).2
+  refine ⟨fun w ↦ ⟨_, (hO w _).mpr ⟨⟨u w, hu w⟩, rfl⟩⟩, funext fun x ↦ ?_⟩
+  change _ = b (Multiplicative.ofAdd (g.val.inv * x))
+  rw [hb]
+  have hold : ((g.val.inv * x).1, fun w : S ↦ (g.val.inv * x).2 ⟨w.val, hST w.property⟩) =
+      (x.1, fun w : S ↦ x.2 ⟨w.val, hST w.property⟩) :=
+    Prod.ext ((congrArg (· * x.1) hi.1).trans (one_mul _)) (funext fun w ↦
+      (congrArg (· * _) (hi.2.1 ⟨w.val, hST w.property⟩ w.property)).trans (one_mul _))
+  rw [hold]
+  rfl
+
+/-- Prescribing integral-unit cosets at the additional places amounts to choosing a T-unit. -/
+private theorem relativeUnit_choose_diagonal (hST : S ⊆ T)
+    (hPic : Subsingleton (CommRing.Pic ((S : Set Places).integer F))) (k : D → ℤ) :
+    ∃ a : (T : Set Places).unit F, ∀ w : D,
+      Valued.v (algebraMap F (L(w.val)) a.val.val) = WithZero.exp (k w) := by
+  obtain ⟨j, hj, -⟩ := picard_localization_exact F S T hST
+  have ex (w : D) : ∃ u : (L(w.val))ˣ, Valued.v u.val = WithZero.exp (k w) := by
+    obtain ⟨x, hx⟩ := w.val.valuedAdicCompletion_surjective F (WithZero.exp (k w))
+    exact ⟨Units.mk0 x (fun hz ↦ WithZero.exp_ne_zero (hx.symm.trans (hz ▸ map_zero _))), hx⟩
+  choose u hu using ex
+  have h : (QuotientGroup.mk (fun w ↦ QuotientGroup.mk (u w)) :
+      _ ⧸ (sUnitLocalClasses F T (T \ S)).range) = 1 := hj ((hPic.elim _ _).trans (map_one j).symm)
+  obtain ⟨a, ha⟩ := (QuotientGroup.eq_one_iff _).mp h
+  refine ⟨a, fun w ↦ ?_⟩
+  have hq := congrFun ha w
+  change (QuotientGroup.mk _ : _ ⧸ _) = QuotientGroup.mk (u w) at hq
+  have hv := HeightOneSpectrum.adicCompletionIntegers.mem_units_iff_valued_eq_one.mp
+    (QuotientGroup.eq.mp hq)
+  rw [Units.val_mul, Units.val_inv_eq_inv_val, map_mul, map_inv₀] at hv
+  exact ((inv_mul_eq_one₀ (by simp)).mp hv).trans (hu w)
+
+/-- The two consecutive balls differ by the shell of their larger radius. -/
+private theorem valuation_shell_step (z : Γ) (n : ℤ) :
+    (if z ≤ WithZero.exp n then (1 : ℂ) else 0) -
+      (if z ≤ WithZero.exp (n-1) then 1 else 0) = if z = WithZero.exp n then 1 else 0 := by
+  rcases eq_or_ne z 0 with rfl | hz
+  · simp [Ne.symm WithZero.exp_ne_zero]
+  · obtain ⟨m, rfl⟩ : ∃ m : ℤ, z = WithZero.exp m := ⟨z.log, (WithZero.exp_log hz).symm⟩
+    simp only [WithZero.exp_le_exp, WithZero.exp_inj]
+    split_ifs <;> first | (exfalso; omega) | norm_num
+
+/-- Sample a local test once per valuation. After removing its constant value near zero,
+only finitely many shells contribute and each shell is the difference of two balls. -/
+private theorem sampled_local_test (w : Places) (s : Γ → L(w))
+    (hs : ∀ z, Valued.v (s z) = z) (f : ℬᵥ(w)) :
+    ∃ c : ℤ →₀ ℂ, ∀ z : Γ, f (Multiplicative.ofAdd (s z)) =
+      ∑ n ∈ c.support, c n * (if z ≤ WithZero.exp n then 1 else 0) := by
+  let φ (x : L(w)) := f (Multiplicative.ofAdd x)
+  obtain ⟨hl, hc⟩ := (mem_finitePlaceSchwartz_iff F w φ).mp ⟨f, fun _ ↦ rfl⟩
+  let ball (n : ℤ) (z : Γ) : ℂ := if z ≤ WithZero.exp n then 1 else 0
+  let d (z : Γ) := φ (s z) - φ 0 * ball 0 z
+  let C := (tsupport φ ∪ (O(w) : Set (L(w)))) \ ((O(w) : Set (L(w))) ∩ φ ⁻¹' {φ 0})
+  have hC : IsCompact C := (hc.union (isCompact_iff_compactSpace.mpr
+    (compactSpace_adicCompletionIntegers w))).diff
+      ((Valued.isOpen_valuationSubring (L(w))).inter (hl.isOpen_fiber _))
+  have h0 : (0 : L(w)) ∉ C := fun h ↦ h.2 ⟨zero_mem _, rfl⟩
+  let : CompactSpace C := isCompact_iff_compactSpace.mp hC
+  have hfin : (range fun x : C ↦ Valued.v x.val).Finite := by
+    apply IsLocallyConstant.range_finite
+    refine (IsLocallyConstant.iff_eventually_eq _).mpr fun x ↦ ?_
+    exact continuous_subtype_val.continuousAt
+      (Valued.locally_const ((Valuation.ne_zero_iff (Valued.v : Valuation (L(w)) Γ)).mpr fun hx ↦ h0 (hx ▸ x.property)))
+  have hd (z : Γ) (hz : d z ≠ 0) : s z ∈ C := by
+    have hb : s z ∈ O(w) ↔ z ≤ WithZero.exp (0 : ℤ) := by
+      rw [HeightOneSpectrum.mem_adicCompletionIntegers, hs, WithZero.exp_zero]
+    by_cases h : s z ∈ O(w)
+    · refine ⟨Or.inr h, fun ht ↦ hz ?_⟩
+      change φ (s z) - φ 0 * (if z ≤ WithZero.exp 0 then 1 else 0) = 0
+      rw [ite_eq_left (hb.mp h), mul_one, show φ (s z) = φ 0 from ht.2, sub_self]
+    · refine ⟨Or.inl (subset_tsupport _ ?_), fun ht ↦ h ht.1⟩
+      intro hzero
+      exact hz (by simp only [d, ball, ite_eq_right (mt hb.mpr h), hzero, mul_zero, sub_zero])
+  let M := Submodule.span ℂ (range ball)
+  have hball (n : ℤ) : ball n ∈ M := Submodule.subset_span (mem_range_self n)
+  have hdM : d ∈ M := by
+    have hf : (support d).Finite := hfin.subset fun z hz ↦ ⟨⟨s z, hd z hz⟩, hs z⟩
+    have hde : d = ∑ z ∈ hf.toFinset, d z • (fun y : Γ ↦ if y = z then (1 : ℂ) else 0) := by
+      funext y
+      simp only [Finset.sum_apply, Pi.smul_apply, smul_eq_mul, mul_ite, mul_one, mul_zero]
+      rw [Finset.sum_ite_eq]
+      by_cases hy : y ∈ hf.toFinset
+      · rw [ite_eq_left hy]
+      · exact (notMem_support.mp (hf.mem_toFinset.not.mp hy)).trans (ite_eq_right hy).symm
+    rw [hde]
+    refine M.sum_mem fun z hz ↦ M.smul_mem _ ?_
+    have hz' : z ≠ 0 := fun he ↦ h0 ((Valuation.zero_iff (Valued.v : Valuation (L(w)) Γ)).mp ((hs z).trans he) ▸
+      hd z (hf.mem_toFinset.mp hz))
+    have he : (fun y : Γ ↦ if y = z then (1 : ℂ) else 0) = ball z.log - ball (z.log - 1) := by
+      funext y
+      exact ((valuation_shell_step y z.log).trans (by rw [WithZero.exp_log hz'])).symm
+    exact he ▸ M.sub_mem (hball _) (hball _)
+  have hφ : (fun z ↦ φ (s z)) ∈ M := by
+    have he : (fun z ↦ φ (s z)) = d + φ 0 • ball 0 := funext fun z ↦ (sub_add_cancel _ _).symm
+    exact he ▸ M.add_mem hdM (M.smul_mem _ (hball _))
+  obtain ⟨c, he⟩ := Finsupp.mem_span_range_iff_exists_finsupp.mp hφ
+  exact ⟨c, fun z ↦ (congrFun he z).symm.trans (by simp [Finsupp.sum, Finset.sum_apply, ball])⟩
+
+/-- A rectangle of valuation balls times an old test is a principal translate of an
+insertion, with the old coordinates of that translation absorbed into the old test. -/
+private theorem relativeUnit_box (hST : S ⊆ T)
+    (hPic : Subsingleton (CommRing.Pic ((S : Set Places).integer F))) (k : D → ℤ) (f : B(S)) :
+    ∃ b : B(T), q(T) b ∈ (sLocalThetaTransition (F := F) hST).range ∧
+      ∀ x : SAdeleRing F T, b (Multiplicative.ofAdd x) =
+        f (Multiplicative.ofAdd (x.1, fun w : S ↦ x.2 ⟨w.val, hST w.property⟩)) *
+          ∏ w : D, (if Valued.v (x.2 ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩) ≤
+            WithZero.exp (k w) then 1 else 0) := by
+  obtain ⟨a, ha⟩ := relativeUnit_choose_diagonal hST hPic k
+  let δ (U : Finset Places) := Units.map (algebraMap F (SAdeleRing F U)).toMonoidHom a.val
+  let f' := schwartzBruhatUnitTranslate (δ S)⁻¹ f
+  let b := sAdeleSchwartzTransition F hST f'
+  refine ⟨schwartzBruhatUnitTranslate (δ T) b, ⟨q(S) f', ?_⟩, fun x ↦ ?_⟩
+  · have hd : (QuotientGroup.mk (δ T) : SIdeleQuotient F T) = 1 :=
+      (sIdeleQuotient_mk_eq_one F T _).mpr ⟨Set.unitEquivUnitsInteger _ _ a, Units.ext rfl⟩
+    have he := (existsUnique_sLocalThetaAction (F := F) (S := T)).exists.choose_spec.2 (δ T) b
+    rw [hd, map_one] at he
+    have ht := LinearMap.congr_fun (sLocalThetaTransition_unique (F := F) hST).1 f'
+    change q(T) b = q(T) (schwartzBruhatUnitTranslate (δ T) b) at he
+    change (sLocalThetaTransition (F := F) hST) (q(S) f') = q(T) b at ht
+    exact ht.trans he
+  · let r : SAdeleRing F T →+* SAdeleRing F S := (RingHom.fst _ _).prod
+      (RingHom.pi fun w : S ↦ (Pi.evalRingHom (fun v : T ↦ L(v.val))
+        ⟨w.val, hST w.property⟩).comp (RingHom.snd _ _))
+    let z := (δ T).inv * x
+    have hold : (δ S).val * (z.1, fun w : S ↦ z.2 ⟨w.val, hST w.property⟩) =
+        (x.1, fun w : S ↦ x.2 ⟨w.val, hST w.property⟩) := by
+      change (δ S).val * r z = r x
+      rw [show r z = r (δ T).inv * r x from r.map_mul _ _,
+        show r (δ T).inv = (δ S).inv from rfl, ← mul_assoc, Units.val_inv, one_mul]
+    have hf : f' (Multiplicative.ofAdd (z.1, fun w : S ↦ z.2 ⟨w.val, hST w.property⟩)) =
+        f (Multiplicative.ofAdd (x.1, fun w : S ↦ x.2 ⟨w.val, hST w.property⟩)) :=
+      congrArg (fun y ↦ f (Multiplicative.ofAdd y)) hold
+    have hc (w : D) : z.2 ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩ ∈ O(w.val) ↔
+        Valued.v (x.2 ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩) ≤ WithZero.exp (k w) := by
+      let v : T := ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩
+      change Valued.v ((algebraMap F (L(w.val)) (↑a.val⁻¹ : F)) * x.2 v) ≤ 1 ↔ _
+      rw [Units.val_inv_eq_inv_val, map_inv₀, map_mul, map_inv₀, ha w, inv_mul_le_iff₀
+        WithZero.exp_pos, mul_one]
+    have hcond : (∀ w : T, w.val ∉ S → z.2 w ∈ O(w.val)) ↔
+        ∀ w : D, Valued.v (x.2 ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩) ≤ WithZero.exp (k w) :=
+      ⟨fun h w ↦ (hc w).mp (h ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩ (Finset.mem_sdiff.mp w.property).2),
+        fun h w hw ↦ (hc ⟨w.val, Finset.mem_sdiff.mpr ⟨w.property, hw⟩⟩).mpr
+          (h ⟨w.val, Finset.mem_sdiff.mpr ⟨w.property, hw⟩⟩)⟩
+    change b (Multiplicative.ofAdd z) = _
+    rw [sAdeleSchwartzTransition_apply, hf, Fintype.prod_ite_zero, Finset.prod_const_one]
+    exact (if_congr hcond rfl rfl).trans (by split_ifs <;> simp)
+
+/-- Two elements of the same valuation are related by a local integral unit,
+including the zero fiber. -/
+private theorem integralUnit_of_valuation_eq (w : Places) (x y : L(w))
+    (h : Valued.v y = Valued.v x) :
+    ∃ u : (L(w))ˣ, u ∈ U(w) ∧ u.val * x = y := by
+  by_cases hx : x = 0
+  · subst x
+    have hy : y = 0 := (Valuation.zero_iff _).mp (h.trans (map_zero _))
+    exact ⟨1, one_mem _, by simp [hy]⟩
+  · have hy : y ≠ 0 := fun hy ↦ hx ((Valuation.zero_iff _).mp (h.symm.trans (hy ▸ map_zero _)))
+    let u := Units.mk0 y hy / Units.mk0 x hx
+    refine ⟨u, HeightOneSpectrum.adicCompletionIntegers.mem_units_iff_valued_eq_one.mpr ?_,
+      div_mul_cancel₀ _ hx⟩
+    change Valued.v (y / x) = 1
+    rw [map_div₀, h, div_self ((Valuation.ne_zero_iff _).mpr hx)]
+
+/-- Choose an element of each relative-unit orbit having prescribed samples in its
+new coordinates. Multiplication by the selected unit fixes the old coordinates. -/
+private theorem relativeUnit_sample (hST : S ⊆ T) (s : ∀ w : Places, Γ → L(w))
+    (hs : ∀ w z, Valued.v (s w z) = z) (x : SAdeleRing F T) :
+    ∃ g : H, let y := g.val.val * x
+      (y.1, fun w : S ↦ y.2 ⟨w.val, hST w.property⟩) =
+        (x.1, fun w : S ↦ x.2 ⟨w.val, hST w.property⟩) ∧
+      ∀ w : D, let v : T := ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩
+        y.2 v = s w.val (Valued.v (x.2 v)) := by
+  choose u hu hux using fun w : T ↦ integralUnit_of_valuation_eq w.val (x.2 w) _
+    (hs w.val (Valued.v (x.2 w)))
+  let t (w : T) : (L(w.val))ˣ := if w.val ∈ S then 1 else u w
+  let g : (SAdeleRing F T)ˣ :=
+    (ContinuousMulEquiv.prodUnits _ _).symm ((1 : (InfiniteAdeleRing F)ˣ),
+      (ContinuousMulEquiv.piUnits (M := fun w : T ↦ L(w.val))).symm t)
+  have hold (w : T) (hw : w.val ∈ S) : g.val.2 w = 1 :=
+    congrArg Units.val (ite_eq_left (t := 1) (e := u w) hw)
+  have hnew (w : T) (hw : w.val ∉ S) : t w = u w := ite_eq_right hw
+  have hg : g ∈ H := (mem_relativeIntegralIdeleUnits_iff g).mpr ⟨rfl, hold, fun w hw ↦ by
+    have ht : t w ∈ U(w.val) := hnew w hw ▸ hu w
+    exact ht⟩
+  refine ⟨⟨g, hg⟩, Prod.ext (one_mul _) (funext fun w ↦ ?_), fun w ↦ ?_⟩
+  · exact (congrArg (· * _) (hold ⟨w.val, hST w.property⟩ w.property)).trans (one_mul _)
+  · let v : T := ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩
+    change (t v).val * x.2 v = _
+    rw [hnew v (Finset.mem_sdiff.mp w.property).2]
+    exact hux v
+
+/-- Expand a product of finite sums of ball indicators in the function space. -/
+private theorem sampled_product_mem {I X : Type*} [Fintype I] (M : Submodule ℂ (X → ℂ))
+    (a : X → ℂ) (b : I → X → ℂ) (B : I → ℤ → X → ℂ)
+    (hb : ∀ i, ∃ c : ℤ →₀ ℂ, ∀ x, b i x = ∑ n ∈ c.support, c n * B i n x)
+    (hB : ∀ n : I → ℤ, (fun x ↦ a x * ∏ i, B i (n i) x) ∈ M) :
+    (fun x ↦ a x * ∏ i, b i x) ∈ M := by
+  classical
+  choose c hc using hb
+  let P := Fintype.piFinset fun i ↦ (c i).support
+  have h := M.sum_mem (t := P) fun n _ ↦ M.smul_mem (∏ i, c i (n i)) (hB n)
+  refine (show (∑ n ∈ P, (∏ i, c i (n i)) • (fun x ↦ a x * ∏ i, B i (n i) x)) =
+      (fun x ↦ a x * ∏ i, b i x) from ?_) ▸ h
+  funext x
+  simp only [Finset.sum_apply, Pi.smul_apply, smul_eq_mul, hc, Finset.prod_univ_sum, Finset.mul_sum,
+    Finset.prod_mul_distrib]
+  exact Finset.sum_congr rfl fun _ _ ↦ mul_left_comm _ _ _
+
+/-- The sampled values of any test belong to the function space generated by boxes.
+Use the algebraic tensor decomposition first on the old and new places, then at each new place. -/
+private theorem relativeUnit_sampled_mem (hST : S ⊆ T) (s : ∀ w : Places, Γ → L(w))
+    (hs : ∀ w z, Valued.v (s w z) = z) (y : SAdeleRing F T → SAdeleRing F T)
+    (hold : ∀ x, ((y x).1, fun w : S ↦ (y x).2 ⟨w.val, hST w.property⟩) =
+      (x.1, fun w : S ↦ x.2 ⟨w.val, hST w.property⟩))
+    (hnew : ∀ x (w : D), let v : T := ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩
+      (y x).2 v = s w.val (Valued.v (x.2 v)))
+    (M : Submodule ℂ (SAdeleRing F T → ℂ))
+    (hbox : ∀ (f : B(S)) (k : D → ℤ),
+      (fun x : SAdeleRing F T ↦ f (Multiplicative.ofAdd (x.1, fun w : S ↦ x.2 ⟨w.val, hST w.property⟩)) *
+        ∏ w : D, (if Valued.v (x.2 ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩) ≤
+          WithZero.exp (k w) then 1 else 0)) ∈ M)
+    (f : B(T)) : (fun x ↦ f (Multiplicative.ofAdd (y x))) ∈ M := by
+  let ev : B(T) →ₗ[ℂ] (SAdeleRing F T → ℂ) :=
+    { toFun := fun f x ↦ f (Multiplicative.ofAdd (y x)), map_add' := fun _ _ ↦ rfl,
+      map_smul' := fun _ _ ↦ rfl }
+  refine relativeUnit_pure_induction hST (M.comap ev) (fun a φ b hb ↦ ?_) f
+  let j (w : D) : T := ⟨w.val, (Finset.mem_sdiff.mp w.property).1⟩
+  let old (x : SAdeleRing F T) := a (Multiplicative.ofAdd (x.1, fun w : S ↦ x.2 ⟨w.val, hST w.property⟩))
+  let v (w : D) (x : SAdeleRing F T) := Valued.v (x.2 (j w))
+  let tail (w : D) (x : SAdeleRing F T) := φ w (Multiplicative.ofAdd (s w.val (v w x)))
+  let ball (w : D) (n : ℤ) (x : SAdeleRing F T) : ℂ := if v w x ≤ WithZero.exp n then 1 else 0
+  have heq : ev b = (fun x ↦ old x * ∏ w, tail w x) := by
+    funext x
+    change b (Multiplicative.ofAdd (y x)) = _
+    rw [hb, hold x]
+    exact congrArg (old x * ·) (Finset.prod_congr rfl fun w _ ↦
+      congrArg (fun z ↦ φ w (Multiplicative.ofAdd z)) (hnew x w))
+  change ev b ∈ M
+  rw [heq]
+  refine sampled_product_mem M old tail ball (fun w ↦ ?_) (hbox a)
+  obtain ⟨c, hc⟩ := sampled_local_test w.val (s w.val) (hs w.val) (φ w)
+  exact ⟨c, fun x ↦ hc (v w x)⟩
+
+/-- A test fixed by the relative units descends in the theta quotient. -/
+private theorem relativeUnit_descent (hST : S ⊆ T)
+    (hPic : Subsingleton (CommRing.Pic ((S : Set Places).integer F))) (f : B(T))
+    (hf : ∀ g : H, schwartzBruhatUnitTranslate g.val f = f) :
+    q(T) f ∈ (sLocalThetaTransition (F := F) hST).range := by
+  let s (w : Places) := Function.surjInv (w.valuedAdicCompletion_surjective F)
+  have hs (w : Places) (z : Γ) : Valued.v (s w z) = z :=
+    Function.rightInverse_surjInv _ _
+  choose g hg using relativeUnit_sample hST s hs
+  let y (x : SAdeleRing F T) := (g x).val.val * x
+  let ev : B(T) →ₗ[ℂ] (SAdeleRing F T → ℂ) :=
+    { toFun := fun b x ↦ b (Multiplicative.ofAdd x), map_add' := fun _ _ ↦ rfl,
+      map_smul' := fun _ _ ↦ rfl }
+  let M := (((sLocalThetaTransition (F := F) hST).range).comap q(T)).map ev
+  have hmem := relativeUnit_sampled_mem hST s hs y (fun x ↦ (hg x).1)
+    (fun x ↦ (hg x).2) M (fun a k ↦ ?_) f
+  · have hfix : (fun x ↦ f (Multiplicative.ofAdd (y x))) = ev f := funext fun x ↦
+      congrArg (fun b : B(T) ↦ b (Multiplicative.ofAdd x)) (hf (g x)⁻¹)
+    obtain ⟨b, hb, hbf⟩ := hfix ▸ hmem
+    have he : b = f := SchwartzBruhat.ext fun x ↦ congrFun hbf x.toAdd
+    exact he ▸ hb
+  · obtain ⟨b, hb, hval⟩ := relativeUnit_box hST hPic k a
+    exact ⟨b, hb, funext hval⟩
+
+/-- Relative-unit equivariance of the transition on arbitrary quotient classes. -/
+private theorem relativeUnit_fixes_transition (hST : S ⊆ T) (y : Θₛ(S)) (g : H) :
+    let ρ := (existsUnique_sLocalThetaAction (F := F) (S := T)).exists.choose
+    ρ (QuotientGroup.mk g.val) (sLocalThetaTransition hST y) = sLocalThetaTransition hST y := by
+  obtain ⟨a, ha, hg⟩ := g.property
+  obtain ⟨u, rfl⟩ := ha.1
+  obtain ⟨f, rfl⟩ := (LinearMap.ker (sLocalAdelicTheta F S)).mkQ_surjective y
+  let z := integralIdeleInsertion F S u
+  have hS : Units.map (adeleProjection F S).toMonoidHom z = 1 := ha.2
+  have he := sLocalThetaTransition_equivariant hST u f
+  have htrans : schwartzBruhatUnitTranslate (1 : (SAdeleRing F S)ˣ) f = f :=
+    DFunLike.congr_fun (map_one (unitTranslateEnd (R := SAdeleRing F S))) f
+  dsimp only at he
+  rw [hS, htrans, hg] at he
+  have ht := LinearMap.congr_fun (sLocalThetaTransition_unique (F := F) hST).1 f
+  have hρ := (existsUnique_sLocalThetaAction (F := F) (S := T)).exists.choose_spec.2 g.val
+    (sAdeleSchwartzTransition F hST f)
+  change (sLocalThetaTransition (F := F) hST) (q(S) f) = q(T) (sAdeleSchwartzTransition F hST f) at ht
+  rw [ht]
+  exact hρ.trans (he.symm.trans ht)
+
+end TransitionInvariants
+
 /-- Paper: Theorem 6.1.2.1(1), p. 288.
 When the S-integers have trivial Picard group, the range of the transition is the fixed
 subspace for the relative integral units in the T-local theta quotient of (5.1.1.3). -/
@@ -298,7 +698,20 @@ theorem sLocalThetaTransition_range_eq_invariants (hST : S ⊂ T)
     let ρ := (existsUnique_sLocalThetaAction (F := F) (S := T)).exists.choose
     Set.range (sLocalThetaTransition (F := F) hST.le) =
       {x : Θₛ(T) | ∀ g : relativeIntegralIdeleUnits F S T,
-        ρ (QuotientGroup.mk g.val) x = x} := by sorry
+        ρ (QuotientGroup.mk g.val) x = x} := by
+  ext x
+  constructor
+  · rintro ⟨y, rfl⟩ g
+    exact relativeUnit_fixes_transition hST.le y g
+  · intro hx
+    obtain ⟨f, rfl⟩ := (LinearMap.ker (sLocalAdelicTheta F T)).mkQ_surjective x
+    let q := (LinearMap.ker (sLocalAdelicTheta F T)).mkQ
+    let r := (unitTranslateEnd (R := SAdeleRing F T)).comp (relativeIntegralIdeleUnits F S T).subtype
+    have h (g : relativeIntegralIdeleUnits F S T) : q (r g f) = q f :=
+      ((existsUnique_sLocalThetaAction (F := F) (S := T)).exists.choose_spec.2 g.val f).symm.trans (hx g)
+    obtain ⟨a, ha, hfix⟩ := fixedLift_of_finite_orbit r q f
+      (relativeUnit_finite_orbit hST.le f) h
+    exact ha ▸ relativeUnit_descent hST.le _hPic a hfix
 
 private theorem sLocalThetaToGlobal_range_eq_invariants_intertwine
     (g : IdeleGroup (𝓞 F) F) (hg : g ∈ (integralIdeleInsertion F T).range) (y : Θₛ(T)) :

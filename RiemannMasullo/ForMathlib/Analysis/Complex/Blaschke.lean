@@ -9,14 +9,15 @@ import Mathlib.Analysis.SpecialFunctions.Complex.LogDeriv
 public import Mathlib.Analysis.Normed.Module.MultipliableUniformlyOn
 public import Mathlib.Analysis.Complex.LocallyUniformLimit
 import Mathlib.Analysis.Complex.Order
+import Mathlib.Analysis.SpecialFunctions.Log.Summable
 
 /-!
 # Blaschke products on a disk and a vertical strip
 
 Jensen's formula gives the Blaschke condition for the divisor of a bounded analytic function.
 The conformal coordinate transports this condition to a vertical strip. For a summable family
-of disk zeros with multiplicities, the products omitting a finite subset are bounded by one,
-vanish to the specified remaining orders and tend pointwise to one.
+of disk zeros with multiplicities, the products omitting a finite subset are bounded by one and tend pointwise to one. Distinct
+points have exactly the specified zero orders, and the product has no other zeros in the disk.
 -/
 
 @[expose] public noncomputable section
@@ -126,6 +127,33 @@ theorem disk_divisor_summable_one_sub_norm {g : ℂ → ℂ} {M : ℝ}
     · apply mul_le_mul_of_nonneg_left _ (hd z)
       simpa using one_sub_inv_le_log_of_pos (inv_pos.mpr (norm_pos_iff.mpr hz))
 
+/-- The zeros of a bounded analytic disk function nonzero at the center have finite positive
+orders. With those intrinsic multiplicities the zero set satisfies the Blaschke condition. -/
+theorem disk_zero_orders_and_summability {g : ℂ → ℂ} {M : ℝ}
+    (hg : AnalyticOnNhd ℂ g (ball 0 1)) (h₀ : g 0 ≠ 0) (hb : ∀ z ∈ ball 0 1, ‖g z‖ ≤ M) :
+    let Z := {z : ℂ // z ∈ ball 0 1 ∧ g z = 0}
+    let m (i : Z) := analyticOrderNatAt g i.val
+    (∀ i : Z, 0 < m i ∧ analyticOrderAt g i.val = m i) ∧
+      Summable (fun i : Z ↦ (m i : ℝ) * (1 - ‖i.val‖)) := by
+  intro Z m
+  have hbase : analyticOrderAt g 0 ≠ ⊤ := by
+    rw [(hg 0 (by simp)).analyticOrderAt_eq_zero.mpr h₀]
+    simp
+  have horder (i : Z) : analyticOrderAt g i.val = m i :=
+    (Nat.cast_analyticOrderNatAt (hg.analyticOrderAt_ne_top_of_isPreconnected
+      (convex_ball (0 : ℂ) 1).isPreconnected (by simp) i.property.1 hbase)).symm
+  refine ⟨fun i ↦ ⟨?_, horder i⟩, ?_⟩
+  · apply Nat.pos_of_ne_zero
+    intro hi
+    exact ((hg _ i.property.1).analyticOrderAt_ne_zero.mpr i.property.2)
+      (by rw [horder i, hi, Nat.cast_zero])
+  · apply ((disk_divisor_summable_one_sub_norm hg h₀ hb).subtype
+      (fun z ↦ z ∈ ball (0 : ℂ) 1 ∧ g z = 0)).congr
+    intro i
+    change (divisor g (ball 0 1) i.val : ℝ) * (1 - ‖i.val‖) = _
+    rw [hg.divisor_apply i.property.1, horder i]
+    simp
+
 /-- The strip-to-disk and disk-to-strip maps use the half-width π/(2k).
 The center may have arbitrary imaginary part. -/
 def stripBlaschkeToDisk (w₀ : ℂ) (k : ℝ) (w : ℂ) : ℂ :=
@@ -181,6 +209,11 @@ private theorem stripBlaschkeFromDisk_mem {z w₀ : ℂ} {k : ℝ} (hk : 0 < k) 
     simp [stripBlaschkeFromDisk, Complex.mul_re, Complex.log_im]
   rw [he, abs_mul, abs_inv, abs_of_pos hk, show (π / 2) / k = k⁻¹ * (π / 2) from div_eq_inv_mul ..]
   exact mul_lt_mul_of_pos_left h (inv_pos.mpr hk)
+
+/-- The inverse chart maps the open disk into the strip of half-width π/(2k). -/
+theorem stripBlaschkeFromDisk_mem_strip {z w₀ : ℂ} {k : ℝ} (hk : 0 < k) (hz : z ∈ ball 0 1) :
+    |(stripBlaschkeFromDisk w₀ k z).re - w₀.re| < (π / 2) / k :=
+  stripBlaschkeFromDisk_mem hk hz
 
 private theorem stripBlaschke_cancel (k : ℝ) (hk : 0 < k) :
     ((k⁻¹ : ℝ) : ℂ) * (-Complex.I) * ((k : ℂ) * Complex.I) = 1 := by
@@ -258,6 +291,39 @@ private theorem stripBlaschkeFromDisk_analytic_deriv {z w₀ : ℂ} {k : ℝ} (h
   rw [hd]
   exact mul_ne_zero (by exact_mod_cast (inv_ne_zero hk.ne')) (mul_ne_zero (neg_ne_zero.mpr Complex.I_ne_zero)
     (mul_ne_zero (inv_ne_zero hnum) (div_ne_zero two_ne_zero (pow_ne_zero _ hden))))
+
+/-- The inverse strip chart is holomorphic with nonvanishing derivative throughout the disk.
+Consequently it preserves analytic zero multiplicities. -/
+theorem stripBlaschkeFromDisk_analyticAt_deriv_ne_zero {z w₀ : ℂ} {k : ℝ} (hk : 0 < k)
+    (hz : z ∈ ball 0 1) :
+    AnalyticAt ℂ (stripBlaschkeFromDisk w₀ k) z ∧ deriv (stripBlaschkeFromDisk w₀ k) z ≠ 0 :=
+  stripBlaschkeFromDisk_analytic_deriv hk hz
+
+/-- Pulling a bounded strip function back to the disk preserves the multiplicities of its
+zeros. The resulting summable divisor is indexed by actual zeros in disk coordinates. -/
+theorem stripBlaschke_disk_zero_orders {w₀ : ℂ} {k M : ℝ} (hk : 0 < k) (G : ℂ → ℂ)
+    (hG : AnalyticOnNhd ℂ G {w | |w.re - w₀.re| < (π / 2) / k}) (h₀ : G w₀ ≠ 0)
+    (hb : ∀ w, |w.re - w₀.re| < (π / 2) / k → ‖G w‖ ≤ M) :
+    let D := stripBlaschkeFromDisk w₀ k
+    let Z := {z : ℂ // z ∈ ball 0 1 ∧ G (D z) = 0}
+    let m (i : Z) := analyticOrderNatAt G (D i.val)
+    (∀ i : Z, 0 < m i ∧ analyticOrderAt G (D i.val) = m i ∧
+      analyticOrderAt (G ∘ D) i.val = m i) ∧
+      Summable (fun i : Z ↦ (m i : ℝ) * (1 - ‖i.val‖)) := by
+  intro D Z m
+  let g := G ∘ D
+  have hg : AnalyticOnNhd ℂ g (ball 0 1) := fun z hz ↦
+    (hG _ (stripBlaschkeFromDisk_mem hk hz)).comp (stripBlaschkeFromDisk_analytic_deriv hk hz).1
+  have hg₀ : g 0 ≠ 0 := by simpa [g, D, stripBlaschkeFromDisk] using h₀
+  obtain ⟨horder, hsum⟩ := disk_zero_orders_and_summability hg hg₀
+    (fun z hz ↦ hb _ (stripBlaschkeFromDisk_mem hk hz))
+  have heq (i : Z) : analyticOrderAt g i.val = analyticOrderAt G (D i.val) := by
+    obtain ⟨ha, hd⟩ := stripBlaschkeFromDisk_analytic_deriv (w₀ := w₀) hk i.property.1
+    exact analyticOrderAt_comp_of_deriv_ne_zero ha hd
+  have hm (i : Z) : analyticOrderNatAt g i.val = m i := congrArg ENat.toNat (heq i)
+  refine ⟨fun i ↦ ?_, hsum.congr fun i ↦ congrArg (fun n : ℕ ↦ (n : ℝ) * (1 - ‖i.val‖)) (hm i)⟩
+  have hi := (horder i).2.trans (congrArg Nat.cast (hm i))
+  exact ⟨(hm i) ▸ (horder i).1, (heq i).symm.trans hi, hi⟩
 
 /-- A bounded analytic function on a vertical strip satisfies a Blaschke condition
 with the exact local zero orders in the conformal coordinate of the disk. -/
@@ -339,14 +405,24 @@ private theorem rotation_mul {a : ℂ} (ha : a ≠ 0) : rotation a * a = ‖a‖
 private def factor (a z : ℂ) : ℂ :=
   ((‖a‖ : ℂ) - rotation a * z) / (1 - (‖a‖ : ℂ) * (rotation a * z))
 
-private theorem den_ne {a z : ℂ} (ha : a ≠ 0) (ha' : ‖a‖ < 1) (hz : ‖z‖ < 1) :
+private theorem factor_den_closed {a z : ℂ} (ha : a ≠ 0) (ha' : ‖a‖ < 1) (hz : ‖z‖ ≤ 1) :
     1 - (‖a‖ : ℂ) * (rotation a * z) ≠ 0 := by
   apply sub_ne_zero.mpr
   intro h
-  have hn : ‖(‖a‖ : ℂ) * (rotation a * z)‖ < 1 := by
-    simp only [norm_mul, rotation_norm ha, one_mul, Complex.norm_real, Real.norm_eq_abs, abs_norm]
-    nlinarith [mul_nonneg (sub_nonneg.mpr ha'.le) (norm_nonneg z)]
-  simp only [← h, norm_one, lt_self_iff_false] at hn
+  have hp : ‖(‖a‖ : ℂ) * (rotation a * z)‖ < 1 := by
+    rw [norm_mul, norm_mul, rotation_norm ha, one_mul, Complex.norm_real, Real.norm_eq_abs, abs_norm]
+    exact (mul_le_of_le_one_right (norm_nonneg a) hz).trans_lt ha'
+  simp [← h] at hp
+
+private theorem den_ne {a z : ℂ} (ha : a ≠ 0) (ha' : ‖a‖ < 1) (hz : ‖z‖ < 1) :
+    1 - (‖a‖ : ℂ) * (rotation a * z) ≠ 0 :=
+  factor_den_closed ha ha' hz.le
+
+private theorem factor_norm_sq_gap (r : ℝ) (w : ℂ) :
+    ‖1 - (r : ℂ) * w‖ ^ 2 - ‖(r : ℂ) - w‖ ^ 2 = (1 - r ^ 2) * (1 - ‖w‖ ^ 2) := by
+  simp only [← Complex.normSq_eq_norm_sq, Complex.normSq_apply, Complex.sub_re, Complex.sub_im,
+    Complex.mul_re, Complex.mul_im, Complex.one_re, Complex.one_im, Complex.ofReal_re, Complex.ofReal_im]
+  ring
 
 private theorem factor_contracts {a z : ℂ} (ha : a ≠ 0) (ha' : ‖a‖ < 1) (hz : ‖z‖ < 1) :
     ‖factor a z‖ ≤ 1 := by
@@ -355,10 +431,7 @@ private theorem factor_contracts {a z : ℂ} (ha : a ≠ 0) (ha' : ‖a‖ < 1) 
   have hw : ‖w‖ < 1 := by simpa [w, norm_mul, rotation_norm ha] using hz
   have hr : r ^ 2 ≤ 1 := pow_le_one₀ (norm_nonneg a) ha'.le
   have hw' : ‖w‖ ^ 2 ≤ 1 := pow_le_one₀ (norm_nonneg w) hw.le
-  have hsq : ‖1 - (r : ℂ) * w‖ ^ 2 - ‖(r : ℂ) - w‖ ^ 2 = (1 - r ^ 2) * (1 - ‖w‖ ^ 2) := by
-    simp only [← Complex.normSq_eq_norm_sq, Complex.normSq_apply, Complex.sub_re, Complex.sub_im,
-      Complex.mul_re, Complex.mul_im, Complex.one_re, Complex.one_im, Complex.ofReal_re, Complex.ofReal_im]
-    ring
+  have hsq := factor_norm_sq_gap r w
   change ‖((r : ℂ) - w) / (1 - (r : ℂ) * w)‖ ≤ 1
   rw [norm_div, div_le_one (norm_pos_iff.mpr (den_ne ha ha' hz))]
   nlinarith [norm_nonneg ((r : ℂ) - w), norm_nonneg (1 - (r : ℂ) * w),
@@ -493,6 +566,156 @@ private theorem product_bound {ι : Type*} (a : ι → ℂ) (m : ι → ℕ)
         (hs.sum_le_tsum S (fun i _ ↦ mul_nonneg (Nat.cast_nonneg _) (sub_nonneg.mpr (ha' i).le)))
         (div_nonneg (by positivity) (sub_nonneg.mpr hz.le))
 
+private theorem factor_continuousOn_closed {a : ℂ} (ha : a ≠ 0) (ha' : ‖a‖ < 1) :
+    ContinuousOn (factor a) (closedBall 0 1) := by
+  intro z hz
+  let V (w : ℂ) := rotation a * w
+  have hV : ContinuousAt V z := continuousAt_const.mul continuousAt_id
+  exact ((continuousAt_const.sub hV).div (continuousAt_const.sub (continuousAt_const.mul hV))
+    (factor_den_closed ha ha' (by simpa [mem_closedBall] using hz))).continuousWithinAt
+
+private theorem factor_boundary {a z : ℂ} (ha : a ≠ 0) (ha' : ‖a‖ < 1) (hz : ‖z‖ = 1) :
+    ‖factor a z‖ = 1 := by
+  let r := ‖a‖
+  let w := rotation a * z
+  have hw : ‖w‖ = 1 := by simp [w, rotation_norm ha, hz]
+  have hsq := factor_norm_sq_gap r w
+  have he : ‖(r : ℂ) - w‖ = ‖1 - (r : ℂ) * w‖ := by
+    rw [hw] at hsq
+    nlinarith [norm_nonneg ((r : ℂ) - w), norm_nonneg (1 - (r : ℂ) * w)]
+  have hd := norm_ne_zero_iff.mpr (factor_den_closed ha ha' hz.le)
+  change ‖((r : ℂ) - w) / (1 - (r : ℂ) * w)‖ = 1
+  rw [norm_div, he, div_self hd]
+
+/-- The disk factor with zero at `a`, normalized to be positive at the origin when `a ≠ 0`. -/
+@[no_expose] def normalizedFactor (a z : ℂ) : ℂ := factor a z
+
+/-- The numerator and denominator of the normalized disk factor in a rotated coordinate. -/
+theorem normalizedFactor_apply (a z : ℂ) :
+    normalizedFactor a z =
+      let w := conj a / (‖a‖ : ℂ) * z
+      ((‖a‖ : ℂ) - w) / (1 - (‖a‖ : ℂ) * w) := (rfl)
+
+/-- Full normalized product with the specified zero multiplicities. -/
+def product {ι : Type*} (a : ι → ℂ) (m : ι → ℕ) (z : ℂ) : ℂ :=
+  ∏' i, normalizedFactor (a i) z ^ m i
+
+/-- Normalized product over the specified finite set of indices, with multiplicities. -/
+def finiteProduct {ι : Type*} (a : ι → ℂ) (m : ι → ℕ) (S : Finset ι) (z : ℂ) : ℂ :=
+  ∏ i ∈ S, normalizedFactor (a i) z ^ m i
+
+/-- Normalized product over the complement of a finite set of indices. -/
+def tail {ι : Type*} (a : ι → ℂ) (m : ι → ℕ) (S : Finset ι) (z : ℂ) : ℂ :=
+  product (fun i : {j // j ∉ S} ↦ a i.val) (fun i ↦ m i.val) z
+
+/-- The full product is holomorphic on the disk under the Blaschke summability condition. -/
+theorem analyticOnNhd_product {ι : Type*} (a : ι → ℂ) (m : ι → ℕ)
+    (ha : ∀ i, a i ≠ 0) (ha' : ∀ i, ‖a i‖ < 1)
+    (hs : Summable fun i ↦ (m i : ℝ) * (1 - ‖a i‖)) :
+    AnalyticOnNhd ℂ (product a m) (ball 0 1) :=
+  product_analytic a m ha ha' hs
+
+/-- Omitting a finite set of factors leaves a holomorphic product on the disk. -/
+theorem analyticOnNhd_tail {ι : Type*} (a : ι → ℂ) (m : ι → ℕ) (S : Finset ι)
+    (ha : ∀ i, a i ≠ 0) (ha' : ∀ i, ‖a i‖ < 1)
+    (hs : Summable fun i ↦ (m i : ℝ) * (1 - ‖a i‖)) :
+    AnalyticOnNhd ℂ (tail a m S) (ball 0 1) :=
+  analyticOnNhd_product _ _ (fun i ↦ ha i.val) (fun i ↦ ha' i.val) (hs.subtype _)
+
+/-- Every complementary product is contractive on the open unit disk. -/
+theorem norm_tail_le_one {ι : Type*} (a : ι → ℂ) (m : ι → ℕ) (S : Finset ι)
+    (ha : ∀ i, a i ≠ 0) (ha' : ∀ i, ‖a i‖ < 1)
+    (hs : Summable fun i ↦ (m i : ℝ) * (1 - ‖a i‖)) {z : ℂ} (hz : ‖z‖ < 1) :
+    ‖tail a m S z‖ ≤ 1 :=
+  (product_bound (fun i : {j // j ∉ S} ↦ a i.val) (fun i ↦ m i.val)
+    (fun i ↦ ha i.val) (fun i ↦ ha' i.val) (hs.subtype _) z hz).1
+
+/-- Finite Blaschke products extend continuously to the unit circle with modulus one. -/
+theorem finiteProduct_inner {ι : Type*} (a : ι → ℂ) (m : ι → ℕ) (S : Finset ι)
+    (ha : ∀ i, a i ≠ 0) (ha' : ∀ i, ‖a i‖ < 1) :
+    ContinuousOn (finiteProduct a m S) (closedBall 0 1) ∧
+      ∀ z ∈ sphere (0 : ℂ) 1, ‖finiteProduct a m S z‖ = 1 := by
+  refine ⟨continuousOn_finsetProd S (fun i _ ↦ (factor_continuousOn_closed (ha i) (ha' i)).pow _), ?_⟩
+  intro z hz
+  have hz' : ‖z‖ = 1 := by simpa [mem_sphere] using hz
+  rw [finiteProduct, norm_prod]
+  change ∏ i ∈ S, ‖factor (a i) z ^ m i‖ = 1
+  exact Finset.prod_eq_one fun i _ ↦ by rw [norm_pow, factor_boundary (ha i) (ha' i) hz', one_pow]
+
+/-- Restricting the index type to a finite set gives the ordinary finite product. -/
+theorem product_subtype_mem {ι : Type*} (a : ι → ℂ) (m : ι → ℕ) (S : Finset ι) :
+    product (fun j : {i // i ∈ S} ↦ a j.val) (fun j ↦ m j.val) = finiteProduct a m S := by
+  funext z
+  exact Finset.tprod_subtype S (fun i ↦ factor (a i) z ^ m i)
+
+private def factorUnit (a z : ℂ) := -rotation a / (1 - (‖a‖ : ℂ) * (rotation a * z))
+
+private theorem factor_unit_decomposition {a : ℂ} (ha : a ≠ 0) (z : ℂ) :
+    factor a z = (z - a) * factorUnit a z := by
+  have hh : ((‖a‖ : ℂ) - rotation a * z) = (z - a) * (-rotation a) := by rw [← rotation_mul ha]; ring
+  unfold factor factorUnit
+  rw [hh, mul_div_assoc]
+
+private theorem factor_unit_ne {a z : ℂ} (ha : a ≠ 0) (ha' : ‖a‖ < 1) (hz : ‖z‖ < 1) :
+    factorUnit a z ≠ 0 := by
+  apply div_ne_zero _ (den_ne ha ha' hz)
+  intro hh
+  have := rotation_norm ha
+  simp [neg_eq_zero.mp hh] at this
+
+private theorem factor_unit_analytic {a z : ℂ} (ha : a ≠ 0) (ha' : ‖a‖ < 1) (hz : ‖z‖ < 1) :
+    AnalyticAt ℂ (factorUnit a) z :=
+  analyticAt_const.div (analyticAt_const.sub (analyticAt_const.mul (analyticAt_const.mul analyticAt_id)))
+    (den_ne ha ha' hz)
+
+/-- The product is nonzero away from its specified positive-multiplicity roots. -/
+theorem product_ne_zero {ι : Type*} (a : ι → ℂ) (m : ι → ℕ)
+    (ha : ∀ i, a i ≠ 0) (ha' : ∀ i, ‖a i‖ < 1)
+    (hs : Summable (fun i ↦ (m i : ℝ) * (1 - ‖a i‖))) {z : ℂ} (hz : ‖z‖ < 1)
+    (hmiss : ∀ i, m i ≠ 0 → z ≠ a i) : product a m z ≠ 0 := by
+  let u (i : ι) := factor (a i) z ^ m i - 1
+  have he (i : ι) : 1 + u i = factor (a i) z ^ m i := by dsimp [u]; ring
+  have hn (i : ι) : 1 + u i ≠ 0 := by
+    rw [he]
+    by_cases hm : m i = 0
+    · simp [hm]
+    · rw [factor_unit_decomposition (ha i)]
+      exact pow_ne_zero _ (mul_ne_zero (sub_ne_zero.mpr (hmiss i hm)) (factor_unit_ne (ha i) (ha' i) hz))
+  let C := (1 + ‖z‖) / (1 - ‖z‖)
+  have hsum : Summable fun i ↦ ‖u i‖ := by
+    apply Summable.of_nonneg_of_le (fun i ↦ norm_nonneg _) _ (hs.mul_left C)
+    intro i
+    apply (norm_pow_sub_one _ (factor_contracts (ha i) (ha' i) hz) _).trans
+    calc
+      _ ≤ (m i : ℝ) * (C * (1 - ‖a i‖)) :=
+        mul_le_mul_of_nonneg_left (factor_close (ha i) (ha' i) le_rfl hz) (Nat.cast_nonneg _)
+      _ = _ := by ring
+  simpa only [he, product, normalizedFactor] using tprod_one_add_ne_zero_of_summable hn hsum
+
+/-- The finite product and its complementary tail recover the full product, including at zeros. -/
+theorem finiteProduct_mul_tail {ι : Type*} (a : ι → ℂ) (m : ι → ℕ) (S : Finset ι)
+    (ha : ∀ i, a i ≠ 0) (ha' : ∀ i, ‖a i‖ < 1)
+    (hs : Summable (fun i ↦ (m i : ℝ) * (1 - ‖a i‖))) (z : ℂ) (hz : z ∈ ball 0 1) :
+    finiteProduct a m S z * tail a m S z = product a m z := by
+  let F (i : ι) := factor (a i) z ^ m i
+  have hin : Multipliable (fun i : {j // j ∈ S} ↦ F i.val) := (hasProd_fintype _).multipliable
+  have hout : Multipliable (fun i : {j // j ∉ S} ↦ F i.val) :=
+    ((product_uniform (fun i : {j // j ∉ S} ↦ a i.val) (fun i ↦ m i.val)
+      (fun i ↦ ha i.val) (fun i ↦ ha' i.val) (hs.subtype _)).hasProd hz).multipliable
+  have h := Multipliable.tprod_mul_tprod_compl (s := (S : Set ι)) (f := F) hin hout
+  rw [Finset.tprod_subtype' S F] at h
+  exact h
+
+/-- Isolate the factor of a single index. Other indices are allowed to mark the same point. -/
+private theorem product_extract_factor {ι : Type*} (a : ι → ℂ) (m : ι → ℕ)
+    (ha : ∀ i, a i ≠ 0) (ha' : ∀ i, ‖a i‖ < 1)
+    (hs : Summable (fun i ↦ (m i : ℝ) * (1 - ‖a i‖))) (i : ι) :
+    product a m =ᶠ[𝓝 (a i)] fun z ↦
+      (z - a i) ^ m i * (factorUnit (a i) z ^ m i * tail a m {i} z) := by
+  filter_upwards [isOpen_ball.mem_nhds (mem_ball_zero_iff.mpr (ha' i))] with z hz
+  simpa only [finiteProduct, Finset.prod_singleton, normalizedFactor, factor_unit_decomposition (ha i),
+    mul_pow, mul_assoc] using (finiteProduct_mul_tail a m {i} ha ha' hs z hz).symm
+
 private theorem product_divisible {ι : Type*} (a : ι → ℂ) (m : ι → ℕ)
     (ha : ∀ i, a i ≠ 0) (ha' : ∀ i, ‖a i‖ < 1)
     (hs : Summable (fun i ↦ (m i : ℝ) * (1 - ‖a i‖))) (i : ι) :
@@ -500,44 +723,66 @@ private theorem product_divisible {ι : Type*} (a : ι → ℂ) (m : ι → ℕ)
       (fun z ↦ ∏' j, factor (a j) z ^ m j) =ᶠ[𝓝 (a i)]
         fun z ↦ (z - a i) ^ m i * G z := by
   classical
-  let n (j : ι) := if j = i then 0 else m j
-  have hs' : Summable (fun j ↦ (n j : ℝ) * (1 - ‖a j‖)) := by
-    apply Summable.of_nonneg_of_le (fun j ↦ mul_nonneg (Nat.cast_nonneg _) (sub_nonneg.mpr (ha' j).le)) _ hs
-    intro j
-    by_cases h : j = i
-    · simp only [n, ite_eq_left h, Nat.cast_zero, zero_mul]
-      exact mul_nonneg (Nat.cast_nonneg _) (sub_nonneg.mpr (ha' j).le)
-    · simp [n, h]
-  let D (z : ℂ) := 1 - (‖a i‖ : ℂ) * (rotation (a i) * z)
-  let V (z : ℂ) := -rotation (a i)/D z
-  let U (z : ℂ) := ∏' j, factor (a j) z ^ n j
-  have hai : a i ∈ ball (0 : ℂ) 1 := mem_ball_zero_iff.mpr (ha' i)
-  have hD : AnalyticAt ℂ D (a i) :=
-    analyticAt_const.sub (analyticAt_const.mul (analyticAt_const.mul analyticAt_id))
-  have hV : AnalyticAt ℂ V (a i) :=
-    analyticAt_const.div hD (den_ne (ha i) (ha' i) (ha' i))
-  have hU : AnalyticAt ℂ U (a i) := product_analytic a n ha ha' hs' _ hai
-  refine ⟨fun z ↦ V z ^ m i * U z, (hV.pow _).mul hU, ?_⟩
-  filter_upwards [isOpen_ball.mem_nhds hai] with z hz
-  have hu : Function.update (fun j ↦ factor (a j) z ^ m j) i 1 =
-      fun j ↦ factor (a j) z ^ n j := by
-    funext j
-    by_cases h : j = i <;> simp [h, n, Function.update_of_ne]
-  have hconv : Multipliable (Function.update (fun j ↦ factor (a j) z ^ m j) i 1) := by
-    rw [hu]
-    exact ((product_uniform a n ha ha' hs').hasProd hz).multipliable
-  rw [Multipliable.tprod_eq_mul_tprod_ite' i hconv]
-  have htail : (∏' j, if j = i then 1 else factor (a j) z ^ m j) = U z := by
-    apply tprod_congr
-    intro j
-    by_cases h : j = i <;> simp [n, h]
-  have hfac : factor (a i) z = (z - a i) * V z := by
-    have hn : ((‖a i‖ : ℂ) - rotation (a i) * z) = (z - a i) * (-rotation (a i)) := by
-      rw [← rotation_mul (ha i)]
-      ring
-    change ((‖a i‖ : ℂ) - rotation (a i) * z)/D z = (z-a i)*(-rotation (a i)/D z)
-    rw [hn, mul_div_assoc]
-  rw [htail, hfac, mul_pow, mul_assoc]
+  have hmem := mem_ball_zero_iff.mpr (ha' i)
+  refine ⟨fun z ↦ factorUnit (a i) z ^ m i * tail a m {i} z,
+    ((factor_unit_analytic (ha i) (ha' i) (ha' i)).pow (m i)).mul
+      (analyticOnNhd_tail a m {i} ha ha' hs _ hmem), ?_⟩
+  exact product_extract_factor a m ha ha' hs i
+
+/-- The product has exactly the specified multiplicity at every marked point,
+including zero multiplicities. -/
+theorem analyticOrderAt_product {ι : Type*} (a : ι → ℂ) (m : ι → ℕ)
+    (hinj : Injective a) (ha : ∀ i, a i ≠ 0) (ha' : ∀ i, ‖a i‖ < 1)
+    (hs : Summable (fun i ↦ (m i : ℝ) * (1 - ‖a i‖))) (i : ι) :
+    analyticOrderAt (product a m) (a i) = m i := by
+  classical
+  let S : Finset ι := {i}
+  let U := tail a m S
+  have hmem := mem_ball_zero_iff.mpr (ha' i)
+  have hA := analyticOnNhd_product a m ha ha' hs _ hmem
+  have hU : AnalyticAt ℂ U (a i) := analyticOnNhd_tail a m S ha ha' hs _ hmem
+  have hune : U (a i) ≠ 0 := by
+    apply product_ne_zero (fun j : {j // j ∉ S} ↦ a j.val) (fun j ↦ m j.val)
+      (fun j ↦ ha j.val) (fun j ↦ ha' j.val) (hs.subtype _) (ha' i)
+    intro j _ h
+    exact j.property (by simpa [S] using (hinj h).symm)
+  refine hA.analyticOrderAt_eq_natCast.mpr ⟨fun z ↦ factorUnit (a i) z ^ m i * U z,
+    ((factor_unit_analytic (ha i) (ha' i) (ha' i)).pow _).mul hU,
+    mul_ne_zero (pow_ne_zero _ (factor_unit_ne (ha i) (ha' i) (ha' i))) hune, ?_⟩
+  exact product_extract_factor a m ha ha' hs i
+
+/-- As the omitted sets exhaust the index type, the tails converge pointwise to one. -/
+theorem tendsto_tail {ι : Type*} (a : ι → ℂ) (m : ι → ℕ)
+    (ha : ∀ i, a i ≠ 0) (ha' : ∀ i, ‖a i‖ < 1)
+    (hs : Summable (fun i ↦ (m i : ℝ) * (1 - ‖a i‖))) {z : ℂ} (hz : ‖z‖ < 1) :
+    Tendsto (fun S ↦ tail a m S z) atTop (𝓝 1) := by
+  let C := (1 + ‖z‖) / (1 - ‖z‖)
+  let u (i : ι) := (m i : ℝ) * (1 - ‖a i‖)
+  have hmajor (S : Finset ι) : ‖tail a m S z - 1‖ ≤ C * ∑' j : {x // x ∉ S}, u j.val :=
+    (product_bound (fun j : {x // x ∉ S} ↦ a j.val) (fun j ↦ m j.val) (fun j ↦ ha _) (fun j ↦ ha' _)
+      (hs.subtype _) z hz).2
+  have hlim : Tendsto (fun S : Finset ι ↦ C * ∑' j : {x // x ∉ S}, u j.val) atTop (𝓝 0) := by
+    simpa only [mul_zero] using (tendsto_tsum_compl_atTop_zero u).const_mul C
+  exact tendsto_iff_norm_sub_tendsto_zero.mpr (squeeze_zero (fun S ↦ norm_nonneg _) hmajor hlim)
+
+/-- Any divisor satisfying the Blaschke condition has contractive holomorphic
+tail factors on the disk. The tails tend pointwise to one and have all
+prescribed zero multiplicities outside a finite set. -/
+theorem exists_holomorphic_disk_tails {ι : Type*} (a : ι → ℂ) (m : ι → ℕ)
+    (ha : ∀ i, a i ≠ 0) (ha' : ∀ i, ‖a i‖ < 1)
+    (hs : Summable (fun i ↦ (m i : ℝ) * (1 - ‖a i‖))) :
+    ∃ B : Finset ι → ℂ → ℂ,
+      (∀ S, AnalyticOnNhd ℂ (B S) (ball 0 1)) ∧
+      (∀ S z, ‖z‖ < 1 → ‖B S z‖ ≤ 1) ∧
+      (∀ z, ‖z‖ < 1 → Tendsto (fun S ↦ B S z) atTop (𝓝 1)) ∧
+      ∀ (S : Finset ι) (i : ι), i ∉ S →
+        ∃ G : ℂ → ℂ, AnalyticAt ℂ G (a i) ∧
+          B S =ᶠ[𝓝 (a i)] fun z ↦ (z - a i) ^ m i * G z := by
+  refine ⟨tail a m, fun S ↦ analyticOnNhd_tail a m S ha ha' hs,
+    fun S _ hz ↦ norm_tail_le_one a m S ha ha' hs hz, fun _ hz ↦ tendsto_tail a m ha ha' hs hz, ?_⟩
+  intro S i hi
+  exact product_divisible (fun j : {j // j ∉ S} ↦ a j.val) (fun j ↦ m j.val)
+    (fun j ↦ ha j.val) (fun j ↦ ha' j.val) (hs.subtype _) ⟨i, hi⟩
 
 /-- The normalized Blaschke tails are contractive. Their distance from one is
 bounded by the disk distortion times the remaining Blaschke mass, uniformly
@@ -567,28 +812,5 @@ theorem exists_holomorphic_disk_tails_bound {ι : Type*} (a : ι → ℂ) (m : �
   refine ⟨tail, hA, fun S z hz ↦ (hbound S z hz).1, fun S z hz ↦ (hbound S z hz).2, ?_⟩
   intro S i hi
   exact product_divisible (ar S) (mult S) (hn S) (hlt S) (hconv S) ⟨i, hi⟩
-
-/-- Any divisor satisfying the Blaschke condition has contractive holomorphic
-tail factors on the disk. The tails tend pointwise to one and have all
-prescribed zero multiplicities outside a finite set. -/
-theorem exists_holomorphic_disk_tails {ι : Type*} (a : ι → ℂ) (m : ι → ℕ)
-    (ha : ∀ i, a i ≠ 0) (ha' : ∀ i, ‖a i‖ < 1)
-    (hs : Summable (fun i ↦ (m i : ℝ) * (1 - ‖a i‖))) :
-    ∃ B : Finset ι → ℂ → ℂ,
-      (∀ S, AnalyticOnNhd ℂ (B S) (ball 0 1)) ∧
-      (∀ S z, ‖z‖ < 1 → ‖B S z‖ ≤ 1) ∧
-      (∀ z, ‖z‖ < 1 → Tendsto (fun S ↦ B S z) atTop (𝓝 1)) ∧
-      ∀ (S : Finset ι) (i : ι), i ∉ S →
-        ∃ G : ℂ → ℂ, AnalyticAt ℂ G (a i) ∧
-          B S =ᶠ[𝓝 (a i)] fun z ↦ (z - a i) ^ m i * G z := by
-  obtain ⟨B, hA, hb, herr, hv⟩ := exists_holomorphic_disk_tails_bound a m ha ha' hs
-  refine ⟨B, hA, hb, ?_, hv⟩
-  intro z hz
-  let C := (1 + ‖z‖) / (1 - ‖z‖)
-  let u (i : ι) := (m i : ℝ) * (1 - ‖a i‖)
-  have hlim : Tendsto (fun S : Finset ι ↦ C * ∑' j : {x // x ∉ S}, u j.val) atTop (𝓝 0) := by
-    simpa only [mul_zero] using (tendsto_tsum_compl_atTop_zero u).const_mul C
-  exact tendsto_iff_norm_sub_tendsto_zero.mpr
-    (squeeze_zero (fun S ↦ norm_nonneg _) (fun S ↦ herr S z hz) hlim)
 
 end RiemannMasullo.Blaschke

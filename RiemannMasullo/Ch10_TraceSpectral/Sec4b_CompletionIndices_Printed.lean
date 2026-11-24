@@ -32,7 +32,7 @@ local notation "C₁[" F "]" => (ideleClassNorm F).ker
 local notation "m[" F "]" =>
   (⟨ideleClassNorm F, (isProperMap_ideleClassNorm F).continuous⟩ : C[F] →ₜ* ℝ≥0ˣ)
 local notation "μ[" F "]" => ideleClassTamagawaMeasure F
-local notation "logNorm[" F "]" => fun g : C[F] ↦ Real.log ((ideleClassNorm F g).val : ℝ)
+local notation "logNorm[" F "]" => (logIdeleClassNorm F)
 local notation "E[" F ", " ω "]" =>
   ↥(modulatedDecayIsotype m[F] univ (mem_univ (0 : ℝ)) ω)
 local notation "W[" F ", " s "]" =>

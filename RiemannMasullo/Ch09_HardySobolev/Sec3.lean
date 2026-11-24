@@ -2154,7 +2154,7 @@ private theorem fourier_isotypic_average (K : Subgroup G) [CompactSpace K]
 
 /-- The characters trivial on the compact kernel form an open real line. Its
 coordinate is normalized so the character at t is exp(i t log m). -/
-theorem exists_modulatedFrequencyLine (hm : IsModulation m) (hms : Surjective m) :
+private theorem exists_frequency_line (hm : IsModulation m) (hms : Surjective m) :
     ∃ e : Multiplicative ℝ ≃ₜ* lcaAnnihilator m.toMonoidHom.ker,
       ∀ (t : ℝ) g, (e (Multiplicative.ofAdd t)).val g = Circle.exp (t * Real.log ((m g).val : ℝ)) := by
   obtain ⟨j, hj⟩ := exists_fullModulationSection m hm hms
@@ -2194,6 +2194,13 @@ theorem exists_modulatedFrequencyLine (hm : IsModulation m) (hms : Surjective m)
   congr 1
   change c * (c⁻¹ * t * _) = _
   rw [mul_assoc c⁻¹, mul_inv_cancel_left₀ hc]
+
+/-- The characters trivial on the compact kernel form an open real line. Its
+coordinate is normalized so the character at t is exp(i t log m). -/
+theorem exists_modulatedFrequencyLine (hm : IsModulation m) (hms : Surjective m) :
+    ∃ e : Multiplicative ℝ ≃ₜ* lcaAnnihilator m.toMonoidHom.ker,
+      ∀ (t : ℝ) g, (e (Multiplicative.ofAdd t)).val g = Circle.exp (t * Real.log ((m g).val : ℝ)) :=
+  exists_frequency_line m hm hms
 
 /-- A compact set of frequencies with a fixed restriction to the kernel
 lies in a bounded interval in the corresponding real frequency line. -/
@@ -3007,7 +3014,7 @@ theorem IsSmoothModulatedCutoff.continuous {Λ ε : ℝ} {ρ : G → ℝ}
 omit [MeasurableSpace G] [BorelSpace G] [SecondCountableTopology G] in
 /-- A smooth function of the logarithmic module is Bruhat smooth. On each
 structural quotient, compose the descended positive quasi-character with log. -/
-private theorem isBruhatSmooth_logProfile (m : G →ₜ* ℝ≥0ˣ) {f : ℝ → ℝ}
+theorem isBruhatSmooth_logProfile (m : G →ₜ* ℝ≥0ˣ) {f : ℝ → ℂ}
     (hf : ContDiff ℝ ∞ f) :
     IsBruhatSmooth (fun x ↦ (f (Real.log ((m x).val : ℝ)) : ℂ)) := by
   let χ : QuasiCharacter G :=
@@ -3029,8 +3036,8 @@ private theorem isBruhatSmooth_logProfile (m : G →ₜ* ℝ≥0ˣ) {f : ℝ →
   refine ⟨fun y ↦ (f (Real.log (q y).re) : ℂ),
     fun x ↦ congrArg (fun z : ℂ ↦ (f (Real.log z.re) : ℂ)) (hq x), ?_⟩
   intro e z b
-  exact Complex.ofRealCLM.contDiff.comp ((hf.of_le (by simp)).comp
-    ((Complex.reCLM.contDiff.comp (hdiff e z b)).log fun x ↦ (hpos _).ne'))
+  exact (hf.of_le (by simp)).comp
+    ((Complex.reCLM.contDiff.comp (hdiff e z b)).log fun x ↦ (hpos _).ne')
 
 /-- Paper: Definition 9.3.3.1, p. 427. A positive real modulation admits a
 smooth cutoff with outer radius two and width one quarter.
@@ -3049,7 +3056,7 @@ theorem exists_smoothModulatedCutoff_radius_two (_hm : IsModulation m) (_hms : S
     simp [r, B.rIn_pos.le]
   refine ⟨ρ, ⟨by norm_num, by norm_num, by norm_num, by norm_num,
     fun _ ↦ B.nonneg, fun x ↦ (abs_of_nonneg (B.nonneg (x := Real.log (r x)))) ▸ B.le_one,
-    ?_, ?_, ?_, ?_, ?_⟩, isBruhatSmooth_logProfile m B.contDiff⟩
+    ?_, ?_, ?_, ?_, ?_⟩, isBruhatSmooth_logProfile m (Complex.ofRealCLM.contDiff.comp B.contDiff)⟩
   · exact IsGreatest.csSup_eq ⟨⟨1, h1⟩, forall_mem_range.mpr fun _ ↦ B.le_one⟩
   · refine ⟨fun t ↦ B (Real.log t), ∅, fun _ ↦ rfl, by simp, ?_, by simp⟩
     simp only [Finset.coe_empty, sdiff_empty]
