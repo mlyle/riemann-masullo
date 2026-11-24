@@ -1,7 +1,7 @@
 module
 
 public import RiemannMasullo.Research.TraceComparison.RationalAnnularLimits
-public import RiemannMasullo.Research.TraceComparison.GeometricWidthLimit
+public import RiemannMasullo.Research.TraceComparison.GeometricWidthContinuity
 public import RiemannMasullo.Research.TraceComparison.RationalComparisonData
 public import RiemannMasullo.Research.StripNuclearity.RationalRealAnnihilator
 
@@ -165,5 +165,36 @@ theorem rational_allWidths_annular_geometric_comparison_iff_riemannHypothesis
     have he : diagonal(φ,hα,hs,U) = 0 := criterion.mpr rh α hα f hf hc hI φ hφ
     rw [he]
     exact rational_annularTrace_realAnnihilator_tendsto_zero f hf hc ha hI φ hφ B hB D hD
+
+
+/-- Paper: Section 12.3, p. 514, and (12.5.1.4), p. 520. For a rational
+prime-free radial test, continuity in the half-width of its actual projected
+diagonal suffices to compare it with the polar-corrected annular local
+trace at every positive half-width. Conversely, comparison at every width
+implies continuity.
+Deviation: The reference value is calibrated by the wide rational contour
+formula, and the annular cutoff uses lower radius t⁻³. -/
+theorem rational_continuous_diagonal_iff_annular_comparison (g : ℝ → ℂ)
+    (hg : ContDiff ℝ (∞) g) (hc : HasCompactSupport g) {a b s : ℝ}
+    (ha : 0 < a) (hb : b < Real.log 2) (hI : tsupport g ⊆ Icc a b) (hs : 3 ≤ s)
+    (φ : BruhatCompactSupport Cℚ) (hφ : radial(φ,g)) (B : BruhatCompactSupport I₀) (hB : lifts(B,φ))
+    (D : Set I₀) (hD : IsFundamentalDomain H₀ D μI)
+    (U : ℕ → Set Cℚ) (hU : IsDPrimeSequence μF U) (hm : ∀ n, MeasurableSet (U n)) :
+    let d (α : Ioi (0 : ℝ)) := centeredStripGeometricDiagonalIntegral φ α.property hs U
+    Continuous d ↔ ∀ α, Tendsto (fun t : ℝ ↦ localTrace(B,D,t) - polar(g)) atTop (𝓝 (d α)) := by
+  intro d
+  let half : Ioi (0:ℝ) := ⟨1/2, half_pos zero_lt_one⟩
+  have h₀ : g 0 = 0 := image_eq_zero_of_notMem_tsupport fun ht ↦ (not_le.mpr ha) (hI ht).1
+  have crit : Continuous d ↔ ∀ α, d α = d half :=
+    continuous_centeredStripDiagonalIntegral_iff_eq_wide φ (rational_vanishes_on_kernel g h₀ φ hφ)
+      hs (fun _ ↦ U) (fun _ ↦ hU) (fun _ ↦ hm)
+  have hw : Tendsto (fun t : ℝ ↦ localTrace(B,D,t) - polar(g)) atTop (𝓝 (d half)) :=
+    rational_annularTrace_tendsto_wide_geometric_diagonal g hg hc ha hb hI (α:=1/2) le_rfl hs φ hφ B hB D hD U hU hm
+  constructor
+  · intro h α
+    rw [crit.mp h α]
+    exact hw
+  · intro h
+    exact crit.mpr fun α ↦ tendsto_nhds_unique (h α) hw
 
 end RiemannMasullo
