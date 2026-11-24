@@ -727,12 +727,744 @@ private theorem sLocalZetaPair_range_le_matching (χ : PontryaginDual Jₛ) :
     _ = ρₛ(χ, s) * (sLocalZetaPair (F := F) (S := S) χ (Submodule.Quotient.mk f)).2.val s :=
         congrArg _ (h₂ hs.2).symm
 
-/-- Every matching pair has its first Bergman datum realized by an S-local test: this is
-the existence step of the range description, where the rapid decay estimates of (5.4.1.2)
-produce a test whose zeta transform has the prescribed values on the right half-plane. -/
+/-- Fourier–Mellin inversion and the radial lift of Lemma 5.3.4.3 realize an entire
+Schwartz–Bergman datum on any unitary chart. The radial integral calculation is from
+`polarFree_zeta_of_radial` and `polarFree_zeta_twist` in §5.3. -/
+private theorem sLocalZetaPair_first_component_attained_entire (χ : PontryaginDual Jₛ)
+    (H : SchwartzBergman univ) :
+    ∃ f : ℬₛ, EqOn H.val (fun z ↦ Zₛ f (normChart(χ) z)) rightHalf := by
+  let r (w : {w : InfinitePlace F // w.IsReal}) :=
+    (⟨InfinitePlace.Completion.ringEquivRealOfIsReal w.property,
+      (InfinitePlace.Completion.isometryEquivRealOfIsReal w.property).toHomeomorph.isHomeomorph⟩ :
+      {e : w.val.Completion ≃+* ℝ // IsHomeomorph (e : w.val.Completion → ℝ)})
+  let c (w : {w : InfinitePlace F // w.IsComplex}) :=
+    (⟨InfinitePlace.Completion.ringEquivComplexOfIsComplex w.property,
+      (InfinitePlace.Completion.isometryEquivComplexOfIsComplex w.property).toHomeomorph.isHomeomorph⟩ :
+      {e : w.val.Completion ≃+* ℂ // IsHomeomorph (e : w.val.Completion → ℂ)})
+  let M := positiveRealFourierMellin univ isOpen_univ ordConnected_univ univ_nonempty
+  let φ := M.symm H
+  obtain ⟨g, hg⟩ := sLocalHomogeneousTheta_trivial_exists_polarFree (S := S) r c φ
+  obtain ⟨A, hA⟩ := sAdelePolarFree_quasiCharacter_mul (S := S) r c
+    ((⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp χ⁻¹)
+  refine ⟨(A g).val, fun z hz ↦ ?_⟩
+  let π := Units.map (adeleProjection F S).toMonoidHom
+  have hπ : Continuous π := (continuous_fst.prodMk (continuous_pi fun v : S ↦
+    (RestrictedProduct.continuous_eval v.val).comp continuous_snd)).units_map _
+  let τ : ℝ≥0ˣ →ₜ* Aₛˣ := ⟨π.comp (canonicalIdeleNormSection F),
+    hπ.comp (canonicalIdeleNormSection_continuous F)⟩
+  have hτ : RightInverse τ (sIdeleNorm F S) := sIdeleNorm_project_canonicalSection F S
+  have hM := positiveRealFourierMellin_apply univ isOpen_univ ordConnected_univ univ_nonempty φ z trivial
+  change (M φ).val z = _ at hM
+  rw [M.apply_symm_apply H] at hM
+  refine hM.trans <| Eq.trans ?_ ((sLocalRadialMellinIntegral_eq_theta τ hτ g.val 1 z hz).trans
+    ((sLocalThetaMellinIntegral_eq_zeta g.val ⟨1, z, hz, rfl⟩).trans ?_))
+  · let e : ℝ ≃ₜ ℝ≥0ˣ := Real.expOrderIso.toHomeomorph.trans (Nonneg.unitsHomeomorphPos ℝ).symm
+    let : BorelSpace ℝ≥0ˣ := borelSpace_units_of_continuousInv₀ ℝ≥0
+    have hμ : positiveRealHaar = volume.map e := by
+      apply congrArg (fun h : ℝ → ℝ≥0ˣ ↦ volume.map h)
+      funext x
+      exact Units.ext (NNReal.eq (Real.coe_toNNReal _ (Real.exp_pos x).le))
+    rw [sLocalRadialMellinIntegral, hμ, e.measurableEmbedding.integral_map, mellin, ← integral_comp_exp]
+    apply integral_congr_ae (.of_forall fun x ↦ ?_)
+    let u : Jₛ := QuotientGroup.mk (τ (e x))
+    change _ = φω((1 : PontryaginDual J₁)) g.val u * (1 * (normℝ(mₛ u) : ℂ) ^ z)
+    rw [hg, show mₛ u = e x from hτ _, one_mul]
+    change _ = φ.val (Real.log (Real.exp x)) * (Real.exp x : ℂ) ^ z
+    simp only [Real.log_exp, Complex.real_smul, smul_eq_mul]
+    rw [Complex.cpow_def_of_ne_zero (by exact_mod_cast (Real.exp_pos x).ne'),
+      Complex.cpow_def_of_ne_zero (by exact_mod_cast (Real.exp_pos x).ne'),
+      ← Complex.ofReal_log (Real.exp_pos x).le, Real.log_exp]
+    simp only [Complex.ofReal_exp, ← mul_assoc, ← Complex.exp_add]
+    rw [mul_comm (φ.val x)]
+    congr 2
+    ring
+  · refine Eq.trans ?_ (sLocalIdelicZFunction_eq_integral (A g).val ⟨χ, z, hz, rfl⟩).symm
+    unfold sLocalIdelicZetaIntegral
+    apply integral_congr_ae (.of_forall fun u ↦ ?_)
+    rw [hA g u]
+    let x : Jₛ := QuotientGroup.mk u
+    change g.val _ * (1 * (normℝ(mₛ x) : ℂ) ^ z) =
+      (((χ x)⁻¹ : Circle) : ℂ) * g.val _ * ((χ x : ℂ) * (normℝ(mₛ x) : ℂ) ^ z)
+    rw [Circle.coe_inv, one_mul]
+    field_simp [Circle.coe_ne_zero]
+
+/-- The finite Euler denominators used to estimate a pole-free remainder have imaginary
+periods. This is the periodicity calculation of §5.3, `finiteEulerInverse_periodic`. -/
+private theorem sLocalZetaPair_first_component_attained_euler
+    (η : PontryaginDual (IdeleClassGroup (𝓞 F) F)) (v : HeightOneSpectrum (𝓞 F)) :
+    let D := fun z ↦ (finiteHeckeEulerFactor η v z)⁻¹
+    Differentiable ℂ D ∧ (∃ z, D z ≠ 0) ∧ ∃ T : ℝ, 0 < T ∧ Periodic D ((T : ℂ) * Complex.I) := by
+  classical
+  let q : ℝ := v.asIdeal.absNorm
+  have hq : 1 < q := by dsimp [q]; exact_mod_cast HeightOneSpectrum.one_lt_absNorm v
+  have hq₀ : (q : ℂ) ≠ 0 := Complex.ofReal_ne_zero.mpr (zero_lt_one.trans hq).ne'
+  let T := 2 * Real.pi / Real.log q
+  have hT : (q : ℂ) ^ ((T : ℂ) * Complex.I) = 1 := by
+    rw [Complex.cpow_def_of_ne_zero hq₀, ← Complex.ofReal_log (zero_lt_one.trans hq).le]
+    have h : (Real.log q : ℂ) * ((T : ℂ) * Complex.I) = 2 * Real.pi * Complex.I := by
+      dsimp [T]
+      push_cast
+      field_simp [(Real.log_pos hq).ne']
+    rw [h, Complex.exp_two_pi_mul_I]
+  dsimp only
+  unfold finiteHeckeEulerFactor
+  split_ifs
+  · simp only [inv_inv]
+    let c := (ideleClassNormTwist η 0).localValue v
+    change Differentiable ℂ (fun z : ℂ ↦ 1 - c * (q : ℂ) ^ (-z)) ∧ _
+    refine ⟨((differentiable_neg.const_cpow (Or.inl hq₀)).const_mul c).const_sub 1,
+      ⟨1, ?_⟩, T, div_pos (by positivity) (Real.log_pos hq), fun z ↦ ?_⟩
+    · apply sub_ne_zero.mpr
+      intro he
+      have hn := congrArg norm he
+      change ‖(1 : ℂ)‖ = ‖c * (q : ℂ) ^ (-(1 : ℂ))‖ at hn
+      rw [norm_one, norm_mul, norm_ideleClassNormTwist_zero_localValue, one_mul,
+        Complex.cpow_neg, Complex.cpow_one, norm_inv, Complex.norm_real, Real.norm_of_nonneg (zero_lt_one.trans hq).le] at hn
+      exact (inv_lt_one_of_one_lt₀ hq).ne' hn
+    · change 1 - c * (q : ℂ) ^ (-(z + _)) = 1 - c * (q : ℂ) ^ (-z)
+      rw [neg_add, Complex.cpow_add _ _ hq₀, Complex.cpow_neg _ ((T : ℂ) * Complex.I), hT, inv_one, mul_one]
+  · simp only [inv_one]
+    exact ⟨differentiable_const _, ⟨0, one_ne_zero⟩, 1, zero_lt_one, fun _ ↦ rfl⟩
+
+/-- At large height on the left of the critical line, clearing the finite Euler
+denominators bounds the Tate factor. The reflected gamma ratio has nonpositive
+growth exponent there. The estimate holds away from its discrete exceptional set. -/
+private theorem sLocalZetaPair_first_component_attained_cleared_bound
+    (χ : PontryaginDual Jₛ) (η : PontryaginDual (IdeleClassGroup (𝓞 F) F))
+    (hr : ideleClassNormTwist η 0 ∈ unramifiedOutside F S)
+    (he : sIdeleRestriction F S ⟨ideleClassNormTwist η 0, hr⟩ = normChart(χ) 0) (a : ℝ) :
+    ∃ C ≥ (0 : ℝ), ∃ T : ℝ, ∀ᶠ z in codiscrete ℂ, z.re ∈ Icc a (1 / 2) → T ≤ |z.im| →
+      ‖(∏ v : S, (finiteHeckeEulerFactor η v.val z)⁻¹) * ρₛ(χ, z)‖ ≤ C := by
+  obtain ⟨A, T, hA, _, hΓ⟩ := heckeGamma_reflection_bound η⁻¹ (1 / 2) (1 - a)
+  obtain ⟨E, hE, hε⟩ := rhoGrowth_epsilon_bound χ a (1 / 2)
+  obtain ⟨B, hB, hD⟩ := rhoGrowth_finite_bound (S := S) η⁻¹ (1 / 2) (by norm_num)
+  refine ⟨E * A * B, by positivity, max T 1, ?_⟩
+  filter_upwards [sLocalRhoFactor_eq_epsilon_mul χ] with z hρ
+  intro hz ht
+  have hre : (1 - z).re = 1 - z.re := by simp
+  have him : |(1 - z).im| = |z.im| := by simp
+  have hw : 1 / 2 ≤ (1 - z).re := by rw [hre]; linarith [hz.2]
+  have hg := hΓ (1 - z) hw (by rw [hre]; linarith [hz.1]) (him ▸ (le_max_left _ _).trans ht)
+  rw [inv_inv, sub_sub_cancel, him] at hg
+  have hb := hg.trans (mul_le_of_le_one_right hA.le (Real.rpow_le_one_of_one_le_of_nonpos
+    ((le_max_right _ _).trans ht) (mul_nonpos_of_nonneg_of_nonpos (Nat.cast_nonneg _) (sub_nonpos.mpr hw))))
+  dsimp only at hρ
+  rw [sLocalNormTwistChart_dual, sLocalHeckeL_eq_partialEulerProduct χ η hr he,
+    rhoGrowth_dual_lift χ η hr he, mul_div_mul_comm] at hρ
+  rw [Finset.prod_inv_distrib, hρ]
+  by_cases hzero : (∏ v : S, finiteHeckeEulerFactor η v.val z) = 0
+  · simp only [hzero, inv_zero, zero_mul, norm_zero]
+    positivity
+  · rw [show (∏ v : S, finiteHeckeEulerFactor η v.val z)⁻¹ * _ =
+        sLocalEpsilonFactor (normChart(χ) z) *
+          (heckeGammaFactor η z / heckeGammaFactor η⁻¹ (1 - z)) *
+          (∏ v : S, finiteHeckeEulerFactor η⁻¹ v.val (1 - z))⁻¹ by
+        simp only [div_eq_mul_inv]; field_simp [hzero]]
+    rw [norm_mul, norm_mul]
+    exact mul_le_mul (mul_le_mul (hε z hz) hb (norm_nonneg _) hE) (hD _ hw).2
+      (norm_nonneg _) (mul_nonneg hE hA.le)
+
+/-- An entire continuation of a matching pair decays rapidly even on strips crossing
+the poles of the Tate factor. Estimate the cleared product, then divide out each
+periodic denominator by the maximum modulus principle of §5.3. -/
+private theorem sLocalZetaPair_first_component_attained_strips (χ : PontryaginDual Jₛ)
+    (p : B⁺ × B⁻) (H : ℂ → ℂ) (hd : Differentiable ℂ H) (hR : EqOn H p.1.val rightHalf)
+    (hL : ∀ z ∈ leftHalf, H =ᶠ[𝓝[≠] z] fun w ↦ ρₛ(χ, w) * p.2.val w) :
+    H ∈ schwartzBergmanSubmodule univ := by
+  classical
+  obtain ⟨η, hr, he, _⟩ := sLocal_character_extension χ
+  let D (v : S) (z : ℂ) := (finiteHeckeEulerFactor η v.val z)⁻¹
+  have hD (v : S) := sLocalZetaPair_first_component_attained_euler η v.val
+  apply schwartzBergman_of_periodic_prod (Finset.univ : Finset S) D hd (fun v _ ↦ hD v)
+  have hprod : Differentiable ℂ (fun z ↦ ∏ v : S, D v z) :=
+    Differentiable.fun_finsetProd fun v _ ↦ (hD v).1
+  refine ⟨fun z hz ↦ (hz trivial).elim, (hprod.mul hd).differentiableOn, ?_⟩
+  intro a b hab _ N
+  obtain ⟨C, hC, T, hleft⟩ := sLocalZetaPair_first_component_attained_cleared_bound χ η hr he (min a 0 - 1)
+  obtain ⟨B, hB, hpos⟩ := rhoGrowth_finite_bound (S := S) η (1 / 3) (by norm_num)
+  obtain ⟨P, hP⟩ := p.1.property.2.2 (1 / 3) (max b 1) (by linarith [le_max_right b 1])
+    (fun x hx ↦ lt_of_lt_of_le (by norm_num : (0 : ℝ) < 1 / 3) hx.1) N
+  obtain ⟨Q, hQ⟩ := p.2.property.2.2 (min a 0 - 1) (1 / 2) (by linarith [min_le_right a 0])
+    (fun x hx ↦ lt_of_le_of_lt hx.2 (by norm_num : (1 : ℝ) / 2 < 1)) N
+  let W (z : ℂ) := z ^ N * ((∏ v : S, D v z) * H z)
+  have hc : Continuous W := (continuous_id.pow N).mul (hprod.continuous.mul hd.continuous)
+  obtain ⟨M, hM⟩ := (isCompact_Icc (a := a) (b := b) |>.reProdIm
+    (isCompact_Icc (a := -T) (b := T))).exists_bound_of_continuousOn hc.continuousOn
+  refine ⟨max M (max (B * max P 0) (C * max Q 0)), ?_⟩
+  rintro _ ⟨z, hz, rfl⟩
+  change ‖W z‖ ≤ _
+  by_cases ht : |z.im| ≤ T
+  · exact (hM z ⟨hz, abs_le.mp ht⟩).trans (le_max_left _ _)
+  apply le_trans _ (le_max_right _ _)
+  by_cases hx : 1 / 3 ≤ z.re
+  · apply le_trans _ (le_max_left _ _)
+    have hPz := hP (mem_image_of_mem _ (show z ∈ Complex.re ⁻¹' Icc (1 / 3) (max b 1) from
+      ⟨hx, hz.2.trans (le_max_left _ _)⟩))
+    have hDz := (hpos z hx).2
+    rw [← Finset.prod_inv_distrib] at hDz
+    change ‖z ^ N * ((∏ v : S, D v z) * H z)‖ ≤ _
+    rw [mul_left_comm, hR (lt_of_lt_of_le (by norm_num : (0 : ℝ) < 1 / 3) hx), norm_mul]
+    exact mul_le_mul hDz (hPz.trans (le_max_left _ _)) (norm_nonneg _) (by linarith)
+  · apply le_trans _ (le_max_right _ _)
+    have hzL : z ∈ leftHalf := lt_trans (lt_of_not_ge hx) (by norm_num)
+    have hnear : ∀ᶠ w in 𝓝 z, min a 0 - 1 < w.re ∧ w.re < 1 / 2 ∧ T < |w.im| := by
+      filter_upwards [(isOpen_lt continuous_const Complex.continuous_re).mem_nhds
+        (show min a 0 - 1 < z.re by linarith [min_le_left a 0, hz.1]),
+        (isOpen_lt Complex.continuous_re continuous_const).mem_nhds
+        (show z.re < 1 / 2 by linarith [lt_of_not_ge hx]),
+        (isOpen_lt continuous_const Complex.continuous_im.abs).mem_nhds (lt_of_not_ge ht)]
+        with w h₁ h₂ h₃ using ⟨h₁, h₂, h₃⟩
+    apply le_of_tendsto (hc.norm.continuousAt.continuousWithinAt (s := {z}ᶜ))
+    filter_upwards [nhdsNE_le_codiscrete z hleft, hL z hzL, nhdsWithin_le_nhds hnear] with w h hw hstrip
+    have hs : w.re ∈ Icc (min a 0 - 1) (1 / 2) := ⟨hstrip.1.le, hstrip.2.1.le⟩
+    have hQw := hQ (mem_image_of_mem _ (show w ∈ Complex.re ⁻¹' Icc (min a 0 - 1) (1 / 2) from hs))
+    change ‖w ^ N * ((∏ v : S, D v w) * H w)‖ ≤ _
+    rw [hw, show w ^ N * ((∏ v : S, D v w) * (ρₛ(χ, w) * p.2.val w)) =
+      ((∏ v : S, D v w) * ρₛ(χ, w)) * (w ^ N * p.2.val w) by ring, norm_mul]
+    exact mul_le_mul (h hs hstrip.2.2.le) (hQw.trans (le_max_left _ _)) (norm_nonneg _) hC
+
+/-- Glue the right component to the corrected left component. Removing the poles in
+meromorphic normal form produces an entire function with the original right restriction. -/
+private theorem sLocalZetaPair_first_component_attained_remove_poles (χ : PontryaginDual Jₛ)
+    (p : B⁺ × B⁻) (hp : p ∈ sLocalZetaMatching (F := F) (S := S) χ)
+    (hord : ∀ z : ℂ, z ∈ leftHalf →
+      0 ≤ meromorphicOrderAt (fun w ↦ ρₛ(χ, w) * p.2.val w) z) :
+    ∃ H : SchwartzBergman univ, EqOn H.val p.1.val rightHalf := by
+  classical
+  let L := fun w ↦ ρₛ(χ, w) * p.2.val w
+  let G := (rightHalf).piecewise p.1.val L
+  have hright : IsOpen rightHalf := isOpen_Ioi.preimage Complex.continuous_re
+  have hleft : IsOpen leftHalf := isOpen_Iio.preimage Complex.continuous_re
+  have hR {z : ℂ} (hz : z ∈ rightHalf) : G =ᶠ[𝓝 z] p.1.val :=
+    Filter.eventually_of_mem (hright.mem_nhds hz) fun _ hw ↦ piecewise_eq_of_mem _ _ _ hw
+  have hL {z : ℂ} (hz : z ∈ leftHalf) : G =ᶠ[𝓝 z] L := by
+    filter_upwards [hleft.mem_nhds hz] with w hw
+    by_cases hw' : w ∈ rightHalf
+    · exact (piecewise_eq_of_mem _ _ _ hw').trans ((mem_sLocalZetaMatching χ p).mp hp ⟨hw', hw⟩)
+    · exact piecewise_eq_of_notMem _ _ _ hw'
+  have ha := p.1.property.2.1.analyticOnNhd hright
+  have hb := p.2.property.2.1.analyticOnNhd hleft
+  have hρ := sLocalRhoFactor_meromorphic χ
+  have hm : MeromorphicOn G univ := by
+    intro z _
+    by_cases hz : 0 < z.re
+    · exact (ha z hz).meromorphicAt.congr ((hR hz).symm.filter_mono nhdsWithin_le_nhds)
+    · have hz' : z ∈ leftHalf := lt_of_le_of_lt (le_of_not_gt hz) zero_lt_one
+      exact ((hρ z).mul (hb z hz').meromorphicAt).congr ((hL hz').filter_mono nhdsWithin_le_nhds).symm
+  let H := toMeromorphicNFOn G univ
+  have hHG (z : ℂ) : H =ᶠ[𝓝[≠] z] G := hm.toMeromorphicNFOn_eq_self_on_nhdsNE (mem_univ z)
+  have hH (z : ℂ) : AnalyticAt ℂ H z := by
+    apply (meromorphicNFOn_toMeromorphicNFOn G univ (mem_univ z)).meromorphicOrderAt_nonneg_iff_analyticAt.mp
+    rw [meromorphicOrderAt_congr (hHG z)]
+    by_cases hz : 0 < z.re
+    · rw [meromorphicOrderAt_congr ((hR hz).filter_mono nhdsWithin_le_nhds)]
+      exact (ha z hz).meromorphicOrderAt_nonneg
+    · have hz' : z ∈ leftHalf := lt_of_le_of_lt (le_of_not_gt hz) zero_lt_one
+      rw [meromorphicOrderAt_congr ((hL hz').filter_mono nhdsWithin_le_nhds)]
+      exact hord z hz'
+  have hHR : EqOn H p.1.val rightHalf := by
+    intro z hz
+    exact (((hH z).continuousAt.eventuallyEq_nhds_iff_eventuallyEq_nhdsNE
+      (ha z hz).continuousAt).mp ((hHG z).trans ((hR hz).filter_mono nhdsWithin_le_nhds))).eq_of_nhds
+  exact ⟨⟨H, sLocalZetaPair_first_component_attained_strips χ p H (fun z ↦ (hH z).differentiableAt)
+    hHR (fun z hz ↦ (hHG z).trans ((hL hz).filter_mono nhdsWithin_le_nhds))⟩, hHR⟩
+
+/-- Outside a compact transition interval, each weighted smooth cutoff is either zero
+or a decaying exponential. All its derivatives are bounded. -/
+private theorem sLocalZetaPair_first_component_attained_cutoff (θ : ℝ → ℝ)
+    (hθ : ContDiff ℝ (⊤ : ℕ∞) θ) (t : ℝ)
+    (htail : ∀ x ∉ Icc (0 : ℝ) 1, θ =ᶠ[𝓝 x] (fun _ ↦ 0) ∨
+      (θ =ᶠ[𝓝 x] (fun _ ↦ 1) ∧ t * x ≤ 0)) :
+    (fun x ↦ Real.exp (t * x) * θ x).HasTemperateGrowth := by
+  let h (x : ℝ) := Real.exp (t * x) * θ x
+  have hd : ContDiff ℝ (⊤ : ℕ∞) h := ((contDiff_const.mul contDiff_id).exp).mul hθ
+  refine ⟨hd, fun n ↦ ?_⟩
+  obtain ⟨C, hC⟩ := isCompact_Icc (a := (0 : ℝ)) (b := 1) |>.exists_bound_of_continuousOn
+    (hd.continuous_iteratedFDeriv (m := n) (by simp)).continuousOn
+  refine ⟨0, max C (|t| ^ n), fun x ↦ ?_⟩
+  simp only [pow_zero, mul_one]
+  by_cases hx : x ∈ Icc (0 : ℝ) 1
+  · exact (hC x hx).trans (le_max_left _ _)
+  rw [norm_iteratedFDeriv_eq_norm_iteratedDeriv]
+  apply le_trans _ (le_max_right _ _)
+  rcases htail x hx with hzero | ⟨hone, htx⟩
+  · have hh : h =ᶠ[𝓝 x] (fun _ ↦ 0) := hzero.mono fun y hy ↦ by simp [h, hy]
+    rw [hh.iteratedDeriv_eq n]
+    change ‖iteratedDeriv n (0 : ℝ → ℝ) x‖ ≤ _
+    rw [iteratedDeriv_const_zero, norm_zero]
+    positivity
+  · have hh : h =ᶠ[𝓝 x] (fun y ↦ Real.exp (t*y)) := hone.mono fun y hy ↦ by simp [h, hy]
+    rw [hh.iteratedDeriv_eq n, iteratedDeriv_exp_const_mul, Real.norm_eq_abs, abs_mul, abs_pow,
+      abs_of_pos (Real.exp_pos _)]
+    exact mul_le_of_le_one_right (by positivity) (Real.exp_le_one_iff.mpr htx)
+
+/-- Split the inverse Mellin profile by a smooth partition of unity in log norm.
+The negative tail has all positive weights and the positive tail has all weights below one. -/
+private theorem sLocalZetaPair_first_component_attained_strip_split (b : B⁰) :
+    ∃ (u : B⁺) (v : B⁻), EqOn b.val (fun z ↦ u.val z + v.val z) overlap := by
+  let M := positiveRealFourierMellin overlapInterval isOpen_Ioo ordConnected_Ioo
+    (Set.nonempty_Ioo.mpr zero_lt_one)
+  let p := M.symm b
+  let θ := Real.smoothTransition
+  have hθ : ContDiff ℝ (⊤ : ℕ∞) θ := Real.smoothTransition.contDiff
+  have hweights (I : Set ℝ) (k : ℝ → ℝ) (hk : ∀ a ∈ I, ∃ d ∈ overlapInterval,
+      (fun x ↦ Real.exp ((a - d) * x) * k x).HasTemperateGrowth) :
+      (fun x ↦ (k x : ℂ) * p.val x) ∈ logExponentialDecaySubmodule I := by
+    apply (Submodule.mem_iInf _).mpr
+    intro a
+    obtain ⟨d, hd, hkd⟩ := hk a a.property
+    let w := fun x : ℝ ↦ ((Real.exp ((a.val - d) * x) * k x : ℝ) : ℂ)
+    have hw : w.HasTemperateGrowth := Complex.hasTemperateGrowth_ofReal.comp hkd
+    let g := logExponentialDecayTwist overlapInterval ⟨d, hd⟩ p
+    refine ⟨SchwartzMap.smulLeftCLM ℂ w g, funext fun x ↦ ?_⟩
+    change SchwartzMap.smulLeftCLM ℂ w g x = (Real.exp (a.val * x) : ℂ) * ((k x : ℂ) * p.val x)
+    rw [SchwartzMap.smulLeftCLM_apply_apply hw, smul_eq_mul,
+      show g x = _ from logExponentialDecayTwist_apply overlapInterval ⟨d, hd⟩ p x]
+    dsimp only [w]
+    push_cast
+    rw [show (a.val : ℂ) * x = ((a.val : ℂ) - d) * x + d * x by ring, Complex.exp_add]
+    ring
+  have hneg (x : ℝ) (hx : x < 0) : θ =ᶠ[𝓝 x] (fun _ ↦ 0) :=
+    (eventually_lt_nhds hx).mono fun _ hy ↦ Real.smoothTransition.zero_of_nonpos hy.le
+  have hpos (x : ℝ) (hx : 1 < x) : θ =ᶠ[𝓝 x] (fun _ ↦ 1) :=
+    (eventually_gt_nhds hx).mono fun _ hy ↦ Real.smoothTransition.one_of_one_le hy.le
+  let r : PositiveRealExponentialDecay rightInterval := ⟨_, hweights rightInterval (fun x ↦ 1 - θ x) (by
+    intro a ha
+    let d := min a (1 / 2)
+    have hd : d ∈ overlapInterval := ⟨lt_min ha (by norm_num), (min_le_right ..).trans_lt (by norm_num)⟩
+    refine ⟨d, hd, sLocalZetaPair_first_component_attained_cutoff _ (contDiff_const.sub hθ) _ ?_⟩
+    intro x hx
+    rcases not_and_or.mp hx with h | h
+    · have h' := lt_of_not_ge h
+      exact Or.inr ⟨(hneg x h').mono (fun y hy ↦ by simp [hy]),
+        mul_nonpos_of_nonneg_of_nonpos (sub_nonneg.mpr (min_le_left ..)) h'.le⟩
+    · exact Or.inl ((hpos x (lt_of_not_ge h)).mono fun y hy ↦ by simp [hy]))⟩
+  let l : PositiveRealExponentialDecay leftInterval := ⟨_, hweights leftInterval θ (by
+    intro a ha
+    let d := max a (1 / 2)
+    have hd : d ∈ overlapInterval := ⟨lt_of_lt_of_le (by norm_num) (le_max_right ..), max_lt ha (by norm_num)⟩
+    refine ⟨d, hd, sLocalZetaPair_first_component_attained_cutoff _ hθ _ ?_⟩
+    intro x hx
+    rcases not_and_or.mp hx with h | h
+    · exact Or.inl (hneg x (lt_of_not_ge h))
+    · have h' := lt_of_not_ge h
+      exact Or.inr ⟨hpos x h', mul_nonpos_of_nonpos_of_nonneg
+        (sub_nonpos.mpr (le_max_left ..)) (zero_le_one.trans h'.le)⟩)⟩
+  let U := positiveRealFourierMellin rightInterval isOpen_Ioi ordConnected_Ioi (nonempty_Ioi)
+  let V := positiveRealFourierMellin leftInterval isOpen_Iio ordConnected_Iio (nonempty_Iio)
+  refine ⟨U r, V l, fun z hz ↦ ?_⟩
+  have hM := positiveRealFourierMellin_apply overlapInterval isOpen_Ioo ordConnected_Ioo
+    (Set.nonempty_Ioo.mpr zero_lt_one) p z hz
+  change (M p).val z = _ at hM
+  rw [M.apply_symm_apply b] at hM
+  have hs := (hasMellin_add (positiveRealExponentialDecay_mellinConvergent rightInterval r z hz.1)
+    (positiveRealExponentialDecay_mellinConvergent leftInterval l z hz.2)).2
+  have hsum (x : ℝ) : p.val x = r.val x + l.val x := by
+    change _ = ((1 - θ x : ℝ) : ℂ) * p.val x + (θ x : ℂ) * p.val x
+    push_cast
+    ring
+  exact hM.trans ((congrArg (fun f ↦ mellin f z) (funext fun t ↦ hsum (Real.log t))).trans
+    (hs.trans (congrArg₂ (· + ·) (positiveRealFourierMellin_apply _ _ _ _ r z hz.1).symm
+      (positiveRealFourierMellin_apply _ _ _ _ l z hz.2).symm)))
+
+/-- A bounded entire multiplier without small values on closed positive strips allows
+one to interpolate left data modulo that multiplier. Split the quotient on the overlap,
+multiply both pieces back, and glue the two expressions for the interpolant. -/
+private theorem sLocalZetaPair_first_component_attained_interpolate (b : B⁻) (D : ℂ → ℂ)
+    (hd : Differentiable ℂ D) (hB : ∀ a c : ℝ, ∃ M ≥ (0 : ℝ), ∀ z : ℂ, z.re ∈ Icc a c → ‖D z‖ ≤ M)
+    (hm : ∀ a c : ℝ, 0 < a → ∃ m > (0 : ℝ), ∀ z : ℂ, z.re ∈ Icc a c → m ≤ ‖D z‖) :
+    ∃ (G : SchwartzBergman univ) (v : B⁻),
+      EqOn (fun z ↦ b.val z - G.val z) (fun z ↦ D z * v.val z) leftHalf := by
+  classical
+  have hn {z : ℂ} (hz : 0 < z.re) : D z ≠ 0 := by
+    obtain ⟨m, hm₀, h⟩ := hm z.re z.re hz
+    exact norm_pos_iff.mp (hm₀.trans_le (h z ⟨le_rfl, le_rfl⟩))
+  obtain ⟨Q, hQ⟩ := existsUnique_sLocalZetaMatchingDifference_multiplier leftInterval
+    (fun _ hz ↦ hz.2) (fun z ↦ (D z)⁻¹) (hd.differentiableOn.inv (fun _ hz ↦ hn hz.1)) (by
+      intro a c hac hsub
+      obtain ⟨m, hm₀, h⟩ := hm a c (hsub (left_mem_Icc.mpr hac)).1
+      exact ⟨m⁻¹, inv_nonneg.mpr hm₀.le, 0, fun z hz ↦ by
+        simpa only [norm_inv, pow_zero, mul_one] using inv_anti₀ hm₀ (h z hz)⟩)
+  obtain ⟨u, v, huv⟩ := sLocalZetaPair_first_component_attained_strip_split (Q b)
+  have mult {I : Set ℝ} (f : SchwartzBergman I) :
+      (fun z ↦ D z * f.val z) ∈ schwartzBergmanSubmodule I := by
+    refine ⟨fun z hz ↦ by change D z * f.val z = 0; rw [f.property.1 hz]; exact mul_zero _, hd.differentiableOn.mul f.property.2.1, ?_⟩
+    intro a c hac hsub N
+    obtain ⟨A, hA, hD⟩ := hB a c
+    obtain ⟨B, h⟩ := f.property.2.2 a c hac hsub N
+    refine ⟨A * max B 0, ?_⟩
+    rintro _ ⟨z, hz, rfl⟩
+    change ‖z ^ N * (D z * f.val z)‖ ≤ _
+    rw [mul_left_comm, norm_mul]
+    exact mul_le_mul (hD z hz) ((h ⟨z, hz, rfl⟩).trans (le_max_left _ _)) (norm_nonneg _) hA
+  let R : B⁺ := ⟨_, mult u⟩
+  let V : B⁻ := ⟨_, mult v⟩
+  let L : B⁻ := b - V
+  have hmatch : EqOn R.val L.val overlap := by
+    intro z hz
+    have h : (D z)⁻¹ * b.val z = u.val z + v.val z := ((hQ b hz).symm.trans (huv hz))
+    change D z * u.val z = b.val z - D z * v.val z
+    have := congrArg (D z * ·) h
+    rw [mul_inv_cancel_left₀ (hn hz.1), mul_add] at this
+    exact eq_sub_of_add_eq this.symm
+  let G := (rightHalf).piecewise R.val L.val
+  have hR : EqOn G R.val rightHalf := fun z hz ↦ piecewise_eq_of_mem _ _ _ hz
+  have hL : EqOn G L.val leftHalf := by
+    intro z hz
+    by_cases hr : z ∈ rightHalf
+    · exact (hR hr).trans (hmatch ⟨hr, hz⟩)
+    · exact piecewise_eq_of_notMem _ _ _ hr
+  have hdiff : Differentiable ℂ G := by
+    intro z
+    by_cases hr : z ∈ rightHalf
+    · exact ((R.property.2.1 z hr).differentiableAt ((isOpen_Ioi.preimage Complex.continuous_re).mem_nhds hr)).congr_of_eventuallyEq
+        (eventuallyEq_of_mem ((isOpen_Ioi.preimage Complex.continuous_re).mem_nhds hr) hR)
+    · have hl : z ∈ leftHalf := lt_of_le_of_lt (not_lt.mp hr) zero_lt_one
+      exact ((L.property.2.1 z hl).differentiableAt ((isOpen_Iio.preimage Complex.continuous_re).mem_nhds hl)).congr_of_eventuallyEq
+        (eventuallyEq_of_mem ((isOpen_Iio.preimage Complex.continuous_re).mem_nhds hl) hL)
+  have hG : G ∈ schwartzBergmanSubmodule univ := by
+    refine ⟨fun _ hz ↦ (hz trivial).elim, hdiff.differentiableOn, ?_⟩
+    intro a c _ _ N
+    obtain ⟨A, hA⟩ := R.property.2.2 (1 / 2) (max c 1) (by linarith [le_max_right c 1])
+      (fun _ h ↦ lt_of_lt_of_le (by norm_num : (0 : ℝ) < 1 / 2) h.1) N
+    obtain ⟨B, hB'⟩ := L.property.2.2 (min a 0) (1 / 2) (by linarith [min_le_right a 0])
+      (fun _ h ↦ h.2.trans_lt (by norm_num : (1 : ℝ) / 2 < 1)) N
+    refine ⟨max A B, ?_⟩
+    rintro _ ⟨z, hz, rfl⟩
+    change ‖z ^ N * G z‖ ≤ _
+    by_cases h : 1 / 2 ≤ z.re
+    · rw [hR (lt_of_lt_of_le (by norm_num : (0 : ℝ) < 1 / 2) h)]
+      exact (hA ⟨z, ⟨h, hz.2.trans (le_max_left _ _)⟩, rfl⟩).trans (le_max_left _ _)
+    · rw [hL ((lt_of_not_ge h).trans (by norm_num : (1 : ℝ) / 2 < 1))]
+      exact (hB' ⟨z, ⟨(min_le_left _ _).trans hz.1, (lt_of_not_ge h).le⟩, rfl⟩).trans (le_max_right _ _)
+  refine ⟨⟨G, hG⟩, v, fun z hz ↦ ?_⟩
+  change b.val z - G z = D z * v.val z
+  rw [hL hz]
+  exact sub_sub_cancel _ _
+
+/-- At every nonpositive integer the gamma recurrence removes the pole after
+multiplication by the local coordinate. -/
+private theorem sLocalZetaPair_first_component_attained_gamma_germ (n : ℕ) :
+    ∃ g : ℂ → ℂ, AnalyticAt ℂ g (-(n : ℂ)) ∧
+      (fun z : ℂ ↦ (z + n) * Complex.Gamma z) =ᶠ[𝓝[≠] (-(n : ℂ))] g := by
+  have hΓ (z : ℂ) (hz : 0 < z.re) : AnalyticAt ℂ Complex.Gamma z := by
+    have h := Complex.differentiable_one_div_Gamma.analyticAt z
+    change AnalyticAt ℂ (Complex.Gamma)⁻¹ z at h
+    simpa only [inv_inv] using h.inv (inv_ne_zero (Complex.Gamma_ne_zero_of_re_pos hz))
+  induction n with
+  | zero =>
+    simp only [Nat.cast_zero, neg_zero, add_zero]
+    refine ⟨fun z ↦ Complex.Gamma (z + 1), (hΓ 1 (by simp)).comp_of_eq (f := fun w : ℂ ↦ w + 1) (by fun_prop) (by simp), ?_⟩
+    filter_upwards [self_mem_nhdsWithin] with w hw using (Complex.Gamma_add_one w hw).symm
+  | succ n ih =>
+    obtain ⟨g, hg, he⟩ := ih
+    let z : ℂ := -((n + 1 : ℕ) : ℂ)
+    have hz : z ≠ 0 := neg_ne_zero.mpr (Nat.cast_ne_zero.mpr (Nat.succ_ne_zero _))
+    have hs : z + 1 = -(n : ℂ) := by dsimp [z]; push_cast; ring
+    have ht : Tendsto (fun w : ℂ ↦ w + 1) (𝓝[≠] z) (𝓝[≠] (-(n : ℂ))) := by
+      rw [← hs]
+      apply tendsto_nhdsWithin_iff.mpr
+      refine ⟨(continuousAt_id.add continuousAt_const).tendsto.mono_left nhdsWithin_le_nhds, ?_⟩
+      filter_upwards [self_mem_nhdsWithin] with w hw using fun eq ↦ hw (add_right_cancel eq)
+    refine ⟨fun w ↦ g (w + 1) / w, (hg.comp_of_eq (f := fun w : ℂ ↦ w + 1) (by fun_prop) hs).div analyticAt_id hz, ?_⟩
+    filter_upwards [ht.eventually he, nhdsWithin_le_nhds (eventually_ne_nhds hz)] with w hw hw₀
+    change (w + 1 + (n : ℂ)) * Complex.Gamma (w + 1) = g (w + 1) at hw
+    rw [← hw, Complex.Gamma_add_one _ hw₀]
+    push_cast
+    field_simp
+    ring
+
+/-- The entire function `1/Γ(1-2⁻ᵘ)` clears every gamma pole. At `u = -n` its
+argument is the nonpositive integer `1-2ⁿ`. In the positive half-plane `|2⁻ᵘ| < 1`,
+so it has no zeros there. Its imaginary period supplies bounds on vertical strips. -/
+private theorem sLocalZetaPair_first_component_attained_gamma_multiplier :
+    ∃ d W : ℂ → ℂ, Differentiable ℂ d ∧ Differentiable ℂ W ∧
+      (∃ T : ℝ, 0 < T ∧ Periodic d ((T : ℂ) * Complex.I)) ∧
+      (∀ z : ℂ, 0 < z.re → d z ≠ 0 ∧ d z * Complex.Gamma z = W z) := by
+  let d (z : ℂ) := (Complex.Gamma (1 - (2 : ℂ) ^ (-z)))⁻¹
+  have hd : Differentiable ℂ d := Complex.differentiable_one_div_Gamma.comp
+    ((differentiable_neg.const_cpow (Or.inl (two_ne_zero : (2 : ℂ) ≠ 0))).const_sub 1)
+  have hΓ (z : ℂ) : MeromorphicAt Complex.Gamma z := by
+    have hh : MeromorphicAt (Complex.Gamma)⁻¹ z := (Complex.differentiable_one_div_Gamma.analyticAt z).meromorphicAt
+    simpa only [inv_inv] using hh.inv
+  let P (z : ℂ) := d z * Complex.Gamma z
+  have hm : MeromorphicOn P univ := fun z _ ↦ (hd.analyticAt z).meromorphicAt.mul (hΓ z)
+  let W := toMeromorphicNFOn P univ
+  have hreg (z : ℂ) (hz : Complex.Gamma z ≠ 0) : AnalyticAt ℂ P z := by
+    have hh : AnalyticAt ℂ (Complex.Gamma)⁻¹ z := Complex.differentiable_one_div_Gamma.analyticAt z
+    exact (hd.analyticAt z).mul (by simpa only [inv_inv] using hh.inv (inv_ne_zero hz))
+  have hW (z : ℂ) : AnalyticAt ℂ W z := by
+    apply (meromorphicNFOn_toMeromorphicNFOn P univ (mem_univ z)).meromorphicOrderAt_nonneg_iff_analyticAt.mp
+    rw [meromorphicOrderAt_toMeromorphicNFOn hm (mem_univ z)]
+    by_cases hz : Complex.Gamma z ≠ 0
+    · exact (hreg z hz).meromorphicOrderAt_nonneg
+    obtain ⟨n, rfl⟩ : ∃ n : ℕ, z = -n := by
+      by_contra! h
+      exact hz (Complex.Gamma_ne_zero h)
+    have hdz : d (-(n : ℂ)) = 0 := by
+      have hpow : (1 : ℂ) - (2 : ℂ) ^ n = -((2^n - 1 : ℕ) : ℂ) := by
+        rw [Nat.cast_sub (Nat.one_le_two_pow), Nat.cast_pow]
+        push_cast
+        ring
+      simp only [d, neg_neg, Complex.cpow_natCast, hpow, Complex.Gamma_neg_nat_eq_zero, inv_zero]
+    obtain ⟨g, hg, he⟩ := sLocalZetaPair_first_component_attained_gamma_germ n
+    apply (hm _ trivial).meromorphicOrderAt_nonneg_iff.mpr
+    refine ⟨fun w ↦ dslope d (-(n : ℂ)) w * g w, ((hd.analyticAt _).dslope _).mul hg, ?_⟩
+    filter_upwards [he] with w hw
+    have h₁ := sub_smul_dslope_of_zero hdz w
+    rw [smul_eq_mul, sub_neg_eq_add] at h₁
+    change d w * Complex.Gamma w = _
+    rw [← hw, ← h₁]
+    ring
+  let T := 2 * Real.pi / Real.log 2
+  have hper : (2 : ℂ)^((T : ℂ) * Complex.I) = 1 := by
+    rw [Complex.cpow_def_of_ne_zero two_ne_zero]
+    rw [show Complex.log 2 = (Real.log 2 : ℂ) from (Complex.ofReal_log (by norm_num : (0 : ℝ) ≤ 2)).symm]
+    dsimp [T]
+    push_cast
+    rw [show (Real.log 2 : ℂ) * (2 * (Real.pi : ℂ) / Real.log 2 * Complex.I) =
+      2 * Real.pi * Complex.I by
+        field_simp
+        exact div_self (Complex.ofReal_ne_zero.mpr (Real.log_pos (by norm_num : (1 : ℝ) < 2)).ne')]
+    exact Complex.exp_two_pi_mul_I
+  refine ⟨d, W, hd, fun z ↦ (hW z).differentiableAt,
+    ⟨T, div_pos (by positivity) (Real.log_pos (by norm_num)), fun z ↦ ?_⟩, fun z hz ↦ ⟨?_, ?_⟩⟩
+  · simp only [d, neg_add, Complex.cpow_add _ _ (two_ne_zero : (2 : ℂ) ≠ 0),
+      Complex.cpow_neg _ ((T : ℂ) * Complex.I), hper, inv_one, mul_one]
+  · apply inv_ne_zero (Complex.Gamma_ne_zero_of_re_pos ?_)
+    have hnorm : ‖(2 : ℂ) ^ (-z)‖ < 1 := by
+      rw [show (2 : ℂ) = ((2 : ℝ) : ℂ) by norm_num, Complex.norm_cpow_eq_rpow_re_of_pos (by norm_num : (0 : ℝ) < 2)]
+      exact Real.rpow_lt_one_of_one_lt_of_neg (by norm_num) (neg_lt_zero.mpr hz)
+    rw [Complex.sub_re, Complex.one_re]
+    exact sub_pos.mpr ((Complex.re_le_norm _).trans_lt hnorm)
+  · exact (((hW z).continuousAt.eventuallyEq_nhds_iff_eventuallyEq_nhdsNE
+      (hreg z (Complex.Gamma_ne_zero_of_re_pos hz)).continuousAt).mp
+      (hm.toMeromorphicNFOn_eq_self_on_nhdsNE (mem_univ z))).eq_of_nhds.symm
+
+/-- Rescale the gamma multiplier for the affine argument of a real or complex Euler factor. -/
+private theorem sLocalZetaPair_first_component_attained_arch_factor
+    (L : ℂ → ℂ) (b : ℂ) (hb : 0 ≤ b.re) (k c : ℝ) (hk : 0 < k) (hc : 0 < c)
+    (hL : ∀ z : ℂ, L z = (c : ℂ) ^ (-((z + b) / k)) * Complex.Gamma ((z + b) / k)) :
+    ∃ D W : ℂ → ℂ, Differentiable ℂ D ∧ Differentiable ℂ W ∧
+      (∃ T : ℝ, 0 < T ∧ Periodic D ((T : ℂ) * Complex.I)) ∧
+      ∀ z : ℂ, 0 < z.re → D z ≠ 0 ∧ D z * L z = W z := by
+  obtain ⟨d, w, hd, hw, ⟨T, hT, hper⟩, h⟩ := sLocalZetaPair_first_component_attained_gamma_multiplier
+  let u (z : ℂ) := (z + b) / (k : ℂ)
+  have hu : Differentiable ℂ u := (differentiable_id.add_const b).div_const _
+  let P (z : ℂ) := (c : ℂ) ^ (-u z)
+  have hP : Differentiable ℂ P := hu.neg.const_cpow (Or.inl (Complex.ofReal_ne_zero.mpr hc.ne'))
+  refine ⟨d ∘ u, fun z ↦ P z * w (u z), hd.comp hu, hP.mul (hw.comp hu),
+    ⟨k * T, mul_pos hk hT, fun z ↦ ?_⟩, fun z hz ↦ ?_⟩
+  · have he : u (z + ((k * T : ℝ) : ℂ) * Complex.I) = u z + (T : ℂ) * Complex.I := by
+      dsimp [u]
+      push_cast
+      field_simp [Complex.ofReal_ne_zero.mpr hk.ne']
+      ring
+    exact (congrArg d he).trans (hper (u z))
+  · have hpos : 0 < (u z).re := by
+      simpa only [u, Complex.div_ofReal_re, Complex.add_re] using div_pos (add_pos_of_pos_of_nonneg hz hb) hk
+    refine ⟨(h _ hpos).1, ?_⟩
+    change d (u z) * L z = P z * w (u z)
+    rw [hL, ← (h _ hpos).2, mul_left_comm]
+
+/-- Bounds for a single periodic denominator. Above a positive abscissa, clamp the real
+part before taking its reciprocal to obtain a continuous periodic function on the plane. -/
+private theorem sLocalZetaPair_first_component_attained_periodic_bounds
+    (D : ℂ → ℂ) (hd : Continuous D) {T : ℝ} (hT : 0 < T) (hper : Periodic D ((T : ℂ) * Complex.I))
+    (hne : ∀ z : ℂ, 0 < z.re → D z ≠ 0) (a b : ℝ) :
+    (∃ C ≥ (0 : ℝ), ∀ z : ℂ, z.re ∈ Icc a b → ‖D z‖ ≤ C) ∧
+    (0 < a → ∃ m > (0 : ℝ), ∀ z : ℂ, z.re ∈ Icc a b → m ≤ ‖D z‖) := by
+  refine ⟨rhoGrowth_periodic_bound hT hper hd a b, fun ha ↦ ?_⟩
+  let r (z : ℂ) : ℂ := ⟨max a z.re, z.im⟩
+  have hc : Continuous r := by
+    have he : r = fun z ↦ ((max a z.re : ℝ) : ℂ) + (z.im : ℂ) * Complex.I := by
+      exact funext fun z ↦ Complex.mk_eq_add_mul_I _ _
+    rw [he]
+    fun_prop
+  have hn (z : ℂ) := hne (r z) (ha.trans_le (le_max_left _ _))
+  have hp : Periodic (fun z ↦ (D (r z))⁻¹) ((T : ℂ) * Complex.I) := by
+    intro z
+    have he : r (z + (T : ℂ) * Complex.I) = r z + (T : ℂ) * Complex.I := by
+      apply Complex.ext <;> simp [r, Complex.add_re, Complex.add_im]
+    change (D (r (z + _)))⁻¹ = _
+    rw [he, hper]
+  obtain ⟨C, hC, h⟩ := rhoGrowth_periodic_bound hT hp ((hd.comp hc).inv₀ hn) a b
+  refine ⟨(max C 1)⁻¹, inv_pos.mpr (lt_of_lt_of_le zero_lt_one (le_max_right _ _)), fun z hz ↦ ?_⟩
+  have he : r z = z := Complex.ext (max_eq_right hz.1) rfl
+  have h' := h z hz
+  change ‖(D (r z))⁻¹‖ ≤ C at h'
+  rw [he, norm_inv] at h'
+  simpa only [inv_inv] using inv_anti₀ (inv_pos.mpr (norm_pos_iff.mpr (hne z (ha.trans_le hz.1))))
+    (h'.trans (le_max_left _ 1))
+
+/-- Assemble the finitely many periodic multipliers and their holomorphic products
+with the local Euler factors. Bounds multiply even for incommensurable periods. -/
+private theorem sLocalZetaPair_first_component_attained_factor_product {ι : Type*} [Fintype ι]
+    (L : ι → ℂ → ℂ) (h : ∀ i, ∃ D W : ℂ → ℂ, Differentiable ℂ D ∧ Differentiable ℂ W ∧
+      (∃ T : ℝ, 0 < T ∧ Periodic D ((T : ℂ) * Complex.I)) ∧
+      ∀ z : ℂ, 0 < z.re → D z ≠ 0 ∧ D z * L i z = W z) :
+    ∃ D W : ℂ → ℂ, Differentiable ℂ D ∧ Differentiable ℂ W ∧
+      (∀ a b : ℝ, ∃ C ≥ (0 : ℝ), ∀ z : ℂ, z.re ∈ Icc a b → ‖D z‖ ≤ C) ∧
+      (∀ a b : ℝ, 0 < a → ∃ m > (0 : ℝ), ∀ z : ℂ, z.re ∈ Icc a b → m ≤ ‖D z‖) ∧
+      ∀ z : ℂ, 0 < z.re → D z * ∏ i, L i z = W z := by
+  classical
+  choose d w hd hw hp hloc using h
+  choose T hT hper using hp
+  have bounds (i : ι) := sLocalZetaPair_first_component_attained_periodic_bounds (d i)
+    (hd i).continuous (hT i) (hper i) (fun z hz ↦ (hloc i z hz).1)
+  refine ⟨fun z ↦ ∏ i, d i z, fun z ↦ ∏ i, w i z, Differentiable.fun_finsetProd (fun i _ ↦ hd i),
+    Differentiable.fun_finsetProd (fun i _ ↦ hw i), fun a b ↦ ?_, fun a b ha ↦ ?_, fun z hz ↦ ?_⟩
+  · choose C hC hc using fun i ↦ (bounds i a b).1
+    refine ⟨∏ i, C i, Finset.prod_nonneg (fun i _ ↦ hC i), fun z hz ↦ ?_⟩
+    exact (norm_prod ..).le.trans (Finset.prod_le_prod₀ (fun _ _ ↦ norm_nonneg _) (fun i _ ↦ hc i z hz))
+  · choose m hm hlow using fun i ↦ (bounds i a b).2 ha
+    refine ⟨∏ i, m i, Finset.prod_pos (fun i _ ↦ hm i), fun z hz ↦ ?_⟩
+    exact (Finset.prod_le_prod₀ (fun i _ ↦ (hm i).le) (fun i _ ↦ hlow i z hz)).trans_eq (norm_prod ..).symm
+  · rw [← Finset.prod_mul_distrib]
+    exact Finset.prod_congr rfl (fun i _ ↦ (hloc i z hz).2)
+
+/-- Clear the archimedean factors with the periodic gamma multipliers and the finite
+factors with their Euler polynomials. The resulting multiplier is bounded on strips,
+bounded away from zero on positive strips, and cancels the full pole divisor of ρ. -/
+private theorem sLocalZetaPair_first_component_attained_denominator (χ : PontryaginDual Jₛ) :
+    ∃ D : ℂ → ℂ, Differentiable ℂ D ∧
+      (∀ a b : ℝ, ∃ C ≥ (0 : ℝ), ∀ z : ℂ, z.re ∈ Icc a b → ‖D z‖ ≤ C) ∧
+      (∀ a b : ℝ, 0 < a → ∃ m > (0 : ℝ), ∀ z : ℂ, z.re ∈ Icc a b → m ≤ ‖D z‖) ∧
+      ∀ z : ℂ, 0 ≤ meromorphicOrderAt (fun w ↦ ρₛ(χ, w) * D w) z := by
+  classical
+  obtain ⟨η, hr, he, _⟩ := sLocal_character_extension χ
+  let arch (v : InfinitePlace F) (s : ℂ) :=
+    if hv : v.IsReal then
+      let a := (realHeckeCharacter_parameters η v hv).exists.choose
+      Complex.Gammaℝ (s + a.1 + (a.2.val : ℂ))
+    else
+      let a := (complexHeckeCharacter_parameters η v (InfinitePlace.not_isReal_iff_isComplex.mp hv)).exists.choose
+      Complex.Gammaℂ (s + a.1 + (a.2.natAbs : ℂ) / 2) / 2
+  let L : InfinitePlace F ⊕ S → ℂ → ℂ := Sum.elim arch (fun v z ↦ finiteHeckeEulerFactor η v.val z)
+  obtain ⟨D, W,hd, hw, hupper, hlower, hprod⟩ := sLocalZetaPair_first_component_attained_factor_product L (by
+    rintro (v | v)
+    · change ∃ _ _, _ ∧ _ ∧ _ ∧ ∀ z : ℂ, 0 < z.re → _ ∧ _ * arch v z = _
+      by_cases hv : v.IsReal
+      · let a := (realHeckeCharacter_parameters η v hv).exists.choose
+        have ha : a.1.re = 0 := (realHeckeCharacter_parameters η v hv).exists.choose_spec.1
+        apply sLocalZetaPair_first_component_attained_arch_factor _ (a.1 + (a.2.val : ℂ)) (by simp [ha]) 2 Real.pi
+          (by norm_num) Real.pi_pos
+        intro z
+        simp only [arch, dite_eq_left hv, Complex.Gammaℝ_def, a, add_assoc, neg_div, Complex.ofReal_ofNat]
+      · let a := (complexHeckeCharacter_parameters η v (InfinitePlace.not_isReal_iff_isComplex.mp hv)).exists.choose
+        have ha : a.1.re = 0 := (complexHeckeCharacter_parameters η v _).exists.choose_spec.1
+        apply sLocalZetaPair_first_component_attained_arch_factor _ (a.1 + (a.2.natAbs : ℂ) / 2) (by simp [ha]; positivity) 1 (2 * Real.pi)
+          zero_lt_one (by positivity)
+        intro z
+        simp [arch, hv, a, Complex.Gammaℂ_def, add_assoc]
+        ring
+    · let d (z : ℂ) := (finiteHeckeEulerFactor η v.val z)⁻¹
+      obtain ⟨hd, _, hp⟩ := sLocalZetaPair_first_component_attained_euler η v.val
+      refine ⟨d, fun _ ↦ 1, hd, differentiable_const _, hp, fun z hz ↦ ?_⟩
+      suffices hn : finiteHeckeEulerFactor η v.val z ≠ 0 from ⟨inv_ne_zero hn, inv_mul_cancel₀ hn⟩
+      unfold finiteHeckeEulerFactor
+      split_ifs
+      · refine inv_ne_zero (sub_ne_zero.mpr ?_)
+        intro h
+        have hh := congrArg norm h
+        have hq : 1 < (v.val.asIdeal.absNorm : ℝ) := by exact_mod_cast HeightOneSpectrum.one_lt_absNorm v.val
+        rw [norm_one, norm_mul, norm_ideleClassNormTwist_zero_localValue, one_mul, ← Complex.ofReal_natCast,
+          Complex.norm_cpow_eq_rpow_re_of_pos (zero_lt_one.trans hq), Complex.neg_re] at hh
+        exact (Real.rpow_lt_one_of_one_lt_of_neg hq (neg_lt_zero.mpr hz)).ne' hh
+      · exact one_ne_zero)
+  have hDL {z : ℂ} (hz : 0 < z.re) : D z * sLocalHeckeL (normChart(χ) z) = W z := by
+    rw [sLocalHeckeL_eq_partialEulerProduct χ η hr he]
+    change D z * ((∏ v, arch v z) * ∏ v : S, finiteHeckeEulerFactor η v.val z) = W z
+    simpa only [Fintype.prod_sum_type, L, Sum.elim_inl, Sum.elim_inr] using hprod z hz
+  let A := fun w ↦ D w * sLocalHeckeL (normChart(χ) w)
+  have hA : Meromorphic A := by
+    intro z
+    apply (hd.analyticAt z).meromorphicAt.mul
+    have h : MeromorphicAt (fun w ↦ sLocalHeckeL (normChart(χ) w))⁻¹ z :=
+      ((sLocalHeckeL_inv_differentiable χ).analyticAt z).meromorphicAt
+    simpa only [inv_inv] using h.inv
+  have hΔ : MeromorphicOn (A - W) univ := fun z _ ↦ (hA z).sub (hw.analyticAt z).meromorphicAt
+  have h₁ : meromorphicOrderAt (A - W) 1 = ⊤ := by
+    apply meromorphicOrderAt_eq_top_iff.mpr
+    have hr₁ : (1 : ℂ) ∈ rightHalf := by simp
+    filter_upwards [nhdsWithin_le_nhds ((isOpen_Ioi.preimage Complex.continuous_re).mem_nhds hr₁)]
+      with w hw' using sub_eq_zero.mpr (hDL hw')
+  refine ⟨D, hd, hupper, hlower, fun z ↦ ?_⟩
+  have hnear := meromorphicOrderAt_eq_top_iff.mp (hΔ.meromorphicOrderAt_eq_top_of_isPreconnected
+    isPreconnected_univ (mem_univ _) (mem_univ z) h₁)
+  let B := fun w ↦ sLocalEpsilonFactor (normChart(χ) w) * W w *
+    (sLocalHeckeL (normChart(χ⁻¹) (1 - w)))⁻¹
+  have hB : AnalyticAt ℂ B z := (((sLocalEpsilonFactor_entire χ) z trivial).mul (hw.analyticAt z)).mul
+    (((sLocalHeckeL_inv_differentiable χ⁻¹).analyticAt (1 - z)).comp (f := fun w : ℂ ↦ 1 - w) (by fun_prop))
+  have hlocal : (fun w ↦ ρₛ(χ, w) * D w) =ᶠ[𝓝[≠] z] B := by
+    filter_upwards [hnear, nhdsNE_le_codiscrete z (sLocalRhoFactor_eq_epsilon_mul χ)] with w h hρ
+    have heq : D w * sLocalHeckeL (normChart(χ) w) = W w := sub_eq_zero.mp h
+    dsimp only at hρ
+    rw [hρ, sLocalNormTwistChart_dual]
+    dsimp [B]
+    rw [← heq, div_eq_mul_inv]
+    ring
+  rw [meromorphicOrderAt_congr hlocal]
+  exact hB.meromorphicOrderAt_nonneg
+
+/-- Interpolate the reflected Fourier datum modulo a multiplier clearing all Tate poles.
+Fourier inversion of the test realizing this entire interpolant matches the principal parts
+at every pole simultaneously. -/
+private theorem sLocalZetaPair_first_component_attained_principal_parts (χ : PontryaginDual Jₛ)
+    (p : B⁺ × B⁻) :
+    ∃ f : ℬₛ, ∀ z : ℂ, z ∈ leftHalf →
+      0 ≤ meromorphicOrderAt (fun w ↦ ρₛ(χ, w) * (p.2.val w -
+        (sLocalZetaPair χ (Submodule.Quotient.mk f)).2.val w)) z := by
+  obtain ⟨D, hd, hupper, hlower, hord⟩ := sLocalZetaPair_first_component_attained_denominator χ
+  obtain ⟨G, v, hG⟩ := sLocalZetaPair_first_component_attained_interpolate p.2 D hd hupper hlower
+  let R : SchwartzBergman univ := ⟨_, existsUnique_sLocalZetaPair_reflect_mem
+    (I := univ) (J := univ) (fun _ ↦ iff_of_true trivial trivial) G⟩
+  obtain ⟨g, hg⟩ := sLocalZetaPair_first_component_attained_entire (F := F) (S := S) χ⁻¹ R
+  let f := Fourierₛ (Fourierₛ (Fourierₛ g))
+  have hf : Fourierₛ f = g := by
+    apply Subtype.ext
+    funext x
+    exact (sLocal_fourier_inversion (Fourierₛ (Fourierₛ g)) x.toAdd).trans
+      ((sLocal_fourier_inversion g (-x.toAdd)).trans (congrArg (fun y ↦ g (Multiplicative.ofAdd y)) (neg_neg x.toAdd)))
+  let u := sLocalZetaPair χ (Submodule.Quotient.mk f)
+  have hu : EqOn u.2.val G.val leftHalf := by
+    intro z hz
+    have h₁ := (sLocalZetaPair_mk χ f).2 hz
+    have h₂ := hg (show 1 - z ∈ rightHalf by simpa using sub_pos.mpr hz)
+    change G.val (1-(1 - z)) = _ at h₂
+    rw [sub_sub_cancel] at h₂
+    exact h₁.trans ((congrArg (fun h ↦ Zₛ h (normChart(χ⁻¹) (1 - z))) hf).trans h₂.symm)
+  refine ⟨f, fun z hl ↦ ?_⟩
+  have hloc : (fun w ↦ ρₛ(χ, w) * (p.2.val w - u.2.val w)) =ᶠ[𝓝[≠] z]
+      (fun w ↦ (ρₛ(χ, w) * D w) * v.val w) := by
+    filter_upwards [nhdsWithin_le_nhds ((isOpen_Iio.preimage Complex.continuous_re).mem_nhds hl)] with w hw
+    have heq : p.2.val w - G.val w = D w * v.val w := hG hw
+    rw [hu hw, heq, mul_assoc]
+  have hv := v.property.2.1.analyticOnNhd (isOpen_Iio.preimage Complex.continuous_re) z hl
+  rw [meromorphicOrderAt_congr hloc]
+  exact (meromorphicOrderAt_mul ((sLocalRhoFactor_meromorphic χ z).mul (hd.analyticAt z).meromorphicAt)
+    hv.meromorphicAt).symm ▸ add_nonneg (hord z) hv.meromorphicOrderAt_nonneg
+
+/-- Paper: Theorem 5.4.1.1(1), p. 266. Every matching pair has its first Bergman
+datum realized by an S-local test. Realize the principal parts using the reflected Fourier
+datum, then lift the entire remainder by Fourier–Mellin inversion. -/
 private theorem sLocalZetaPair_first_component_attained (χ : PontryaginDual Jₛ) (p : B⁺ × B⁻)
     (_hp : p ∈ sLocalZetaMatching (F := F) (S := S) χ) :
-    ∃ f : ℬₛ, EqOn p.1.val (fun s ↦ Zₛ f (normChart(χ) s)) rightHalf := by sorry
+    ∃ f : ℬₛ, EqOn p.1.val (fun s ↦ Zₛ f (normChart(χ) s)) rightHalf := by
+  obtain ⟨f, hf⟩ := sLocalZetaPair_first_component_attained_principal_parts χ p
+  let u := sLocalZetaPair χ (Submodule.Quotient.mk f)
+  have hu : u ∈ sLocalZetaMatching χ := sLocalZetaPair_range_le_matching χ ⟨_, rfl⟩
+  obtain ⟨H, hH⟩ := sLocalZetaPair_first_component_attained_remove_poles χ (p - u)
+    ((sLocalZetaMatching χ).sub_mem _hp hu) hf
+  obtain ⟨g, hg⟩ := sLocalZetaPair_first_component_attained_entire (F := F) (S := S) χ H
+  refine ⟨f + g, fun z hz ↦ ?_⟩
+  have hsub : p.1.val z - u.1.val z = Zₛ g (normChart(χ) z) := (hH hz).symm.trans (hg hz)
+  obtain ⟨E, hE⟩ := existsUnique_sLocalZetaPair_eval χ z hz
+  change p.1.val z = Zₛ (f + g) (normChart(χ) z)
+  rw [← hE, show (Submodule.Quotient.mk (f + g) : Θω(restrict₁(χ))) =
+    Submodule.Quotient.mk f + Submodule.Quotient.mk g from rfl, map_add, hE, hE]
+  exact (sub_eq_iff_eq_add'.mp hsub).trans (congrArg (· + Zₛ g (normChart(χ) z))
+    ((sLocalZetaPair_mk χ f).1 hz))
 
 /-- Once the first Bergman datum of a matching pair is realized by a test, the pair is the
 zeta pair of that test's theta class: the second component agrees with the reflected Fourier

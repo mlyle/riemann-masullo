@@ -2603,14 +2603,9 @@ private theorem sLocalTraceSharpMass_asymptotic_restrict (φ : BruhatCompactSupp
         (a w).val u = φ.val (archClass(w) u)) ∧
       (∀ (v : S) (u : (v.val.adicCompletion F)ˣ),
         (b v).val u = φ.val (finiteClass(v.val) u)) := by
-  let τ : ℝ≥0ˣ →ₜ* C𝔽 :=
-    ⟨(QuotientGroup.mk' _).comp (canonicalIdeleNormSection F),
-      continuous_quotient_mk'.comp (canonicalIdeleNormSection_continuous F)⟩
-  obtain ⟨_, _, _, _, _, _, harch, hfinite, _⟩ :=
-    idelicExplicitFormula τ (canonicalIdeleNormSection_rightInverse F)
-  choose a ha _ using fun w ↦ harch w φ
-  choose b hb _ using fun v : S ↦ hfinite v.val φ
-  exact ⟨a, b, ha, hb⟩
+  choose A hA using fun w : InfinitePlace F ↦ idelicExplicitFormula_infiniteTestMap (F := F) w
+  choose B hB using fun v : S ↦ idelicExplicitFormula_finiteTestMap (F := F) v.val
+  exact ⟨fun w ↦ A w φ, fun v ↦ B v φ, fun w ↦ hA w φ, fun v ↦ hB v φ⟩
 
 /-- The unit-locus integral of the Fourier transform is the value of the
 translated test at the origin.  This is the coefficient of the logarithmic

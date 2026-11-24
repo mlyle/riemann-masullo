@@ -2167,11 +2167,192 @@ theorem globalThetaPrincipalValue_continuous (S₀ : Finset V) :
 -- range P and injectivity after descent do not establish closedness of this
 -- sum or continuity of the inverse on its image. This affects both quotients.
 
+private theorem sLocalThetaPrincipalValue_isClosedEmbedding_localUnit_mul {S : Finset V} (v : S)
+    (a b : (v.val.adicCompletion F)ˣ) :
+    adelicPrincipalValueLocalUnit v (a * b) =
+      adelicPrincipalValueLocalUnit v a * adelicPrincipalValueLocalUnit v b := by
+  classical
+  apply Units.ext
+  refine Prod.ext (one_mul 1).symm (funext fun w ↦ ?_)
+  by_cases hw : w = v
+  · subst w
+    simp [adelicPrincipalValueLocalUnit]
+  · simp [adelicPrincipalValueLocalUnit, Function.update_of_ne hw]
+
+/-- Theta of the part removed by a single principal value is the translated unit average.
+Changing the uniformizer by a unit leaves this average unchanged. -/
+private theorem sLocalThetaPrincipalValue_isClosedEmbedding_average {S : Finset V} (v : S)
+    (π : (v.val.adicCompletion F)ˣ)
+    (hπ : (Valued.v : Valuation (v.val.adicCompletion F) (WithZero (Multiplicative ℤ))).IsUniformizer
+      (π : v.val.adicCompletion F)) (f : ℬₛ(S)) (x : (SAdeleRing F S)ˣ) :
+    let P := sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property)
+    let U := (HeightOneSpectrum.adicCompletionIntegers F v.val).units
+    let μ := finiteLocalMultiplicativeTamagawaMeasure F v.val
+    sLocalAdelicTheta F S (f - P f) x = (μ.real U : ℂ)⁻¹ *
+      ∫ u in U, sLocalAdelicTheta F S f ((adelicPrincipalValueLocalUnit v (π * u))⁻¹ * x) ∂μ := by
+  intro P U μ
+  rw [map_sub, ContinuousMap.sub_apply, sLocalAdelicTheta_sAdelePrincipalValue_singleton v π hπ,
+    sub_sub_cancel]
+  simp only [U, μ, sAdelePrincipalValue_preserves_thetaKernel_translate]
+
+/-- Translating the removed part by an integer unit has the same effect in the averaging
+formula as making another choice of uniformizer. Its theta function is therefore invariant. -/
+private theorem sLocalThetaPrincipalValue_isClosedEmbedding_unitInvariant {S : Finset V} (v : S)
+    (π : (v.val.adicCompletion F)ˣ)
+    (hπ : (Valued.v : Valuation (v.val.adicCompletion F) (WithZero (Multiplicative ℤ))).IsUniformizer
+      (π : v.val.adicCompletion F)) (f : ℬₛ(S))
+    (a : (HeightOneSpectrum.adicCompletionIntegers F v.val).units) (x : (SAdeleRing F S)ˣ) :
+    let g := f - sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property) f
+    sLocalAdelicTheta F S g ((adelicPrincipalValueLocalUnit v a.val)⁻¹ * x) =
+      sLocalAdelicTheta F S g x := by
+  have ha := HeightOneSpectrum.adicCompletionIntegers.mem_units_iff_valued_eq_one.mp a.property
+  have hπa : (Valued.v : Valuation (v.val.adicCompletion F) _).IsUniformizer
+      ((a.val * π : (v.val.adicCompletion F)ˣ) : v.val.adicCompletion F) := by
+    rw [Valuation.IsUniformizer.iff, Units.val_mul, map_mul, ha, one_mul]
+    exact hπ.val
+  dsimp only
+  rw [sLocalThetaPrincipalValue_isClosedEmbedding_average v π hπ,
+    sLocalThetaPrincipalValue_isClosedEmbedding_average v (a.val * π) hπa]
+  congr 1
+  apply congrArg (fun g : (v.val.adicCompletion F)ˣ → ℂ ↦ ∫ u in _, g u ∂_)
+  funext u
+  simp only [sLocalThetaPrincipalValue_isClosedEmbedding_localUnit_mul, mul_inv_rev, mul_assoc]
+
+/-- Paper: Lemma 5.3.1.5, p. 242.
+On theta functions invariant under the integer units at one finite place, every continuous
+quotient seminorm is bounded by a continuous quotient seminorm of the difference with the
+uniformizer translate. The Mellin identity theorem on page 242 gives injectivity. The relative
+openness argument there controls seminorms before taking the theta quotient. A reconstruction
+of the primitive along uniformizer orbits with bounds modulo the theta kernel would give this
+estimate. -/
+private theorem sLocalThetaPrincipalValue_isClosedEmbedding_difference_bound {S : Finset V} (v : S)
+    (π : (v.val.adicCompletion F)ˣ)
+    (hπ : (Valued.v : Valuation (v.val.adicCompletion F) (WithZero (Multiplicative ℤ))).IsUniformizer
+      (π : v.val.adicCompletion F)) (p : Seminorm ℂ Θₛ(S)) (hp : Continuous p) :
+    ∃ q : Seminorm ℂ Θₛ(S), Continuous q ∧ ∀ f : ℬₛ(S),
+      (∀ (u : (HeightOneSpectrum.adicCompletionIntegers F v.val).units) (x : (SAdeleRing F S)ˣ),
+        sLocalAdelicTheta F S f ((adelicPrincipalValueLocalUnit v u.val)⁻¹ * x) =
+          sLocalAdelicTheta F S f x) →
+      p ((Kₛ(S)).mkQ f) ≤ q ((Kₛ(S)).mkQ
+        (f - schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v π) f)) := by
+  sorry
+
+/-- On the unit-invariant theta functions the average is a single translate. Thus the
+uniformizer difference and principal value give the same quotient class. -/
+private theorem sLocalThetaPrincipalValue_isClosedEmbedding_difference {S : Finset V} (v : S)
+    (π : (v.val.adicCompletion F)ˣ)
+    (hπ : (Valued.v : Valuation (v.val.adicCompletion F) (WithZero (Multiplicative ℤ))).IsUniformizer
+      (π : v.val.adicCompletion F)) (f : ℬₛ(S))
+    (hf : ∀ (u : (HeightOneSpectrum.adicCompletionIntegers F v.val).units) (x : (SAdeleRing F S)ˣ),
+      sLocalAdelicTheta F S f ((adelicPrincipalValueLocalUnit v u.val)⁻¹ * x) =
+        sLocalAdelicTheta F S f x) :
+    (Kₛ(S)).mkQ (f - schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v π) f) =
+      (Kₛ(S)).mkQ (sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property) f) := by
+  apply (Submodule.Quotient.eq _).mpr
+  rw [LinearMap.mem_ker, map_sub, sub_eq_zero]
+  ext x
+  rw [map_sub, ContinuousMap.sub_apply, sAdelePrincipalValue_preserves_thetaKernel_translate,
+    sLocalAdelicTheta_sAdelePrincipalValue_singleton v π hπ]
+  let U := (HeightOneSpectrum.adicCompletionIntegers F v.val).units
+  let μ := finiteLocalMultiplicativeTamagawaMeasure F v.val
+  let : BorelSpace (v.val.adicCompletion F)ˣ := ⟨rfl⟩
+  have hU : MeasurableSet (U : Set (v.val.adicCompletion F)ˣ) :=
+    (Submonoid.isOpen_units (Valued.isOpen_valuationSubring _)).measurableSet
+  rw [setIntegral_congr_fun hU (g := fun _ ↦
+    sLocalAdelicTheta F S f ((adelicPrincipalValueLocalUnit v π)⁻¹ * x)) (fun u hu ↦ by
+      rw [sAdelePrincipalValue_preserves_thetaKernel_translate,
+        sLocalThetaPrincipalValue_isClosedEmbedding_localUnit_mul, mul_inv_rev, mul_assoc]
+      exact hf ⟨u, hu⟩ _), setIntegral_const, Complex.real_smul]
+  have hm : (μ.real U : ℂ) ≠ 0 := by
+    exact_mod_cast (finitePlacePrincipalValue_integrable v.val π 0 1).1.ne'
+  change _ = _ - (μ.real U : ℂ)⁻¹ * ((μ.real U : ℂ) * _)
+  rw [inv_mul_cancel_left₀ hm]
+
+/-- For a continuous endomorphism of a complete Hausdorff locally convex space, an inverse
+seminorm estimate on the vectors `x - P x` suffices. The term `P x` is already controlled,
+and an inducing additive map has complete image. -/
+private theorem sLocalThetaPrincipalValue_isClosedEmbedding_of_bound {E : Type*}
+    [AddCommGroup E] [Module ℂ E] [TopologicalSpace E] [IsTopologicalAddGroup E]
+    [PolynormableSpace ℂ E] [T2Space E]
+    (hc : @CompleteSpace E (IsTopologicalAddGroup.rightUniformSpace E))
+    (P : E →ₗ[ℂ] E) (hP : Continuous P)
+    (hbound : ∀ p : Seminorm ℂ E, Continuous p → ∃ q : Seminorm ℂ E, Continuous q ∧
+      ∀ x, p (x - P x) ≤ q (P (x - P x))) : IsClosedEmbedding P := by
+  have hind : IsInducing P := by
+    rw [IsTopologicalAddGroup.isInducing_iff_nhds_zero]
+    refine le_antisymm (by simpa only [map_zero] using (hP.tendsto 0).le_comap) (fun W hW ↦ ?_)
+    obtain ⟨p, hp, hpW⟩ := (PolynormableSpace.hasBasis_zero_ball ℂ E).mem_iff.mp hW
+    obtain ⟨q, hq, hle⟩ := hbound p hp
+    let t := p + q.comp (LinearMap.id - P)
+    have ht : Continuous t := hp.add (hq.comp (continuous_id.sub hP))
+    refine ⟨t.ball 0 1, Seminorm.ball_mem_nhds ht one_pos, fun x hx ↦ hpW ?_⟩
+    apply (Seminorm.mem_ball_zero p).mpr
+    have hx' := (Seminorm.mem_ball_zero t).mp hx
+    refine lt_of_le_of_lt ?_ hx'
+    calc p x = p (P x + (x - P x)) := by rw [add_sub_cancel]
+         _ ≤ p (P x) + p (x - P x) := map_add_le_add _ _ _
+         _ ≤ t (P x) := by
+           change _ ≤ p (P x) + q (P x - P (P x))
+           simpa only [map_sub] using add_le_add_right (hle x) (p (P x))
+  let : UniformSpace E := IsTopologicalAddGroup.rightUniformSpace E
+  let : IsUniformAddGroup E := isUniformAddGroup_of_addCommGroup
+  let : CompleteSpace E := hc
+  exact ⟨hind.isEmbedding,
+    (AddMonoidHom.isUniformInducing_of_isInducing hind).isComplete_range.isClosed⟩
+
+private theorem sLocalThetaPrincipalValue_isClosedEmbedding_singleton {S : Finset V} (v : S) :
+    IsClosedEmbedding (sLocalThetaPrincipalValue F (Finset.singleton_subset_iff.mpr v.property)) := by
+  let : T2Space Θₛ(S) := (sLocalAdelicThetaSpace_lf (F := F) (S := S)).1
+  let : PolynormableSpace ℂ Θₛ(S) := sLocalAdelicThetaSpace_polynormable
+  apply sLocalThetaPrincipalValue_isClosedEmbedding_of_bound sLocalAdelicThetaSpace_complete _
+    (sLocalThetaPrincipalValue_continuous _)
+  intro p hp
+  let hv := (Valued.v : Valuation (v.val.adicCompletion F)
+    (WithZero (Multiplicative ℤ))).exists_isUniformizer_of_isCyclic_of_nontrivial
+  let π := Units.mk0 (hv.choose : v.val.adicCompletion F) hv.choose_spec.ne_zero
+  obtain ⟨q, hq, hle⟩ := sLocalThetaPrincipalValue_isClosedEmbedding_difference_bound v π
+    hv.choose_spec p hp
+  refine ⟨q, hq, fun x ↦ ?_⟩
+  obtain ⟨f, rfl⟩ := (Kₛ(S)).mkQ_surjective x
+  let P := sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property)
+  let g := f - P f
+  have hg := sLocalThetaPrincipalValue_isClosedEmbedding_unitInvariant v π hv.choose_spec f
+  have h := hle g hg
+  rw [sLocalThetaPrincipalValue_isClosedEmbedding_difference v π hv.choose_spec g hg] at h
+  change p ((Kₛ(S)).mkQ f - (Kₛ(S)).mkQ (P f)) ≤
+    q ((sLocalThetaPrincipalValue F _) ((Kₛ(S)).mkQ f - (Kₛ(S)).mkQ (P f)))
+  rw [← (Kₛ(S)).mkQ.map_sub]
+  exact h
+
 /-- Paper: Lemma 5.3.1.5, p. 242.
 The S-local principal value on theta classes is a closed topological embedding. -/
 theorem sLocalThetaPrincipalValue_isClosedEmbedding {S S₀ : Finset V} (h₀ : S₀ ⊆ S)
     (hn : S₀.Nonempty) :
-    IsClosedEmbedding (sLocalThetaPrincipalValue F h₀) := by sorry
+    IsClosedEmbedding (sLocalThetaPrincipalValue F h₀) := by
+  classical
+  let R (v : V) : ℬₛ(S) →ₗ[ℂ] ℬₛ(S) := if h : v ∈ S then
+    sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr h) else 1
+  have factor (l : List V) (hl : ∀ v ∈ l, v ∈ S) :
+      ∃ A : Θₛ(S) →ₗ[ℂ] Θₛ(S), IsClosedEmbedding A ∧
+        ∀ f, A ((Kₛ(S)).mkQ f) = (Kₛ(S)).mkQ ((l.map R).prod f) := by
+    induction l with
+    | nil => exact ⟨1, IsClosedEmbedding.id, fun _ ↦ rfl⟩
+    | cons v l ih =>
+      have hv := hl v List.mem_cons_self
+      obtain ⟨A, hA, he⟩ := ih fun w hw ↦ hl w (List.mem_cons_of_mem _ hw)
+      let P := sLocalThetaPrincipalValue F (Finset.singleton_subset_iff.mpr hv)
+      refine ⟨P.comp A,
+        (sLocalThetaPrincipalValue_isClosedEmbedding_singleton (F := F) ⟨v, hv⟩).comp hA, fun f ↦ ?_⟩
+      rw [LinearMap.comp_apply, he, List.map_cons, List.prod_cons]
+      simp only [R, dite_eq_left hv]
+      rfl
+  obtain ⟨A, hA, he⟩ := factor S₀.val.toList (fun v hv ↦ h₀ (Multiset.mem_toList.mp hv))
+  suffices sLocalThetaPrincipalValue F h₀ = A by rwa [this]
+  apply LinearMap.ext
+  intro x
+  obtain ⟨f, rfl⟩ := (Kₛ(S)).mkQ_surjective x
+  exact (sLocalThetaPrincipalValue_mk h₀ f).trans
+    ((congrArg (Kₛ(S)).mkQ (sAdelePrincipalValue_preserves_thetaKernel_list h₀ f)).trans (he f).symm)
 
 private theorem sLocalThetaPrincipalValue_transition_tmul {ι A X : Type*} {M : ι → Type*}
     [TopologicalSpace A] [AddCommGroup A] [Module ℂ A] [TopologicalSpace X]
