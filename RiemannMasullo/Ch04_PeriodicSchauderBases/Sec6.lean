@@ -2233,19 +2233,19 @@ private theorem moment_translate_series {A : Type*} [Finite A] (H : SchwartzBerg
     mul_assoc]
   exact mul_le_mul_of_nonneg_left (hg _) (norm_nonneg _)
 
-/-- A biorthogonal family is determined by its jets on a separating quotient.
-Representatives at the finitely many base points generate the other vectors
-by translation, so the lattice sum reconstructs every quotient class. -/
-private theorem moment_lattice_basis {X ι A : Type*} [AddCommGroup X] [Module ℂ X]
+/-- Representatives at the finite set of base points translate to representatives of
+every member of the corresponding biorthogonal orbit. -/
+private theorem moment_lattice_translates {X ι A : Type*} [AddCommGroup X] [Module ℂ X]
     [TopologicalSpace X] [IsTopologicalAddGroup X] [ContinuousSMul ℂ X] [Finite A]
-    (e : (A × ℤ) ≃ ι) (b : A → ℝ) (r : A → ℕ) {T : ℝ} (hT : 0 < T)
+    (e : (A × ℤ) ≃ ι) (b : A → ℝ) (r : A → ℕ) {T : ℝ}
     (Q : SchwartzBergman univ →L[ℂ] X) (hsur : Surjective Q) (c : ℂ)
     (d : ι → StrongDual ℂ X) (ψ : ι → X)
     (he : ∀ H a (n : ℤ), d (e (a,n)) (Q H) =
       c * iteratedDeriv (r a) H.val (((b a + n*T : ℝ) : ℂ)*Complex.I))
     (hsep : ∀ u, (∀ j, d j u = 0) → u = 0)
     (hbi : (∀ j, d j (ψ j) = 1) ∧ ∀ j k, j ≠ k → d j (ψ k) = 0)
-    (σ : ℕ ≃ ι) : IsSchauderBasis (ψ ∘ σ) (d ∘ σ) := by
+    : ∃ F : A → SchwartzBergman univ, ∀ a (n : ℤ),
+      Q (moment_translate (F a) (n*T)) = ψ (e (a,n)) := by
   classical
   have hdelta (i j : ι) : d i (ψ j) = if i = j then 1 else 0 := by
     by_cases h : i = j
@@ -2266,6 +2266,29 @@ private theorem moment_lattice_basis {X ι A : Type*} [AddCommGroup X] [Module �
     dsimp only
     rw [harg, ← he, hF, hdelta, hdelta]
     simp only [e.injective.eq_iff, Prod.mk.injEq, sub_eq_zero]
+  exact ⟨F, htr⟩
+
+/-- A biorthogonal family is determined by its jets on a separating quotient.
+Representatives at the finitely many base points generate the other vectors
+by translation, so the lattice sum reconstructs every quotient class. -/
+private theorem moment_lattice_basis {X ι A : Type*} [AddCommGroup X] [Module ℂ X]
+    [TopologicalSpace X] [IsTopologicalAddGroup X] [ContinuousSMul ℂ X] [Finite A]
+    (e : (A × ℤ) ≃ ι) (b : A → ℝ) (r : A → ℕ) {T : ℝ} (hT : 0 < T)
+    (Q : SchwartzBergman univ →L[ℂ] X) (hsur : Surjective Q) (c : ℂ)
+    (d : ι → StrongDual ℂ X) (ψ : ι → X)
+    (he : ∀ H a (n : ℤ), d (e (a,n)) (Q H) =
+      c * iteratedDeriv (r a) H.val (((b a + n*T : ℝ) : ℂ)*Complex.I))
+    (hsep : ∀ u, (∀ j, d j u = 0) → u = 0)
+    (hbi : (∀ j, d j (ψ j) = 1) ∧ ∀ j k, j ≠ k → d j (ψ k) = 0)
+    (σ : ℕ ≃ ι) : IsSchauderBasis (ψ ∘ σ) (d ∘ σ) := by
+  classical
+  have hdelta (i j : ι) : d i (ψ j) = if i = j then 1 else 0 := by
+    by_cases h : i = j
+    · subst j; simp [hbi.1]
+    · simp [h,hbi.2 _ _ h]
+  have hext {u v : X} (h : ∀ j, d j u = d j v) : u = v :=
+    sub_eq_zero.mp (hsep (u-v) fun j ↦ (map_sub (d j) _ _).trans (sub_eq_zero.mpr (h j)))
+  obtain ⟨F, htr⟩ := moment_lattice_translates e b r Q hsur c d ψ he hsep hbi
   constructor
   · intro i j
     simpa only [Function.comp_apply, ContinuousLinearMap.coe_coe, σ.injective.eq_iff] using
@@ -2294,16 +2317,59 @@ private theorem moment_lattice_basis {X ι A : Type*} [AddCommGroup X] [Module �
 
 end
 
+/-- A continuous seminorm of finitely many Schwartz–Bergman functions and their imaginary
+translates is bounded by one polynomial in the translation parameter. -/
+private theorem moment_translate_seminorm_bound {A : Type*} [Finite A] (F : A → SchwartzBergman univ)
+    (q : Seminorm ℂ (SchwartzBergman univ)) (hq : Continuous q) :
+    ∃ (d : ℕ) (C : ℝ), 0 < C ∧ ∀ a t, q (moment_translate (F a) t) ≤ C * (1 + |t|)^d := by
+  classical
+  let _ := Fintype.ofFinite A
+  let lines := LinearMap.pi (bergmanLine isOpen_univ ordConnected_univ)
+  let family := (SeminormFamily.sigma fun a : (univ : Set ℝ) ↦
+    (schwartzSeminormFamily ℂ ℝ ℂ).comp (LinearMap.proj a)).comp lines
+  have hs : WithSeminorms family := by
+    have h := lines.withSeminorms_induced (withSeminorms_pi fun _ : (univ : Set ℝ) ↦
+      schwartz_withSeminorms ℂ ℝ ℂ)
+    have htop : (inferInstance : TopologicalSpace (SchwartzBergman univ)) = induced lines inferInstance :=
+      (bergman_embedding isOpen_univ ordConnected_univ).eq_induced
+    exact (congrArg (fun t ↦ WithSeminorms (topology := t) family) htop).mpr h
+  obtain ⟨I, c, hc, hqle⟩ := Seminorm.bound_of_continuous hs q hq
+  let LineOrder := (a : (univ : Set ℝ)) × ℕ × ℕ
+  obtain ⟨B, hB, hbound⟩ : ∃ B : A → LineOrder → ℝ,
+      (∀ a i, 0 ≤ B a i) ∧ ∀ a (i : LineOrder) t,
+      family i (moment_translate (F a) t) ≤ (1 + |t|)^i.2.1 * B a i := by
+    choose B hB hbound using fun (a : A) (i : LineOrder) ↦ moment_translate_bound (F a) i.1 i.2.1 i.2.2
+    exact ⟨B, hB, hbound⟩
+  let d := I.sup fun i ↦ i.2.1
+  let B₀ := 1 + ∑ a : A, ∑ i ∈ I, B a i
+  have hB₀ : 0 < B₀ := add_pos_of_pos_of_nonneg one_pos
+    (Finset.sum_nonneg fun a _ ↦ Finset.sum_nonneg fun i _ ↦ hB a i)
+  refine ⟨d, (c : ℝ) * B₀, mul_pos (NNReal.coe_pos.mpr (pos_iff_ne_zero.mpr hc)) hB₀, fun a t ↦ ?_⟩
+  have himax (i : LineOrder) (hi : i ∈ I) : B a i ≤ B₀ := by
+    have h₁ := Finset.single_le_sum (fun i (_ : i ∈ I) ↦ hB a i) hi
+    have h₂ := Finset.single_le_sum (s := Finset.univ) (f := fun a : A ↦ ∑ i ∈ I, B a i)
+      (fun b _ ↦ Finset.sum_nonneg fun i _ ↦ hB b i) (Finset.mem_univ a)
+    exact (h₁.trans h₂).trans (by dsimp [B₀]; linarith)
+  have hh : (I.sup family) (moment_translate (F a) t) ≤ (1 + |t|)^d * B₀ := by
+    apply Seminorm.finset_sup_apply_le (by positivity)
+    intro i hi
+    exact (hbound a i t).trans (mul_le_mul (pow_le_pow_right₀ (by linarith [abs_nonneg t])
+      (Finset.le_sup (f := fun i : LineOrder ↦ i.2.1) hi)) (himax i hi) (hB a i) (by positivity))
+  calc q (moment_translate (F a) t) ≤ (c • (I.sup family)) (moment_translate (F a) t) := hqle _
+    _ = (c : ℝ) * (I.sup family) (moment_translate (F a) t) := rfl
+    _ ≤ (c : ℝ) * ((1 + |t|)^d * B₀) := mul_le_mul_of_nonneg_left hh c.property
+    _ = _ := by ring
+
 include hcomm in
-/-- Paper: Theorem 4.6.1.5 and Equation (4.6.1.15), p. 212. Under every enumeration of the
-moment family, the biorthogonal vectors are a Schauder basis of the difference quotient with
-the descended log-moments as coefficient functionals. This is the expansion step: the coordinate
-series of a quotient representative converges to it because the coefficients decay faster than
-any power of the lattice frequency. Absoluteness is
-`modulatedQuotientLogMoment_bases_absolute`. -/
-private theorem modulatedQuotientLogMoment_bases_quotient (σ : ℕ ≃ J) (ψ : J → U)
+/-- The lattice chart for the quotient basis also bounds every continuous seminorm
+of its vectors polynomially in the real frequency of the chosen section. -/
+private theorem modulatedQuotientLogMoment_basis_and_section_growth (σ : ℕ ≃ J) (ψ : J → U)
     (hbi : (∀ j, D j (ψ j) = 1) ∧ ∀ j k, j ≠ k → D j (ψ k) = 0) :
-    IsSchauderBasis (ψ ∘ σ) (D ∘ σ) := by
+    IsSchauderBasis (ψ ∘ σ) (D ∘ σ) ∧
+      ∃ (τ : ℝ≥0ˣ →ₜ* G) (s : J → ℝ), RightInverse τ m ∧
+        (∀ (j : J) t, j.val.1 (τ t) = Circle.exp (s j * Real.log ((t : ℝ≥0) : ℝ))) ∧
+        ∀ q : Seminorm ℂ U, Continuous q → ∃ (d : ℕ) (C : ℝ), 0 < C ∧
+          ∀ j, q (ψ j) ≤ C * (1 + |s j|)^d := by
   classical
   obtain ⟨τ, hτ⟩ := exists_surjectiveModulation_section m hm hms
   obtain ⟨χ₀, s, hK, h₀, hξ⟩ := moment_chart m ω γs τ hτ
@@ -2370,8 +2436,47 @@ private theorem modulatedQuotientLogMoment_bases_quotient (σ : ℕ ≃ J) (ψ :
     hj hcover hP hnz ho (N := N) (fun z ↦ (Finset.card_filter_le _ _).trans (by simp))
   let A := {j : J // s j ∈ Ico 0 T}
   let : Finite A := hfin
-  exact moment_lattice_basis enum (fun a : A ↦ s a.val) (fun a : A ↦ a.val.val.2) hT Q hsur
-    (c : ℝ) D ψ (fun H a n ↦ by rw [hjet, (henum a n).1, (henum a n).2]) hsep hbi σ
+  have hmoment (H : SchwartzBergman univ) (a : A) (n : ℤ) : D (enum (a,n)) (Q H) =
+      ((c : ℝ) : ℂ) * iteratedDeriv a.val.val.2 H.val (((s a.val + n*T : ℝ) : ℂ)*Complex.I) := by
+    rw [hjet, (henum a n).1, (henum a n).2]
+  refine ⟨moment_lattice_basis enum (fun a : A ↦ s a.val) (fun a : A ↦ a.val.val.2) hT Q hsur
+    (c : ℝ) D ψ hmoment hsep hbi σ, τ, s, hτ, ?_, ?_⟩
+  · intro j t
+    simpa only [h₀, one_mul, hτ t] using hξ j (τ t)
+  · intro q hq
+    obtain ⟨F, htr⟩ := moment_lattice_translates enum (fun a : A ↦ s a.val) (fun a : A ↦ a.val.val.2)
+      Q hsur (c : ℝ) D ψ hmoment hsep hbi
+    obtain ⟨p, C, hC, hbound⟩ := moment_translate_seminorm_bound F (q.comp Q.toLinearMap)
+      (hq.comp Q.continuous)
+    refine ⟨p, C * (1 + T)^p, mul_pos hC (pow_pos (by linarith) _), fun j ↦ ?_⟩
+    obtain ⟨⟨a,n⟩,rfl⟩ := enum.surjective j
+    let y := s (enum (a,n))
+    have hshift : (n : ℝ)*T = y - s a.val := by dsimp only [y]; rw [(henum a n).1]; ring
+    have htri : |(n : ℝ)*T| ≤ |y| + T := by
+      rw [hshift]
+      have ha : |s a.val| ≤ T := (abs_of_nonneg a.property.1).le.trans a.property.2.le
+      exact (abs_sub y _).trans (add_le_add le_rfl ha)
+    have hw : 1 + |(n : ℝ)*T| ≤ (1 + T)*(1 + |y|) := by
+      nlinarith [mul_nonneg hT.le (abs_nonneg y)]
+    rw [←htr]
+    change q (Q (moment_translate (F a) ((n : ℝ)*T))) ≤ _
+    calc _ ≤ C*(1+|(n : ℝ)*T|)^p := hbound a _
+         _ ≤ C*((1+T)*(1+|y|))^p := mul_le_mul_of_nonneg_left
+           (pow_le_pow_left₀ (by positivity) hw _) hC.le
+         _ = _ := by rw [mul_pow, mul_assoc]
+
+include hcomm in
+/-- Paper: Theorem 4.6.1.5 and Equation (4.6.1.15), p. 212. Under every enumeration of the
+moment family, the biorthogonal vectors are a Schauder basis of the difference quotient with
+the descended log-moments as coefficient functionals. This is the expansion step: the coordinate
+series of a quotient representative converges to it because the coefficients decay faster than
+any power of the lattice frequency. Absoluteness is
+`modulatedQuotientLogMoment_bases_absolute`. -/
+private theorem modulatedQuotientLogMoment_bases_quotient (σ : ℕ ≃ J) (ψ : J → U)
+    (hbi : (∀ j, D j (ψ j) = 1) ∧ ∀ j k, j ≠ k → D j (ψ k) = 0) :
+    IsSchauderBasis (ψ ∘ σ) (D ∘ σ) := by
+  exact (modulatedQuotientLogMoment_basis_and_section_growth (m := m) (hm := hm)
+    (hms := hms) (ω := ω) (γs := γs) (hγs := hγs) (μ := μ) (hcomm := hcomm) σ ψ hbi).1
 
 include hcomm in
 /-- Paper: Theorem 4.6.1.5 and Equation (4.6.1.16), p. 212, via Lemma 4.1.2.4, p. 159. Once
@@ -2445,7 +2550,49 @@ theorem modulatedQuotientLogMoment_exists_biorthogonal_growth :
       ∀ q : Seminorm ℂ U, Continuous q → ∃ d : ℕ, ∀ k : Fin N, ∃ C : ℝ, 0 < C ∧
         ∀ (n : ℤ) (j : J), j.val.1 = freq[k, n] →
           q (ψ j) ≤ C * (1 + |(n : ℝ)|) ^ d := by
-  sorry
+  obtain ⟨ψ, hbi⟩ := modulatedQuotientLogMoment_bases_biorthogonal (m := m) (hm := hm)
+    (hms := hms) (ω := ω) (γs := γs) (hγs := hγs) (μ := μ) (hcomm := hcomm)
+  refine ⟨ψ, hbi.1, hbi.2, fun q hq ↦ ?_⟩
+  by_cases hN : 0 < N
+  · obtain ⟨σ⟩ := modulatedPeriodicMomentIndex_enumerable m hm hms ω γs hγs hN
+    obtain ⟨τ, s, hτ, hs, hg⟩ := (modulatedQuotientLogMoment_basis_and_section_growth (m := m)
+      (hm := hm) (hms := hms) (ω := ω) (γs := γs) (hγs := hγs) (μ := μ) (hcomm := hcomm) σ ψ hbi).2
+    obtain ⟨p, C, hC, hp⟩ := hg q hq
+    obtain ⟨b, hb⟩ := exists_circleExp_freq ((χ ω).comp τ)
+    have hb' (t : ℝ≥0ˣ) : χ ω (τ t) = Circle.exp (b * Real.log ((t : ℝ≥0) : ℝ)) := hb t
+    refine ⟨p, fun k ↦ ?_⟩
+    let L := Real.log ((m (γs k)).val : ℝ)
+    let u := b - t₀ k ω
+    let v := 2 * Real.pi / L
+    let B := 1 + |u| + |v|
+    have hB : 0 < B := by dsimp [B]; positivity
+    refine ⟨C * B^p, mul_pos hC (pow_pos hB _), fun n j hj ↦ ?_⟩
+    have hfreq (x : G) : freq[k, n] x =
+        χ ω x * Circle.exp (-(t₀ k ω - 2 * Real.pi * (n : ℝ) / L) * period x) := by
+      change (modulatedCyclicCharacter m (γs k) (hγs k) χ (t₀ k) (ht₀ k) (ω, n)
+        (QuotientGroup.mk x))⁻¹ = _
+      rw [modulatedCyclicCharacter_mk, neg_mul, Circle.exp_neg, mul_inv, inv_inv]
+    have hsj : s j = u + v * n := by
+      apply (existsUnique_positiveRealCharacter_freq (j.val.1.comp τ)).unique
+      · exact hs j
+      · intro t
+        change j.val.1 (τ t) = _
+        rw [hj, hfreq, hτ t, hb', ← Circle.exp_add]
+        congr 1
+        dsimp only [u, v]
+        ring
+    have hw : 1 + |s j| ≤ B * (1 + |(n : ℝ)|) := by
+      rw [hsj]
+      have ht := abs_add_le u (v * (n : ℝ))
+      rw [abs_mul] at ht
+      dsimp only [B]
+      nlinarith [abs_nonneg u, abs_nonneg v, abs_nonneg (n : ℝ),
+        mul_nonneg (abs_nonneg u) (abs_nonneg (n : ℝ))]
+    calc q (ψ j) ≤ C*(1+|s j|)^p := hp j
+         _ ≤ C*(B*(1+|(n : ℝ)|))^p := mul_le_mul_of_nonneg_left
+           (pow_le_pow_left₀ (by positivity) hw _) hC.le
+         _ = _ := by rw [mul_pow, mul_assoc]
+  · exact ⟨0, fun k ↦ (hN ((Nat.zero_le _).trans_lt k.isLt)).elim⟩
 
 include hcomm in
 /-- Two biorthogonal families of the descended log-moments coincide. Their difference at any
