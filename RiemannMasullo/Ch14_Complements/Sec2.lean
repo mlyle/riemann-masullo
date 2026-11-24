@@ -12,6 +12,7 @@ public import Mathlib.Data.Set.Card
 public import Mathlib.FieldTheory.Finite.GaloisField
 public import Mathlib.Topology.JacobsonSpace
 public import Mathlib.Topology.Algebra.InfiniteSum.Defs
+import Mathlib.NumberTheory.ArithmeticFunction.Moebius
 
 /-!
 # §§14.2–14.3: Global function fields and higher rank
@@ -736,6 +737,127 @@ theorem curveZeta_closedPointsOfDegree_asymptotic (f : X ⟶ Spec (.of k))
     (fun m : ℕ ↦ (curveZetaClosedPointCount f m : ℝ) - q ^ m / m) =O[Filter.atTop]
       (fun m : ℕ ↦ Real.sqrt (q ^ m) / m) := by sorry
 
+/-- A geometric sum in the base `q ≥ 2` is at most twice its last term. -/
+private theorem curveZeta_closedPointsOfDegree_bound_of_weil_geom (q : ℝ) (hq : 2 ≤ q) (n : ℕ) :
+    ∑ b ∈ Finset.Icc 1 n, q ^ b ≤ 2 * q ^ n := by
+  induction n with
+  | zero => simp
+  | succ n ih =>
+    rw [Finset.sum_Icc_succ_top (by omega), pow_succ]
+    have h0 : 0 ≤ q ^ n := by positivity
+    nlinarith [mul_nonneg h0 (sub_nonneg.mpr hq)]
+
+/-- The sum of `√(q^b)` for `b ≤ n` is at most `2 q^n` when `q ≥ 2`. -/
+private theorem curveZeta_closedPointsOfDegree_bound_of_weil_geom_sqrt (q : ℝ) (hq : 2 ≤ q)
+    (n : ℕ) :
+    ∑ b ∈ Finset.Icc 1 n, Real.sqrt (q ^ b) ≤ 2 * q ^ n := by
+  have hs := Real.sq_sqrt (show 0 ≤ q by linarith)
+  have hs0 := Real.sqrt_nonneg q
+  have hs1 : 1 ≤ Real.sqrt q := by nlinarith
+  have hc : 2 + Real.sqrt q ≤ 2 * q := by nlinarith [mul_nonneg hs0 (sub_nonneg.mpr hs1)]
+  induction n with
+  | zero => simp
+  | succ n ih =>
+    rw [Finset.sum_Icc_succ_top (by omega), pow_succ, Real.sqrt_mul (by positivity)]
+    have h1 : 1 ≤ q ^ n := one_le_pow₀ (by linarith)
+    have hX : Real.sqrt (q ^ n) ≤ q ^ n := by
+      calc Real.sqrt (q ^ n) ≤ Real.sqrt ((q ^ n) ^ 2) := Real.sqrt_le_sqrt (by nlinarith)
+        _ = q ^ n := Real.sqrt_sq (by positivity)
+    calc ∑ b ∈ Finset.Icc 1 n, Real.sqrt (q ^ b) + Real.sqrt (q ^ n) * Real.sqrt q
+        ≤ 2 * q ^ n + q ^ n * Real.sqrt q := add_le_add ih (mul_le_mul_of_nonneg_right hX hs0)
+      _ = q ^ n * (2 + Real.sqrt q) := by ring
+      _ ≤ q ^ n * (2 * q) := mul_le_mul_of_nonneg_left hc (by positivity)
+      _ = 2 * (q ^ n * q) := by ring
+
+/-- Möbius inversion of the point counts, with the Weil bound as a hypothesis. -/
+private theorem curveZeta_closedPointsOfDegree_bound_of_weil_aux (q g : ℝ) (P : ℕ → ℝ)
+    (hq : 2 ≤ q) (hg : 0 ≤ g)
+    (hW : ∀ r : ℕ, 0 < r →
+      |∑ d ∈ r.divisors, (d : ℝ) * P d - (q ^ r + 1)| ≤ 2 * g * Real.sqrt (q ^ r))
+    (m : ℕ) (hm : 0 < m) :
+    |P m - q ^ m / m| ≤ (5 + 6 * g) * Real.sqrt (q ^ m) / m := by
+  classical
+  let N : ℕ → ℝ := fun r ↦ ∑ d ∈ r.divisors, (d : ℝ) * P d
+  let E : ℕ → ℝ := fun r ↦ N r - (q ^ r + 1)
+  have hEb : ∀ r, 0 < r → |E r| ≤ 2 * g * Real.sqrt (q ^ r) := hW
+  have hsum : ∀ r > 0, ∑ i ∈ r.divisors, (((i : ℕ) : ℝ) * P i - if i = 1 then 1 else 0) =
+      N r - 1 := by
+    intro r hr
+    rw [Finset.sum_sub_distrib, Finset.sum_ite_eq']
+    simp [hr.ne', N]
+  have hinv := ArithmeticFunction.sum_eq_iff_sum_smul_moebius_eq.mp hsum m hm
+  have h2 : ∑ i ∈ m.divisors, ((ArithmeticFunction.moebius (m / i) : ℤ) : ℝ) * (N i - 1) =
+      (m : ℝ) * P m - if m = 1 then 1 else 0 := by
+    rw [← hinv]
+    simp only [zsmul_eq_mul]
+    exact (Nat.sum_divisorsAntidiagonal'
+      (fun a b ↦ ((ArithmeticFunction.moebius a : ℤ) : ℝ) * (N b - 1))).symm
+  rw [← Nat.cons_self_properDivisors hm.ne', Finset.sum_cons, Nat.div_self hm,
+    ArithmeticFunction.moebius_apply_one, Int.cast_one, one_mul] at h2
+  set T := ∑ i ∈ m.properDivisors, ((ArithmeticFunction.moebius (m / i) : ℤ) : ℝ) * (N i - 1)
+    with hTdef
+  have hmain : (m : ℝ) * P m - q ^ m = (if m = 1 then 1 else 0) + E m + T := by
+    simp only [E]
+    linarith
+  have hsub : m.properDivisors ⊆ Finset.Icc 1 (m / 2) := by
+    intro i hi
+    obtain ⟨⟨c, hc⟩, hlt⟩ := Nat.mem_properDivisors.mp hi
+    have hi0 : 0 < i := Nat.pos_of_mem_properDivisors hi
+    have hc2 : 2 ≤ c := by
+      rcases c with _ | _ | c
+      · simp at hc
+        omega
+      · simp at hc
+        omega
+      · omega
+    rw [Finset.mem_Icc, Nat.le_div_iff_mul_le (by norm_num)]
+    exact ⟨hi0, hc ▸ Nat.mul_le_mul_left i hc2⟩
+  have hhalf : q ^ (m / 2) ≤ Real.sqrt (q ^ m) := by
+    calc q ^ (m / 2) = Real.sqrt ((q ^ (m / 2)) ^ 2) := (Real.sqrt_sq (by positivity)).symm
+      _ ≤ Real.sqrt (q ^ m) := Real.sqrt_le_sqrt (by
+          rw [← pow_mul]
+          exact pow_le_pow_right₀ (by linarith) (by omega))
+  have hT : |T| ≤ ∑ i ∈ m.properDivisors, (q ^ i + 2 * g * Real.sqrt (q ^ i)) := by
+    refine (Finset.abs_sum_le_sum_abs _ _).trans (Finset.sum_le_sum fun i hi ↦ ?_)
+    have hi0 : 0 < i := Nat.pos_of_mem_properDivisors hi
+    have hμ : |((ArithmeticFunction.moebius (m / i) : ℤ) : ℝ)| ≤ 1 := by
+      exact_mod_cast ArithmeticFunction.abs_moebius_le_one
+    have hN : |N i - 1| ≤ q ^ i + 2 * g * Real.sqrt (q ^ i) := by
+      have h := hEb i hi0
+      calc |N i - 1| = |q ^ i + E i| := by
+            congr 1
+            simp only [E]
+            ring
+        _ ≤ |q ^ i| + |E i| := abs_add_le _ _
+        _ ≤ q ^ i + 2 * g * Real.sqrt (q ^ i) := by
+            rw [abs_of_nonneg (by positivity)]
+            linarith
+    rw [abs_mul]
+    calc |((ArithmeticFunction.moebius (m / i) : ℤ) : ℝ)| * |N i - 1|
+        ≤ 1 * (q ^ i + 2 * g * Real.sqrt (q ^ i)) :=
+          mul_le_mul hμ hN (abs_nonneg _) zero_le_one
+      _ = q ^ i + 2 * g * Real.sqrt (q ^ i) := one_mul _
+  have hS1 : ∑ i ∈ m.properDivisors, q ^ i ≤ 2 * Real.sqrt (q ^ m) :=
+    (Finset.sum_le_sum_of_subset_of_nonneg hsub fun _ _ _ ↦ by positivity).trans
+      ((curveZeta_closedPointsOfDegree_bound_of_weil_geom q hq _).trans (by linarith))
+  have hS2 : ∑ i ∈ m.properDivisors, Real.sqrt (q ^ i) ≤ 2 * Real.sqrt (q ^ m) :=
+    (Finset.sum_le_sum_of_subset_of_nonneg hsub fun _ _ _ ↦ Real.sqrt_nonneg _).trans
+      ((curveZeta_closedPointsOfDegree_bound_of_weil_geom_sqrt q hq _).trans (by linarith))
+  have hsplit : ∑ i ∈ m.properDivisors, (q ^ i + 2 * g * Real.sqrt (q ^ i)) =
+      ∑ i ∈ m.properDivisors, q ^ i + 2 * g * ∑ i ∈ m.properDivisors, Real.sqrt (q ^ i) := by
+    rw [Finset.sum_add_distrib, Finset.mul_sum]
+  have hone : 1 ≤ Real.sqrt (q ^ m) := Real.one_le_sqrt.mpr (one_le_pow₀ (by linarith))
+  have hite : |(if m = 1 then (1 : ℝ) else 0)| ≤ 1 := by split_ifs <;> simp
+  have key : |(m : ℝ) * P m - q ^ m| ≤ (5 + 6 * g) * Real.sqrt (q ^ m) := by
+    rw [hmain]
+    have h3 := abs_add_three (if m = 1 then (1 : ℝ) else 0) (E m) T
+    have hE := hEb m hm
+    nlinarith [mul_le_mul_of_nonneg_left hS2 (by linarith : (0 : ℝ) ≤ 2 * g)]
+  have hm' : (0 : ℝ) < m := by exact_mod_cast hm
+  rw [show P m - q ^ m / m = ((m : ℝ) * P m - q ^ m) / m by field_simp, abs_div,
+    abs_of_pos hm']
+  exact div_le_div_of_nonneg_right key hm'.le
+
 /-- Paper: §14.2, p. 535. The Weil point-count estimate with genus g gives
 an error constant depending only on g in the closed-point count.
 Deviation: Uses the numerical Weil hypothesis and the closed-point expression
@@ -746,7 +868,14 @@ theorem curveZeta_closedPointsOfDegree_bound_of_weil (f : X ⟶ Spec (.of k))
     let N (r : ℕ) : ℝ := ∑ d ∈ r.divisors, (d : ℝ) * curveZetaClosedPointCount f d
     (∀ r : ℕ, 0 < r → |N r - (q ^ r + 1)| ≤ 2 * g * Real.sqrt (q ^ r)) →
     ∀ m : ℕ, 0 < m → |(curveZetaClosedPointCount f m : ℝ) - q ^ m / m| ≤
-      (5 + 6 * (g : ℝ)) * Real.sqrt (q ^ m) / m := by sorry
+      (5 + 6 * (g : ℝ)) * Real.sqrt (q ^ m) / m := by
+  intro q N hW m hm
+  have hq : (2 : ℝ) ≤ q := by
+    have h := Finite.one_lt_card (α := k)
+    show (2 : ℝ) ≤ (Nat.card k : ℝ)
+    exact_mod_cast h
+  exact curveZeta_closedPointsOfDegree_bound_of_weil_aux q g
+    (fun d ↦ (curveZetaClosedPointCount f d : ℝ)) hq (Nat.cast_nonneg g) hW m hm
 
 -- TODO(paper-gap): The comparison on p. 535 refers to the missing Theorem
 -- 13.3.1.2. Equation (5.3.1.5) supplies a finite-place principal-value

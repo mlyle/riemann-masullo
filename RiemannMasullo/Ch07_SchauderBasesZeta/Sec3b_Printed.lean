@@ -593,16 +593,336 @@ def Printed.sLocalPW_principalValue_diagram : Prop :=
           (∀ E ∈ ({a, b, a', b', H₀} : Set (Submodule ℂ (Θ(F, T, χ)))),
             ∀ x ∈ E, A g x ∈ E) ∧ ∀ x ∈ H₀, P (A g x) = A g (P x)
 
+/-- Fourier theta evaluation on the trivial component, read from the second Čech coordinate. -/
+private theorem sec3bP_fourierEval (S : Finset Vℚ) (g : SIdeleQuotient ℚ S) :
+    ∃ L : Θ(ℚ, S, 1) →L[ℂ] ℂ, ∀ f : B(ℚ, S),
+      L (q(ℚ, S, 1) f) = sLocalHomogeneousAdelicThetaLinearMap ℚ S 1 (sAdeleSchwartzFourier f) g := by
+  let := isClosed_sProjectedDiagonal (F := ℚ) (S := S)
+  let : T2Space (SIdeleQuotient ℚ S) := inferInstanceAs (T2Space (_ ⧸ _))
+  let : LocallyCompactSpace (SAdeleRing ℚ S)ˣ := (sIdeleGroup_description ℚ S).2.2.1
+  let (v : S) : ProperSpace (v.val.adicCompletion ℚ) := properSpace_adicCompletion v.val
+  let (w : InfinitePlace ℚ) : SecondCountableTopology w.Completion :=
+    (InfinitePlace.Completion.isometry_extensionEmbedding w).isEmbedding.secondCountableTopology
+  let : SecondCountableTopology (SAdeleRing ℚ S) := inferInstanceAs
+    (SecondCountableTopology (((w : InfinitePlace ℚ) → w.Completion) × ((v : S) → v.val.adicCompletion ℚ)))
+  let : SecondCountableTopology (SAdeleRing ℚ S)ˣ := (sIdeleGroup_description ℚ S).1.secondCountableTopology
+  have hpair := (existsUnique_sLocalCechThetaPair (F := ℚ) (S := S) 1).exists
+  simp only [inv_one] at hpair
+  obtain ⟨U, hU⟩ := hpair
+  let m : SIdeleQuotient ℚ S →ₜ* ℝ≥0ˣ := ⟨m(ℚ, S), (isProperMap_sIdeleQuotientNorm ℚ S).continuous⟩
+  let E := ModulatedExponentialDecay m (Ioi (0 : ℝ))
+  let ev : E →L[ℂ] ℂ :=
+    ⟨(LinearMap.proj g).comp (modulatedExponentialDecaySubmodule m _).subtype,
+      continuous_modulatedExponentialDecay_eval m _ ⟨1, one_pos⟩ g⟩
+  exact ⟨ev.comp ((Submodule.subtypeL _).comp ((ContinuousLinearMap.snd ℂ _ _).comp U)),
+    fun f ↦ congrFun (hU f).2 g⟩
+
+/-- Every term in the homogeneous theta integral at g has the same idelic norm as g. -/
+private theorem sec3bP_theta_zero (S : Finset Vℚ) (g : SIdeleQuotient ℚ S) (f : B(ℚ, S))
+    (hz : ∀ u : (SAdeleRing ℚ S)ˣ, sIdeleNorm ℚ S u = m(ℚ, S) g →
+      f (Multiplicative.ofAdd u.val) = 0) :
+    sLocalHomogeneousAdelicThetaLinearMap ℚ S 1 f g = 0 := by
+  rw [sLocalHomogeneousAdelicThetaLinearMap_apply]
+  apply (MeasureTheory.integral_congr_ae (Eventually.of_forall fun k ↦ ?_)).trans (MeasureTheory.integral_zero _ _)
+  obtain ⟨a, ha⟩ := QuotientGroup.mk_surjective (g * k.val)
+  simp only [PontryaginDual.one_apply, Circle.coe_one, mul_one, ← ha,
+    sLocalAdelicThetaOnClasses_mk, sLocalAdelicTheta_apply]
+  refine (tsum_congr fun ξ ↦ hz (sUnitEmbedding ℚ S ξ * a) ?_).trans tsum_zero
+  have hξ : sIdeleNorm ℚ S (sUnitEmbedding ℚ S ξ) = 1 := MonoidHom.mem_ker.mp ((sIdeleNorm_spec ℚ S).2 ⟨ξ, rfl⟩)
+  rw [map_mul, hξ, one_mul,
+    ← sIdeleQuotientNorm_mk, ha, map_mul, MonoidHom.mem_ker.mp k.property, mul_one]
+
+open MeasureTheory in
+/-- A nonnegative test which is positive at an idele has positive homogeneous theta there. -/
+private theorem sec3bP_theta_ne (S : Finset Vℚ) (a : (SAdeleRing ℚ S)ˣ) (f : B(ℚ, S))
+    (hf : ∀ x, 0 ≤ (f x).re) (ha : 0 < (f (Multiplicative.ofAdd a.val)).re) :
+    sLocalHomogeneousAdelicThetaLinearMap ℚ S 1 f (QuotientGroup.mk a) ≠ 0 := by
+  let : MeasurableSpace J₁(ℚ, S) := borel _
+  let : BorelSpace J₁(ℚ, S) := ⟨rfl⟩
+  let μ : MeasureTheory.Measure J₁(ℚ, S) := sLocalNormOneQuotientMeasure ℚ S
+  let : μ.IsHaarMeasure := (sLocalNormOneQuotientMeasure_normProduct (F := ℚ) (S := S)).1
+  let : CompactSpace J₁(ℚ, S) := isCompact_iff_compactSpace.mp
+    ((isProperMap_sIdeleQuotientNorm ℚ S).isCompact_preimage isCompact_singleton)
+  let θ := sLocalAdelicThetaOnClasses ℚ S f
+  have hle (b : (SAdeleRing ℚ S)ˣ) : (f (Multiplicative.ofAdd b.val)).re ≤ (θ (QuotientGroup.mk b)).re := by
+    change _ ≤ (sLocalAdelicThetaOnClasses ℚ S f (QuotientGroup.mk b)).re
+    have hs := ((sLocalAdelicTheta_hasSumUniformlyOn ℚ S f {b} isCompact_singleton).hasSum rfl).summable
+    rw [sLocalAdelicThetaOnClasses_mk, sLocalAdelicTheta_apply, Complex.re_tsum hs]
+    simpa only [Function.comp_apply, Complex.reCLM_apply, map_one, one_mul] using
+      (hs.mapL Complex.reCLM).le_tsum 1 (fun ξ _ ↦ hf _)
+  let v (k : J₁(ℚ, S)) := θ (QuotientGroup.mk a * k.val)
+  have hc : Continuous v := θ.continuous.comp (continuous_const.mul (continuous_subtype_val (p := (· ∈ J₁(ℚ, S)))))
+  have hi := hc.integrable_of_hasCompactSupport (HasCompactSupport.of_compactSpace _) (μ := μ)
+  have hp : 0 < ∫ k, (v k).re ∂μ := by
+    apply MeasureTheory.integral_pos_of_integrable_nonneg_ne_zero (Complex.continuous_re.comp hc)
+      ((Complex.continuous_re.comp hc).integrable_of_hasCompactSupport (HasCompactSupport.of_compactSpace _)) (x := 1)
+    · intro k
+      obtain ⟨b, hb⟩ := QuotientGroup.mk_surjective (QuotientGroup.mk a * k.val)
+      exact (hf _).trans (hb ▸ hle b)
+    · simpa only [Function.comp_apply, v, OneMemClass.coe_one, mul_one] using (ha.trans_le (hle a)).ne'
+  rw [sLocalHomogeneousAdelicThetaLinearMap_apply]
+  simp only [PontryaginDual.one_apply, Circle.coe_one, mul_one]
+  intro h
+  change ∫ k, v k ∂μ = 0 at h
+  have hr := Complex.reCLM.integral_comp_comm (μ := μ) hi
+  change (∫ k, (v k).re ∂μ) = (∫ k, v k ∂μ).re at hr
+  rw [hr, h, Complex.zero_re] at hp
+  exact lt_irrefl _ hp
+
+local notation "prodNorm(" S ", " x ")" =>
+  ((∏ w : InfinitePlace ℚ, ‖(x : SAdeleRing ℚ S).1 w‖ ^ w.mult) * ∏ v : S, ‖x.2 v‖)
+
+private theorem sec3bP_prodNorm_unit {S : Finset Vℚ} (u : (SAdeleRing ℚ S)ˣ) :
+    prodNorm(S, u.val) = ((sIdeleNorm ℚ S u).val : ℝ) := by simp [sIdeleNorm]
+
+/-- A compact Fourier bump on an open shell can be chosen with nonzero homogeneous
+Fourier theta at any prescribed idele on that shell. -/
+private theorem sec3bP_shell_bump (S : Finset Vℚ) (a : (SAdeleRing ℚ S)ˣ) (l r : ℝ)
+    (ha : ((sIdeleNorm ℚ S a).val : ℝ) ∈ Ioo l r) :
+    ∃ f : B(ℚ, S), HasCompactSupport (sAdeleSchwartzFourier f).val ∧
+      (∀ x ∈ tsupport (sAdeleSchwartzFourier f).val, prodNorm(S, x.toAdd) ∈ Ioo l r) ∧
+      sLocalHomogeneousAdelicThetaLinearMap ℚ S 1 (sAdeleSchwartzFourier f) (QuotientGroup.mk a) ≠ 0 := by
+  let (v : S) : ProperSpace (v.val.adicCompletion ℚ) := properSpace_adicCompletion v.val
+  let G := Multiplicative (SAdeleRing ℚ S)
+  let : T2Space G := inferInstanceAs (T2Space
+    (((w : InfinitePlace ℚ) → w.Completion) × ((v : S) → v.val.adicCompletion ℚ)))
+  let : LocallyCompactSpace G := inferInstanceAs (LocallyCompactSpace
+    (((w : InfinitePlace ℚ) → w.Completion) × ((v : S) → v.val.adicCompletion ℚ)))
+  let U : Set G := {x | prodNorm(S, x.toAdd) ∈ Ioo l r}
+  have hU : IsOpen U := by
+    refine isOpen_Ioo.preimage (Continuous.mul ?_ ?_)
+    · exact continuous_finsetProd _ fun w _ ↦ (((continuous_apply w).comp
+        (continuous_fst.comp continuous_toAdd)).norm.pow w.mult)
+    · exact continuous_finsetProd _ fun v _ ↦ ((continuous_apply v).comp
+        (continuous_snd.comp continuous_toAdd)).norm
+  have ham : Multiplicative.ofAdd a.val ∈ U := by
+    change prodNorm(S, a.val) ∈ Ioo l r
+    rwa [sec3bP_prodNorm_unit]
+  obtain ⟨b, hc, hs, hb⟩ := schwartzBruhat_exists_local_unit hU ham
+  -- As in the compact shape construction in Ch05 Sec3b, take the squared modulus.
+  have hn : ContDiff ℝ (↑(⊤ : ℕ∞)) (fun z : ℂ ↦ Complex.normSq z) :=
+    (Complex.reCLM.contDiff.mul Complex.reCLM.contDiff).add (Complex.imCLM.contDiff.mul Complex.imCLM.contDiff)
+  obtain ⟨k, hk⟩ := compact_schwartzBruhat_comp hc
+    (φ := fun z ↦ (Complex.normSq z : ℂ)) (Complex.ofRealCLM.contDiff.comp hn) (by simp)
+  let F := sAdeleSchwartzFourier (F := ℚ) (S := S)
+  have h4 : F (F (F (F k))) = k := by
+    apply Subtype.ext
+    funext x
+    exact (sLocal_fourier_inversion (F (F k)) x.toAdd).trans
+      ((sLocal_fourier_inversion k (-x.toAdd)).trans (by rw [neg_neg]; rfl))
+  refine ⟨F (F (F k)), ?_⟩
+  change HasCompactSupport (F (F (F (F k)))).val ∧ _
+  rw [show sAdeleSchwartzFourier (F (F (F k))) = k from h4, h4]
+  refine ⟨by rw [hk]; exact hc.comp_left (by simp), ?_, sec3bP_theta_ne S a k ?_ ?_⟩
+  · intro x hx
+    apply hs
+    refine closure_mono (s := Function.support k.val) (t := Function.support b.val) ?_ hx
+    intro y hy hyb
+    apply hy
+    change b y = 0 at hyb
+    simp [hk, hyb]
+  · intro x
+    simp [hk, Complex.normSq_nonneg]
+  · simp [hk, hb.eq_of_nhds]
+
+/-- A compact set of frequencies fits in a single box. From the compact-box argument in Sec3b. -/
+private theorem sec3bP_compact_box {S : Finset Vℚ} {K : Set (Multiplicative (SAdeleRing ℚ S))}
+    (hK : IsCompact K) : ∃ X > 0, K ⊆ Multiplicative.toAdd ⁻¹' sLocalPWBox S X := by
+  let N (x : SAdeleRing ℚ S) := (∑ w : InfinitePlace ℚ, ‖x.1 w‖ ^ w.mult) + ∑ v : S, ‖x.2 v‖
+  have hN : Continuous N := (continuous_finsetSum _ fun w _ ↦
+    ((continuous_apply w).comp continuous_fst).norm.pow w.mult).add
+      (continuous_finsetSum _ fun v _ ↦ ((continuous_apply v).comp continuous_snd).norm)
+  obtain ⟨R, hR⟩ := (hK.image (hN.comp continuous_toAdd)).bddAbove
+  refine ⟨max R 1, zero_lt_one.trans_le (le_max_right _ _), fun x hx ↦ ?_⟩
+  have hxR : N x.toAdd ≤ max R 1 := (hR (mem_image_of_mem _ hx)).trans (le_max_left _ _)
+  refine ⟨fun w ↦ ?_, fun v ↦ ?_⟩
+  · exact (Finset.single_le_sum (fun i _ ↦ pow_nonneg (norm_nonneg _) _) (Finset.mem_univ w)).trans
+      ((le_add_of_nonneg_right (Finset.sum_nonneg fun _ _ ↦ norm_nonneg _)).trans hxR)
+  · exact (Finset.single_le_sum (fun i _ ↦ norm_nonneg _) (Finset.mem_univ v)).trans
+      ((le_add_of_nonneg_left (Finset.sum_nonneg fun _ _ ↦ pow_nonneg (norm_nonneg _) _)).trans hxR)
+
+/-- Two disjoint Fourier shells give a nonzero Fourier theta even after imposing one
+additional scalar moment. Their common box bound is independent of that moment. -/
+private theorem sec3bP_shell_test (S : Finset Vℚ) :
+    ∃ B₀ > (0 : ℝ), ∀ M : B(ℚ, S) →ₗ[ℂ] ℂ, ∃ f : B(ℚ, S),
+      M f = 0 ∧ HasCompactSupport (sAdeleSchwartzFourier f).val ∧
+      tsupport (sAdeleSchwartzFourier f).val ⊆ Multiplicative.toAdd ⁻¹' sLocalPWBox S B₀ ∧
+      (∀ x ∈ tsupport (sAdeleSchwartzFourier f).val, prodNorm(S, x.toAdd) ∈ Ioo (1/2) 3) ∧
+      ∃ g : SIdeleQuotient ℚ S, ((m(ℚ, S) g).val : ℝ) ∈ Icc 1 2 ∧
+        sLocalHomogeneousAdelicThetaLinearMap ℚ S 1 (sAdeleSchwartzFourier f) g ≠ 0 := by
+  obtain ⟨τ, hτ⟩ := sIdeleQuotientNorm_exists_section ℚ S
+  let t : ℝ≥0ˣ := Units.mk0 2 (by norm_num)
+  obtain ⟨b, hb⟩ := QuotientGroup.mk_surjective (τ t)
+  have hb2 : ((sIdeleNorm ℚ S b).val : ℝ) = 2 := by
+    rw [← sIdeleQuotientNorm_mk, hb, hτ]
+    rfl
+  obtain ⟨u, hu, hSu, hθu⟩ := sec3bP_shell_bump S 1 (1/2) (3/2) (by simp; norm_num)
+  obtain ⟨v, hv, hSv, hθv⟩ := sec3bP_shell_bump S b (3/2) 3 (by rw [hb2]; constructor <;> norm_num)
+  obtain ⟨B₀, hB, hbox⟩ := sec3bP_compact_box (hu.union hv)
+  refine ⟨B₀, hB, fun M ↦ ?_⟩
+  let K := tsupport (sAdeleSchwartzFourier u).val ∪ tsupport (sAdeleSchwartzFourier v).val
+  have hK (x) (hx : x ∈ K) : prodNorm(S, x.toAdd) ∈ Ioo (1/2) 3 := by
+    rcases hx with hx | hx
+    · exact ⟨(hSu x hx).1, (hSu x hx).2.trans (by norm_num)⟩
+    · exact ⟨lt_trans (by norm_num) (hSv x hx).1, (hSv x hx).2⟩
+  by_cases hM : M u = 0
+  · exact ⟨u, hM, hu, subset_union_left.trans hbox, fun x hx ↦ hK x (Or.inl hx),
+      QuotientGroup.mk (1 : (SAdeleRing ℚ S)ˣ), by simp, hθu⟩
+  let c := M v / M u
+  let w := v - c • u
+  obtain ⟨A, hA⟩ := sLocal_fourier_continuousLinear (F := ℚ) (S := S)
+  have hw : sAdeleSchwartzFourier w = sAdeleSchwartzFourier v - c • sAdeleSchwartzFourier u := by
+    rw [← hA, map_sub, map_smul, hA, hA]
+  have hs : tsupport (sAdeleSchwartzFourier w).val ⊆ K := by
+    rw [hw]
+    exact (tsupport_sub _ _).trans (union_subset subset_union_right
+      ((tsupport_smul_subset_right (fun _ ↦ c) _).trans subset_union_left))
+  have hz : sLocalHomogeneousAdelicThetaLinearMap ℚ S 1 (sAdeleSchwartzFourier u) (QuotientGroup.mk b) = 0 := by
+    apply sec3bP_theta_zero
+    intro a ha
+    apply image_eq_zero_of_notMem_tsupport
+    intro hx
+    have hlt := (hSu _ hx).2
+    change prodNorm(S, a.val) < 3/2 at hlt
+    rw [sec3bP_prodNorm_unit, ha, sIdeleQuotientNorm_mk, hb2] at hlt
+    norm_num at hlt
+  refine ⟨w, ?_, (hu.union hv).of_isClosed_subset isClosed_closure hs, hs.trans hbox,
+    fun x hx ↦ hK x (hs hx), QuotientGroup.mk b, ?_, ?_⟩
+  · simp [w, c, div_mul_cancel₀ _ hM]
+  · rw [sIdeleQuotientNorm_mk, hb2]; constructor <;> norm_num
+  · rw [hw, map_sub, map_smul]
+    simpa only [ContinuousMap.sub_apply, ContinuousMap.smul_apply, hz, smul_zero, sub_zero] using hθv
+
+private theorem sec3bP_one_unramified (S : Finset Vℚ) :
+    NormOneCharacterUnramifiedOutside (1 : PontryaginDual (ideleClassNorm ℚ).ker) S :=
+  ⟨⟨1, (mem_unramifiedOutside_iff ℚ S 1).mpr (fun _ _ _ ↦ rfl)⟩, fun _ ↦ rfl⟩
+
+private theorem sec3bP_one_local (S : Finset Vℚ)
+    (hu : NormOneCharacterUnramifiedOutside (1 : PontryaginDual (ideleClassNorm ℚ).ker) S) :
+    sLocalNormOneCharacter S 1 hu = 1 := by
+  ext y
+  have h := sLocalNormOneCharacter_eq_sIdeleRestriction (F := ℚ) (S := S) 1
+    ⟨1, (mem_unramifiedOutside_iff ℚ S 1).mpr (fun _ _ _ ↦ rfl)⟩ (fun _ ↦ rfl) y
+  rw [h]
+  obtain ⟨g, hg⟩ := QuotientGroup.mk_surjective y.val
+  rw [← hg, sIdeleRestriction_mk]
+  rfl
+
+/-- Composing ordinary stage insertion with principal value at the added places gives
+a closed embedding on the trivial theta component. -/
+private theorem sec3bP_unit_embedding {S T : Finset Vℚ} (hST : S ⊆ T) :
+    ∃ E : Θ(ℚ, S, 1) →ₗ[ℂ] Θ(ℚ, T, 1), IsClosedEmbedding E ∧
+      ∀ f, E (q(ℚ, S, 1) f) = q(ℚ, T, 1) (unitPV(ℚ, S, T) (sAdeleSchwartzTransition ℚ hST f)) := by
+  have hu := sec3bP_one_unramified S
+  let χ := sLocalNormOneCharacter T 1 (hu.mono hST)
+  let η := sLocalNormOneCharacter S 1 hu
+  let i := sLocalHomogeneousThetaTransition hu hST
+  let P := sLocalHomogeneousThetaPrincipalValue (Finset.sdiff_subset : T \ S ⊆ T) χ
+  have hex : ∃ E : Θ(ℚ, S, η) →ₗ[ℂ] Θ(ℚ, T, χ), IsClosedEmbedding E ∧
+      ∀ f, E (q(ℚ, S, η) f) = q(ℚ, T, χ) (unitPV(ℚ, S, T) (sAdeleSchwartzTransition ℚ hST f)) :=
+    ⟨P.comp i, (sLocalHomogeneousThetaPrincipalValue_isClosedEmbedding _ χ).comp
+      (sLocalHomogeneousThetaTransition_isClosedEmbedding hu hST), fun f ↦
+        congrArg P (LinearMap.congr_fun (sLocalHomogeneousThetaTransition_spec hu hST).1 f)⟩
+  rwa [show η = 1 from sec3bP_one_local S hu, show χ = 1 from sec3bP_one_local T _] at hex
+
+/-- Beyond the product cutoff, the old-stage Fourier theta evaluation vanishes on every
+representative in the closed unit level, after cancellation of its insertion. -/
+private theorem sec3bP_unitLevel_bound {S T : Finset Vℚ} (hST : S ⊆ T)
+    (E : Θ(ℚ, S, 1) →ₗ[ℂ] Θ(ℚ, T, 1)) (hc : IsClosedEmbedding E)
+    (he : ∀ f, E (q(ℚ, S, 1) f) = q(ℚ, T, 1) (unitPV(ℚ, S, T) (sAdeleSchwartzTransition ℚ hST f)))
+    {Y : ℝ} (f : B(ℚ, S))
+    (hf : E (q(ℚ, S, 1) f) ∈ unitLevel(ℚ, S, T, hST, sLocalPWProductRegion S Y, zeroMoments(ℚ, T), 1))
+    (g : SIdeleQuotient ℚ S) (hg : Y < ((m(ℚ, S) g).val : ℝ)) :
+    sLocalHomogeneousAdelicThetaLinearMap ℚ S 1 (sAdeleSchwartzFourier f) g = 0 := by
+  obtain ⟨L, hL⟩ := sec3bP_fourierEval S g
+  have hclosed : IsClosed (L.ker.map E : Set (Θ(ℚ, T, 1))) := hc.isClosedMap _ L.isClosed_ker
+  obtain ⟨x, hx, hxf⟩ := Submodule.topologicalClosure_minimal _ (t := L.ker.map E) (by
+    rintro _ ⟨b, ⟨⟨t, ht, rfl⟩, -⟩, rfl⟩
+    obtain ⟨v, rfl, -, hband⟩ := (mem_sLocalPWTests hST _ _).mp ht
+    refine ⟨q(ℚ, S, 1) v, ?_, he v⟩
+    change L (q(ℚ, S, 1) v) = 0
+    rw [hL]
+    apply sec3bP_theta_zero
+    intro u hu
+    apply image_eq_zero_of_notMem_tsupport
+    intro h
+    have hn := (mem_sLocalPWProductRegion_units (F := ℚ) Y u).mp (hband (by exact h))
+    exact hg.not_ge (hu ▸ hn)) hclosed hf
+  rw [← hL, ← hc.injective hxf]
+  exact hx
+
+/-- The value at zero already vanishes after unit insertion. The remaining moment is
+one linear constraint on the small-stage test. -/
+private theorem sec3bP_unit_moment {S T : Finset Vℚ} (hST : S ⊆ T) (hne : (T \ S).Nonempty) :
+    ∃ M : B(ℚ, S) →ₗ[ℂ] ℂ, ∀ f, M f = 0 →
+      unitPV(ℚ, S, T) (sAdeleSchwartzTransition ℚ hST f) ∈ zeroMoments(ℚ, T) := by
+  obtain ⟨p, hp⟩ := hne
+  refine ⟨((LinearMap.snd ℂ ℂ ℂ).comp ((sAdelePolarValues_isLinear (F := ℚ) (S := T)).mk' _)).comp
+    ((unitPV(ℚ, S, T)).comp (sAdeleSchwartzTransition ℚ hST)), fun f hf ↦ ?_⟩
+  exact (mem_sAdelePolarSubspace _).mpr ⟨sec3bP_sPV_zero Finset.sdiff_subset hp 0 rfl _, hf⟩
+
+private theorem sec3bP_unitLevel_mem {S T : Finset Vℚ} (hST : S ⊆ T) (K : Set (SAdeleRing ℚ S))
+    (f : B(ℚ, S)) (hc : HasCompactSupport (sAdeleSchwartzFourier f).val)
+    (hs : tsupport (sAdeleSchwartzFourier f).val ⊆ Multiplicative.toAdd ⁻¹' K)
+    (hm : unitPV(ℚ, S, T) (sAdeleSchwartzTransition ℚ hST f) ∈ zeroMoments(ℚ, T)) :
+    q(ℚ, T, 1) (unitPV(ℚ, S, T) (sAdeleSchwartzTransition ℚ hST f)) ∈
+      unitLevel(ℚ, S, T, hST, K, zeroMoments(ℚ, T), 1) :=
+  Submodule.le_topologicalClosure _ (Submodule.mem_map_of_mem ⟨Submodule.mem_map_of_mem
+    ((mem_sLocalPWTests hST _ _).mpr ⟨f, rfl, hc, hs⟩), hm⟩)
+
+/-- Rational prime ideals have unbounded residue sizes, even after removing finitely many. -/
+private theorem sec3bP_large_prime (S : Finset Vℚ) (b : ℝ) :
+    ∃ p : Vℚ, p ∉ S ∧ b < (p.asIdeal.absNorm : ℝ) := by
+  obtain ⟨n : ℕ, hn⟩ := exists_nat_gt b
+  have hi : Infinite Vℚ := Rat.HeightOneSpectrum.primesEquiv.infinite_iff.mpr inferInstance
+  have hf := (Ring.HasFiniteQuotients.finite_absNorm_le (S := 𝓞 ℚ) n).preimage
+    (f := fun p : Vℚ ↦ p.asIdeal) (fun _ _ _ _ h ↦ HeightOneSpectrum.ext h)
+  obtain ⟨p, hp⟩ := (S.finite_toSet.union hf).exists_notMem
+  have hpn : n < p.asIdeal.absNorm := lt_of_not_ge fun h ↦ hp (Or.inr h)
+  exact ⟨p, fun h ↦ hp (Or.inl h), hn.trans (by exact_mod_cast hpn)⟩
+
 /-- Paper: Proposition 7.3.3.2, pp. 357–358.
-Take F = ℚ, S = {∞, 2, 3}, S₀ = R = {5}, trivial character, X = 4 and Y = 64.
-At the bottom absolute level 20 use a Fourier test supported at finite norms 16 and 9
-and in a small even real neighborhood of ±19, with zero integral and nonzero value at 19.
-Its inserted Fourier theta is nonzero at the idele (19, 1/16, 1/9, 1), of norm 2736,
-whereas the bottom invariant level has Fourier theta supported in norms at most
-5 · 320 = 1600, since the Fourier transform of the 5-unit indicator is supported in
-5⁻¹ℤ₅. At the stated idele the only contributing S'-units are ±1. -/
+Over ℚ take one old finite place and add a prime of residue size N. Choose a test
+with Fourier support in a box of size B and nonzero Fourier theta at a norm in [1, 2].
+With X = B/N and Y = X², the bottom box has size B and the bottom product cutoff
+is B²/N. Choosing N > B² puts this cutoff below 1. The Fourier theta evaluation
+separates the two closed levels after cancelling the common unit insertion. -/
 theorem Printed.sLocalPW_principalValue_diagram_false :
-    ¬ Printed.sLocalPW_principalValue_diagram := by sorry
+    ¬ Printed.sLocalPW_principalValue_diagram := by
+  intro h
+  obtain ⟨r, -, -⟩ := sec3bP_large_prime ∅ 1
+  let S : Finset Vℚ := {r}
+  have hPic : Subsingleton (CommRing.Pic ((S : Set Vℚ).integer ℚ)) := by
+    let := sec3bP_pic
+    obtain ⟨_, _, _, hsurj, _⟩ := picard_localization_exact ℚ ∅ S (Finset.empty_subset _)
+    exact hsurj.subsingleton
+  obtain ⟨B₀, hB, htest⟩ := sec3bP_shell_test S
+  obtain ⟨p, hp, hlarge⟩ := sec3bP_large_prime S (B₀ ^ 2)
+  let T := S ∪ {p}
+  have hST : S ⊆ T := Finset.subset_union_left
+  have hpT : p ∈ T \ S := Finset.mem_sdiff.mpr ⟨Finset.mem_union_right _ (Finset.mem_singleton_self _), hp⟩
+  let N : ℝ := p.asIdeal.absNorm
+  have hN : 0 < N := (sq_nonneg _).trans_lt hlarge
+  let X := B₀ / N
+  have hX : 0 < X := div_pos hB hN
+  have hsize : size(({p} : Finset Vℚ)) = N := by simp [N]
+  have hcard : count(ℚ, S) = 2 := by
+    simp [S, Fintype.card_unique]
+  have hbot := (h ℚ S {p} T {p} rfl (Finset.disjoint_singleton_right.mpr hp) (sec3bP_saturated p)
+    (by rfl) (sec3bP_saturated p) hPic 1 (sec3bP_one_unramified S) X (X ^ 2) hX (sq_pos_of_pos hX)
+    (by rw [hcard]) hST 1 (sec3bP_one_local T _).symm (Finset.subset_union_right)).2.2.1
+  have hNX : N * X = B₀ := by dsimp [X]; field_simp
+  rw [hsize, hNX] at hbot
+  obtain ⟨E, hE, he⟩ := sec3bP_unit_embedding hST
+  obtain ⟨M, hM⟩ := sec3bP_unit_moment hST ⟨p, hpT⟩
+  obtain ⟨f, hm, hc, hbox, -, g, hg, hne⟩ := htest M
+  have hf := hbot (sec3bP_unitLevel_mem hST _ f hc hbox (hM f hm))
+  rw [← he] at hf
+  apply hne (sec3bP_unitLevel_bound hST E hE he f hf g ?_)
+  apply lt_of_lt_of_le _ hg.1
+  have hlevel : N * X ^ 2 = B₀ ^ 2 / N := by dsimp [X]; field_simp
+  rw [hlevel, div_lt_one hN]
+  exact hlarge
 
 local notation "primary(" F ", " T ", " p ")" => sLocalPrimaryPlaces (F := F) T p
 
@@ -628,15 +948,277 @@ def Printed.sLocalPWOrbitalQuotients_defined : Prop :=
         (unitLevel(F, S, T, hST, sLocalPWProductRegion S Y, D, χ)).map PV ≤
           unitLevel(F, S, T, hST, sLocalPWProductRegion S (Y / size(P)), D, χ)
 
+local notation "normChart(" S ", " z ")" =>
+  quasiCharacterNormTwist (m(ℚ, S)) (isProperMap_sIdeleQuotientNorm ℚ S).continuous
+    ((⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp (1 : PontryaginDual (SIdeleQuotient ℚ S))) z
+
+/-- On the trivial norm-one component every quasi-character is a bare norm power. -/
+private theorem sec3bP_on_norm_chart {S : Finset Vℚ} (c : QuasiCharacter (SIdeleQuotient ℚ S))
+    (hc : ∀ k : J₁(ℚ, S), c k.val = 1) : ∃ z, normChart(S, z) = c := by
+  obtain ⟨τ, hτ⟩ := sIdeleQuotientNorm_exists_section ℚ S
+  obtain ⟨z, hz⟩ := (existsUnique_complexPower (c.comp τ)).exists
+  refine ⟨z, ContinuousMonoidHom.ext fun g ↦ ?_⟩
+  have h := hc ⟨g / τ (m(ℚ, S) g), MonoidHom.mem_ker.mpr (by rw [map_div, hτ, div_self'])⟩
+  change c (g / τ (m(ℚ, S) g)) = 1 at h
+  rw [map_div, div_eq_one_iff_eq ((Group.isUnit _).map c).ne_zero] at h
+  exact (one_mul _).trans ((hz _).symm.trans h.symm)
+
+/-- On a bare norm chart the singleton Euler factor is the reciprocal of the
+translation-difference multiplier. -/
+private theorem sec3bP_single_euler {S : Finset Vℚ} (v : S) (z : ℂ) (hz : 0 < z.re) :
+    finiteLocalEulerFactor v.val (sLocalFiniteRestriction v (normChart(S, z))) =
+      (1 - (v.val.asIdeal.absNorm : ℂ) ^ (-z))⁻¹ := by
+  refine Eq.trans ?_ (finiteLocalEulerFactor_norm v.val hz)
+  congr 1
+  ext u
+  obtain ⟨y, hy⟩ : ∃ y : SIdeleQuotient ℚ S, ∀ c, sLocalFiniteRestriction v c u = c y := ⟨_, fun _ ↦ rfl⟩
+  have h := sLocalFiniteRestriction_norm v u
+  rw [hy] at h ⊢
+  change (1 : ℂ) * _ ^ (1 : ℂ) = _ at h
+  rw [one_mul, Complex.cpow_one] at h
+  change (1 : ℂ) * _ ^ z = (1 : ℂ) * _ ^ z
+  rw [h]
+
+/-- The Euler multiplier identifies PV on the trivial singleton-stage quotient
+with the identity minus translation by any idele of norm 1/N(p). -/
+private theorem sec3bP_single_pv {p : Vℚ} {T : Finset Vℚ} (hT : T = {p}) (u : (SAdeleRing ℚ T)ˣ)
+    (hu : ((sIdeleNorm ℚ T u).val : ℝ) = (p.asIdeal.absNorm : ℝ)⁻¹)
+    (f : B(ℚ, T)) :
+    q(ℚ, T, 1) (sAdelePrincipalValue ℚ (Finset.Subset.refl T) f) =
+      q(ℚ, T, 1) (f - schwartzBruhatUnitTranslate u f) := by
+  let P := sAdelePrincipalValue ℚ (Finset.Subset.refl T)
+  let k := P f - (f - schwartzBruhatUnitTranslate u f)
+  apply (Submodule.Quotient.eq _).mpr
+  apply (mem_sLocalHomogeneousAdelicTheta_ker_iff (1 : PontryaginDual J₁(ℚ, T)) k).mpr
+  intro c hc
+  obtain ⟨s, hs⟩ := sec3bP_on_norm_chart c.val (fun h ↦ hc h)
+  change sLocalIdelicZFunction k c.val = 0
+  rw [← hs]
+  let Z := fun z : ℂ ↦ sLocalIdelicZFunction k (normChart(T, z))
+  have heq : Z = 0 := by
+    apply eq_of_agree_rightHalf (sLocalIdelicZFunction_meromorphic k 1) (fun _ _ ↦ analyticAt_const.meromorphicNFAt) 0
+    intro z hz
+    have hn : ∀ᶠ w : ℂ in 𝓝[≠] z, 0 < w.re := nhdsWithin_le_nhds
+      ((isOpen_lt continuous_const Complex.continuous_re).mem_nhds hz)
+    have hzero : Z =ᶠ[𝓝[≠] z] 0 := by
+      filter_upwards [hn, nhdsNE_le_codiscrete z (sLocalIdelicZFunction_principalValue T
+        (Finset.Subset.refl T) f 1)] with w hw hP
+      let c₀ := normChart(T, w)
+      let d := (⟨c₀, sLocalOrderBound_positive (F := ℚ) (S := T) 1 hw⟩ :
+        {c : QuasiCharacter (SIdeleQuotient ℚ T) // 0 ≤ sLocalIdelicOrderBound c})
+      let A := sLocalIdelicMellin (F := ℚ) (S := T)
+      have htr := sLocalIdelicMellin_unitTranslate u f d
+      have hev : c₀ (QuotientGroup.mk u) = (p.asIdeal.absNorm : ℂ) ^ (-w) := by
+        change (1 : ℂ) * (((sIdeleNorm ℚ T u).val : ℝ) : ℂ) ^ w = _
+        rw [one_mul, hu, Complex.ofReal_inv, Complex.inv_cpow _ _ (by
+          rw [Complex.arg_ofReal_of_nonneg (by positivity)]; exact Real.pi_ne_zero.symm),
+          ← Complex.cpow_neg, Complex.ofReal_natCast]
+      have hprod : (∏ v : T, if v.val ∈ T then finiteLocalEulerFactor v.val (sLocalFiniteRestriction v c₀)
+          else 1) = (1 - (p.asIdeal.absNorm : ℂ) ^ (-w))⁻¹ := by
+        have : Subsingleton T := hT ▸ inferInstanceAs (Subsingleton (↥({p} : Finset Vℚ)))
+        let v : T := ⟨p, hT ▸ Finset.mem_singleton_self _⟩
+        rw [Finset.prod_eq_single v (fun b _ hb ↦ (hb (Subsingleton.elim _ _)).elim)
+          (fun h ↦ (h (Finset.mem_univ _)).elim), ite_eq_left v.property]
+        exact sec3bP_single_euler v w hw
+      change (A (P f)).val d = (A f).val d / _ at hP
+      rw [hprod, div_inv_eq_mul] at hP
+      change (A (schwartzBruhatUnitTranslate u f)).val d = c₀ (QuotientGroup.mk u) * (A f).val d at htr
+      rw [hev] at htr
+      change (A (P f - (f - schwartzBruhatUnitTranslate u f))).val d = 0
+      rw [map_sub, map_sub]
+      change (A (P f)).val d - ((A f).val d - (A (schwartzBruhatUnitTranslate u f)).val d) = 0
+      rw [hP, htr]
+      ring
+    exact (((sLocalIdelicZFunction_meromorphic k 1 (mem_univ z)).eventuallyEq_nhdsNE_iff_eventuallyEq_nhds
+      analyticAt_const.meromorphicNFAt).mp hzero).eq_of_nhds
+  exact congrFun heq s
+
+open MeasureTheory in
+/-- The Fourier transform of a translated test is zero wherever its dilated transform
+is zero. This is the change of Haar measure in the Fourier dilation argument of Sec3b. -/
+private theorem sec3bP_translate_fourier_zero {S : Finset Vℚ} (u : (SAdeleRing ℚ S)ˣ)
+    (f : B(ℚ, S)) (y : SAdeleRing ℚ S)
+    (hy : sAdeleSchwartzFourier f (Multiplicative.ofAdd (u.val * y)) = 0) :
+    sAdeleSchwartzFourier (schwartzBruhatUnitTranslate u f) (Multiplicative.ofAdd y) = 0 := by
+  let A := SAdeleRing ℚ S
+  let : MeasurableSpace A := instMeasurableSpaceSAdeleRing ℚ S
+  let : BorelSpace A := sAdeleRing_borelSpace
+  let (v : S) : ProperSpace (v.val.adicCompletion ℚ) := properSpace_adicCompletion v.val
+  let : LocallyCompactSpace A := inferInstanceAs (LocallyCompactSpace (SAdeleRing ℚ S))
+  let : T2Space A := inferInstanceAs (T2Space
+    (((w : InfinitePlace ℚ) → w.Completion) × ((v : S) → v.val.adicCompletion ℚ)))
+  let (w : InfinitePlace ℚ) : MeasurableSpace w.Completion := borel _
+  let (v : Vℚ) : MeasurableSpace (v.adicCompletion ℚ) := borel _
+  let (w : InfinitePlace ℚ) : BorelSpace w.Completion := ⟨rfl⟩
+  let (v : S) : BorelSpace (v.val.adicCompletion ℚ) := ⟨rfl⟩
+  let (w : InfinitePlace ℚ) : SecondCountableTopology w.Completion :=
+    (InfinitePlace.Completion.isometry_extensionEmbedding w).isEmbedding.secondCountableTopology
+  let (w : InfinitePlace ℚ) : (infiniteLocalAdditiveTamagawaMeasure ℚ w).IsAddHaarMeasure := by
+    have hw : w.IsReal := (Subsingleton.elim w Rat.infinitePlace) ▸ Rat.isReal_infinitePlace
+    rw [infiniteLocalAdditiveTamagawaMeasure, dite_eq_left hw]
+    exact (InfinitePlace.Completion.ringEquivRealOfIsReal hw).symm.toAddEquiv.isAddHaarMeasure_map
+      volume (InfinitePlace.Completion.isometryEquivRealOfIsReal hw).symm.continuous
+      (InfinitePlace.Completion.isometryEquivRealOfIsReal hw).continuous
+  let (v : S) : (finiteLocalAdditiveTamagawaMeasure ℚ v.val).IsAddHaarMeasure :=
+    finiteLocalAdditiveTamagawaMeasure_isAddHaar ℚ v.val
+  let : (Measure.pi (infiniteLocalAdditiveTamagawaMeasure ℚ)).IsAddHaarMeasure :=
+    Measure.pi.isAddHaarMeasure _
+  let : (Measure.pi (fun v : S ↦ finiteLocalAdditiveTamagawaMeasure ℚ v.val)).IsAddHaarMeasure :=
+    Measure.pi.isAddHaarMeasure _
+  let μ : Measure A := sAdditiveTamagawaMeasure ℚ S
+  let : μ.IsAddHaarMeasure := Measure.prod.instIsAddHaarMeasure _ _
+  let : SecondCountableTopology A := inferInstanceAs (SecondCountableTopology
+    (((w : InfinitePlace ℚ) → w.Completion) × ((v : S) → v.val.adicCompletion ℚ)))
+  let k (x : A) := f (Multiplicative.ofAdd x) * star (sAdeleStandardCharacter ℚ S (x * (u.val * y)) : ℂ)
+  change ∫ x, k x ∂μ = 0 at hy
+  have h : ∫ x : A, k (u⁻¹ • x) ∂μ = 0 := by
+    refine (integral_domSMul (μ := μ) (DomMulAct.mk u) k).symm.trans ?_
+    rw [Measure.isAddLeftInvariant_eq_smul (DomMulAct.mk u • μ) μ,
+      integral_smul_nnreal_measure, hy, smul_zero]
+  refine Eq.trans ?_ h
+  change (∫ x : A, f (Multiplicative.ofAdd (u⁻¹.val * x)) *
+    star (sAdeleStandardCharacter ℚ S (x * y) : ℂ) ∂μ) = _
+  refine integral_congr_ae (Eventually.of_forall fun x ↦ ?_)
+  change _ * star (sAdeleStandardCharacter ℚ S (x * y) : ℂ) =
+    _ * star (sAdeleStandardCharacter ℚ S ((u⁻¹.val * x) * (u.val * y)) : ℂ)
+  rw [mul_mul_mul_comm, Units.inv_mul, one_mul]
+  rfl
+
+local notation "radialAt(" S ", " t ")" =>
+  Units.map (adeleProjection ℚ S).toMonoidHom (canonicalIdeleNormSection ℚ t)
+
+/-- Dilation along the archimedean norm section commutes with integer insertion. -/
+private theorem sec3bP_radial_insert {S T : Finset Vℚ} (hST : S ⊆ T) (t : ℝ≥0ˣ) (f : B(ℚ, S)) :
+    schwartzBruhatUnitTranslate (radialAt(T, t)) (sAdeleSchwartzTransition ℚ hST f) =
+      sAdeleSchwartzTransition ℚ hST (schwartzBruhatUnitTranslate (radialAt(S, t)) f) := by
+  apply Subtype.ext
+  funext x
+  change schwartzBruhatUnitTranslate _ _ (Multiplicative.ofAdd x.toAdd) =
+    sAdeleSchwartzTransition ℚ hST _ (Multiplicative.ofAdd x.toAdd)
+  rw [schwartzBruhatUnitTranslate_apply, sAdeleSchwartzTransition_apply,
+    sAdeleSchwartzTransition_apply]
+  have hfin (v : T) : (radialAt(T, t))⁻¹.val.2 v = 1 := by
+    change (canonicalIdeleNormSection ℚ t)⁻¹.val.2 v.val = 1
+    rw [← map_inv]
+    exact congrArg (fun b ↦ b v.val) (canonicalIdeleNormSection_finite ℚ t⁻¹)
+  have he (v : T) : ((radialAt(T, t))⁻¹.val * x.toAdd).2 v = x.toAdd.2 v := by
+    change (radialAt(T, t))⁻¹.val.2 v * _ = _
+    rw [hfin, one_mul]
+  have hc : (∀ w : T, w.val ∉ S → ((radialAt(T, t))⁻¹.val * x.toAdd).2 w ∈ w.val.adicCompletionIntegers ℚ) ↔
+      ∀ w : T, w.val ∉ S → x.toAdd.2 w ∈ w.val.adicCompletionIntegers ℚ := by simp only [he]
+  rw [if_congr hc rfl rfl]
+  split_ifs
+  · rw [schwartzBruhatUnitTranslate_apply]
+    rfl
+  · rfl
+
+/-- On the embedded old stage the singleton principal value is the difference
+with the radial translate. The radial section has trivial finite coordinates. -/
+private theorem sec3bP_insert_pv_diff {S T : Finset Vℚ} (hST : S ⊆ T) (p : Vℚ)
+    (hT : T = {p}) (hR : T \ S = T) (t : ℝ≥0ˣ)
+    (ht : ((sIdeleNorm ℚ T (radialAt(T, t))).val : ℝ) = (p.asIdeal.absNorm : ℝ)⁻¹)
+    (E : Θ(ℚ, S, 1) →ₗ[ℂ] Θ(ℚ, T, 1))
+    (he : ∀ f : B(ℚ, S), E (q(ℚ, S, 1) f) = q(ℚ, T, 1)
+      (unitPV(ℚ, S, T) (sAdeleSchwartzTransition ℚ hST f)))
+    (f : B(ℚ, S)) :
+    sLocalHomogeneousThetaPrincipalValue (Finset.Subset.refl T) (1 : PontryaginDual J₁(ℚ, T))
+      (E (q(ℚ, S, 1) f)) = E (q(ℚ, S, 1) (f - schwartzBruhatUnitTranslate (radialAt(S, t)) f)) := by
+  let P := sLocalHomogeneousThetaPrincipalValue (Finset.Subset.refl T) (1 : PontryaginDual J₁(ℚ, T))
+  let ins := sAdeleSchwartzTransition ℚ hST
+  have he' (k : B(ℚ, S)) : E (q(ℚ, S, 1) k) = P (q(ℚ, T, 1) (ins k)) := by
+    change E (q(ℚ, S, 1) k) = q(ℚ, T, 1) (sAdelePrincipalValue ℚ (Finset.Subset.refl T) (ins k))
+    simpa only [hR] using he k
+  let f' := schwartzBruhatUnitTranslate (radialAt(S, t)) f
+  have hdiff : P (q(ℚ, T, 1) (ins f)) = q(ℚ, T, 1) (ins (f - f')) := by
+    refine (sec3bP_single_pv hT (radialAt(T, t)) ht (ins f)).trans ?_
+    apply congrArg (q(ℚ, T, 1))
+    exact (congrArg (fun k ↦ ins f - k) (sec3bP_radial_insert hST t f)).trans (map_sub ins f f').symm
+  exact (congrArg P (he' f)).trans ((congrArg P hdiff).trans (he' (f - f')).symm)
+
+/-- The translated Fourier theta vanishes if the entire dilated norm fibre misses the support. -/
+private theorem sec3bP_dilated_theta_zero {S : Finset Vℚ} (u : (SAdeleRing ℚ S)ˣ)
+    (f : B(ℚ, S)) (g : SIdeleQuotient ℚ S)
+    (hshell : ∀ x ∈ tsupport (sAdeleSchwartzFourier f).val, 1/2 < prodNorm(S, x.toAdd))
+    (hsmall : ((sIdeleNorm ℚ S u).val : ℝ) * ((m(ℚ, S) g).val : ℝ) ≤ 1/2) :
+    sLocalHomogeneousAdelicThetaLinearMap ℚ S 1
+      (sAdeleSchwartzFourier (schwartzBruhatUnitTranslate u f)) g = 0 := by
+  apply sec3bP_theta_zero
+  intro a ha
+  apply sec3bP_translate_fourier_zero u f a.val
+  apply image_eq_zero_of_notMem_tsupport
+  intro hsup
+  have hlo := hshell _ hsup
+  change 1/2 < prodNorm(S, (u * a).val) at hlo
+  rw [sec3bP_prodNorm_unit, map_mul, Units.val_mul, NNReal.coe_mul, ha] at hlo
+  exact hsmall.not_gt hlo
+
 /-- Paper: Definition 7.3.3.3(1)–(2), p. 359.
-Take F = ℚ, S = {∞}, S₀ = {p}, and the trivial character. Take an even smooth Fourier
-test h supported near ±ξ with X/p < ξ < X, h(ξ) ≠ 0 and integral zero.
-The principal value replaces the base test f by f(x) − f(px). Its Fourier transform
-is h(t) − h(t/p)/p. At the idele with real coordinate pξ and finite coordinate 1
-the Fourier theta of the resulting unit-indicator tensor is nonzero, while any member
-of the printed target level has Fourier theta supported in norms at most X. -/
+Over ℚ start with no finite places and add one prime of residue size N > 4.
+Take the product cutoff Y = 3. On the trivial component, principal value acts
+as the identity minus translation by an idele of norm 1/N. The translated
+Fourier theta vanishes on [1, 2], where the original test has a nonzero Fourier
+theta value. The printed target cutoff 3/N is below 1. -/
 theorem Printed.sLocalPWOrbitalQuotients_defined_false :
-    ¬ Printed.sLocalPWOrbitalQuotients_defined := by sorry
+    ¬ Printed.sLocalPWOrbitalQuotients_defined := by
+  intro h
+  let S : Finset Vℚ := ∅
+  obtain ⟨p, -, hp⟩ := sec3bP_large_prime S 4
+  let T : Finset Vℚ := {p}
+  let N : ℝ := p.asIdeal.absNorm
+  have hN : 0 < N := lt_trans (by norm_num : (0 : ℝ) < 4) hp
+  have hST : S ⊆ T := Finset.empty_subset _
+  have hPT : sLocalPrimaryPlaces (F := ℚ) T p = T := by
+    ext v
+    rw [mem_sLocalPrimaryPlaces]
+    refine and_iff_left_of_imp (fun hv ↦ ?_)
+    rw [Finset.mem_singleton.mp hv]
+    apply HeightOneSpectrum.ext
+    change Ideal.comap (algebraMap (𝓞 ℚ) (𝓞 ℚ)) p.asIdeal = p.asIdeal
+    rw [Algebra.algebraMap_self, Ideal.comap_id]
+  have hn : (sLocalPrimaryPlaces (F := ℚ) T p).Nonempty := by
+    rw [hPT]
+    exact Finset.singleton_nonempty _
+  have hsat : IsSaturatedPlaceSet (F := ℚ) S := fun _ _ hv ↦ (Finset.notMem_empty _ hv).elim
+  have hcont := (h ℚ S T T (by simp [S]) hsat (Finset.disjoint_empty_left _) (sec3bP_saturated p)
+    sec3bP_pic p 1 (sec3bP_one_unramified S) 1 3 one_pos (by norm_num) hST 1
+    (sec3bP_one_local T _).symm hn (sLocalPrimaryPlaces_subset T p)).2
+  let P := sLocalHomogeneousThetaPrincipalValue (F := ℚ) (Finset.Subset.refl T) (1 : PontryaginDual J₁(ℚ, T))
+  have hsize : size(sLocalPrimaryPlaces (F := ℚ) T p) = N := by rw [hPT]; simp [T, N]
+  have hPV : sLocalHomogeneousThetaPrincipalValue (sLocalPrimaryPlaces_subset (F := ℚ) T p)
+      (1 : PontryaginDual J₁(ℚ, T)) = P := by
+    unfold P
+    congr 1
+  rw [hPV, hsize] at hcont
+  obtain ⟨E, hE, he⟩ := sec3bP_unit_embedding hST
+  obtain ⟨_, _, htest⟩ := sec3bP_shell_test S
+  obtain ⟨M, hM⟩ := sec3bP_unit_moment hST ⟨p, by simp [T, S]⟩
+  obtain ⟨f, hm, hc, -, hshell, g, hg, hne⟩ := htest M
+  have hband : tsupport (sAdeleSchwartzFourier f).val ⊆ Multiplicative.toAdd ⁻¹' sLocalPWProductRegion S 3 :=
+    fun x hx ↦ (hshell x hx).2.le
+  have hsrc := sec3bP_unitLevel_mem hST _ f hc hband (hM f hm)
+  rw [← he] at hsrc
+  have himage := hcont (Submodule.mem_map_of_mem (f := P) hsrc)
+  -- The second principal value acts, before the common embedding, as a dilation difference.
+  let t : ℝ≥0ˣ := Units.mk0 ⟨N⁻¹, inv_nonneg.mpr hN.le⟩
+    (fun h ↦ (inv_ne_zero hN.ne') (congrArg Subtype.val h))
+  have ht (U : Finset Vℚ) : ((sIdeleNorm ℚ U (radialAt(U, t))).val : ℝ) = N⁻¹ :=
+    congrArg (fun z : ℝ≥0ˣ ↦ (z.val : ℝ)) (sIdeleNorm_project_canonicalSection ℚ U t)
+  let f' := schwartzBruhatUnitTranslate (radialAt(S, t)) f
+  have heq : P (E (q(ℚ, S, 1) f)) = E (q(ℚ, S, 1) (f - f')) :=
+    sec3bP_insert_pv_diff hST p rfl Finset.sdiff_empty t (ht T) E he f
+  rw [heq] at himage
+  have hz := sec3bP_unitLevel_bound hST E hE he (f - f') himage g
+    (lt_of_lt_of_le ((div_lt_one hN).mpr (by change (3 : ℝ) < p.asIdeal.absNorm; linarith only [hp])) hg.1)
+  have hshift : sLocalHomogeneousAdelicThetaLinearMap ℚ S 1 (sAdeleSchwartzFourier f') g = 0 := by
+    apply sec3bP_dilated_theta_zero _ f g (fun x hx ↦ (hshell x hx).1)
+    rw [ht]
+    apply (mul_le_mul_of_nonneg_left hg.2 (inv_nonneg.mpr hN.le)).trans
+    rw [← div_eq_inv_mul, div_le_iff₀ hN]
+    dsimp only [N]
+    linarith only [hp]
+  obtain ⟨L, hL⟩ := sec3bP_fourierEval S g
+  rw [← hL (f - f'), map_sub, map_sub, hL, hL, hshift, sub_zero] at hz
+  exact hne hz
 
 local notation "Rₚ(" F ", " T ", " p ", " χ ")" =>
   sLocalPrimaryOrbitalSubmodule (F := F) (S := T) p χ

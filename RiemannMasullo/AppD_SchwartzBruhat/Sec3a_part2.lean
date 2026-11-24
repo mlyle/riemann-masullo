@@ -13,6 +13,7 @@ import RiemannMasullo.ForMathlib.MeasureTheory.Group.Arithmetic
 import Mathlib.MeasureTheory.Integral.IntegralEqImproper
 import RiemannMasullo.ForMathlib.Analysis.SpecialFunctions.Pow.Complex
 import RiemannMasullo.ForMathlib.Analysis.LocallyConvex.Completion
+import RiemannMasullo.ForMathlib.Analysis.LocallyConvex.TensorProduct.Comparison
 import Mathlib.Analysis.Distribution.SchwartzSpace.CompactSupport
 import Mathlib.Analysis.LocallyConvex.ContinuousOfBounded
 import RiemannMasullo.ForMathlib.Topology.ContinuousMap.LocallyConvex
@@ -976,6 +977,157 @@ theorem modulatedExponentialDecay_tensor_equivariant
     apply modulatedExponentialDecay_tensor_equivariant_coe m I τ hτ e he u t L
     exact hL
 
+/-- Continuous linear maps out of the completed inductive tensor are determined on pure tensors. -/
+private theorem tensor_stage_ext {A B Y : Type*}
+    [AddCommGroup A] [Module ℂ A] [TopologicalSpace A]
+    [AddCommGroup B] [Module ℂ B] [TopologicalSpace B]
+    [AddCommGroup Y] [Module ℂ Y] [TopologicalSpace Y] [T2Space Y]
+    (L R : Completion (InductiveTensor A B) →L[ℂ] Y)
+    (h : ∀ a b, L (Completion.coe' (α := InductiveTensor A B) (a ⊗ₜ[ℂ] b)) =
+      R (Completion.coe' (α := InductiveTensor A B) (a ⊗ₜ[ℂ] b))) (z) : L z = R z := by
+  let i := (Completion.toComplL : InductiveTensor A B →L[ℂ] Completion (InductiveTensor A B))
+  have he : (L.comp i).toLinearMap = (R.comp i).toLinearMap := TensorProduct.ext' h
+  exact Completion.ext' L.continuous R.continuous (LinearMap.congr_fun he) z
+
+/-- Tensor a retraction with the identity. Its projection on the completion commutes
+with every contraction against a functional of the second factor. -/
+private theorem tensor_stage_retract {A U V : Type*}
+    [AddCommGroup A] [Module ℂ A] [TopologicalSpace A] [PolynormableSpace ℂ A] [T2Space A]
+    [AddCommGroup U] [Module ℂ U] [UniformSpace U] [IsUniformAddGroup U]
+    [PolynormableSpace ℂ U] [T2Space U] [CompleteSpace U] [ContinuousSMul ℂ U]
+    [AddCommGroup V] [Module ℂ V] [TopologicalSpace V] [PolynormableSpace ℂ V] [T2Space V]
+    (j : A →L[ℂ] U) (r : U →L[ℂ] A) (hr : LeftInverse r j) :
+    let X := InductiveTensor A V
+    let Y := InductiveTensor U V
+    ∃ (J : Completion X →L[ℂ] Completion Y) (R : Completion Y →L[ℂ] Completion X),
+      ⇑J = Completion.map (inductiveTensorMap j.toLinearMap (LinearMap.id : V →ₗ[ℂ] V) : X → Y) ∧
+      (∀ a v, J (Completion.coe' (α := X) (a ⊗ₜ[ℂ] v)) =
+        Completion.coe' (α := Y) (j a ⊗ₜ[ℂ] v)) ∧ LeftInverse R J ∧
+      ∀ φ : V →L[ℂ] ℂ, ∃ D : Completion Y →L[ℂ] U,
+        (∀ u v, D (Completion.coe' (α := Y) (u ⊗ₜ[ℂ] v)) = φ v • u) ∧
+        ∀ z, D (J (R z)) = j (r (D z)) := by
+  intro X Y
+  let idV := ContinuousLinearMap.id ℂ V
+  let j' : X →L[ℂ] Y := ⟨inductiveTensorMap j.toLinearMap idV.toLinearMap,
+    inductiveTensorMap_continuous j idV⟩
+  let r' : Y →L[ℂ] X := ⟨inductiveTensorMap r.toLinearMap idV.toLinearMap,
+    inductiveTensorMap_continuous r idV⟩
+  let J := j'.completion
+  let R := r'.completion
+  have hJ (a : A) (v : V) : J (Completion.coe' (α := X) (a ⊗ₜ[ℂ] v)) =
+      Completion.coe' (α := Y) (j a ⊗ₜ[ℂ] v) := j'.completion_apply_coe _
+  have hR (u : U) (v : V) : R (Completion.coe' (α := Y) (u ⊗ₜ[ℂ] v)) =
+      Completion.coe' (α := X) (r u ⊗ₜ[ℂ] v) := r'.completion_apply_coe _
+  refine ⟨J, R, rfl, hJ, tensor_stage_ext (R.comp J) (ContinuousLinearMap.id ℂ _) ?_, ?_⟩
+  · intro a v
+    exact ((congrArg R (hJ a v)).trans (hR (j a) v)).trans
+      (congrArg (fun b : A ↦ Completion.coe' (α := X) (b ⊗ₜ[ℂ] v)) (hr a))
+  · intro φ
+    let d : Y →ₗ[ℂ] U := TensorProduct.lift (((LinearMap.lsmul ℂ U).comp φ.toLinearMap).flip)
+    let D₀ : Y →L[ℂ] U := ⟨d, (continuous_inductiveTensor_iff d).mpr
+      ⟨fun u ↦ φ.continuous.smul continuous_const, fun v ↦ continuous_const_smul (φ v)⟩⟩
+    let D := D₀.fromCompletion
+    have hD (u : U) (v : V) : D (Completion.coe' (α := Y) (u ⊗ₜ[ℂ] v)) = φ v • u :=
+      D₀.fromCompletion_apply_coe _
+    refine ⟨D, hD, tensor_stage_ext ((D.comp J).comp R) ((j.comp r).comp D) ?_⟩
+    intro u v
+    change D (J (R _)) = j (r (D _))
+    rw [hR, hJ, hD, hD, map_smul, map_smul]
+
+/-- An embedded stage and a split tensor inclusion are equivalent if the image
+of the stage is the fixed space of the tensor projection in ambient coordinates. -/
+private theorem tensor_stage_equiv_of_fixed {X Y S W : Type*}
+    [AddCommGroup X] [Module ℂ X] [TopologicalSpace X]
+    [AddCommGroup Y] [Module ℂ Y] [TopologicalSpace Y]
+    [AddCommGroup S] [Module ℂ S] [TopologicalSpace S]
+    [AddCommGroup W] [Module ℂ W] [TopologicalSpace W]
+    (J : X →L[ℂ] Y) (R : Y →L[ℂ] X) (hr : LeftInverse R J)
+    (e : Y ≃L[ℂ] W) (i : S →ₗ[ℂ] W) (hi : IsEmbedding i)
+    (h : ∀ z, e z ∈ i.range ↔ J (R z) = z) :
+    ∃ v : X ≃L[ℂ] S, ∀ x, i (v x) = e (J x) := by
+  let L := e.toContinuousLinearMap.comp J
+  let s := LinearEquiv.ofInjective i hi.injective
+  let f : X →ₗ[ℂ] S := s.symm.toLinearMap.comp (L.toLinearMap.codRestrict i.range
+    (fun x ↦ (h (J x)).mpr (congrArg J (hr x))))
+  have hf (x : X) : i (f x) = L x := congrArg Subtype.val (s.apply_symm_apply _)
+  have hL : IsEmbedding L := e.toHomeomorph.isEmbedding.comp
+    (hr.isEmbedding R.continuous J.continuous)
+  have hf' : IsEmbedding f := hi.of_comp_iff.mp ((congrArg IsEmbedding (show i ∘ f = ⇑L from funext hf)).mpr hL)
+  have hs : Surjective f := by
+    intro y
+    let z := e.symm (i y)
+    have hz : e z = i y := e.apply_symm_apply _
+    exact ⟨R z, hi.injective ((hf _).trans ((congrArg e ((h z).mp ⟨y, hz.symm⟩)).trans hz))⟩
+  exact ⟨ContinuousLinearEquiv.ofIsHomeomorph (LinearEquiv.ofBijective f ⟨hf'.injective, hs⟩)
+    (isHomeomorph_iff_isEmbedding_surjective.mpr ⟨hf', hs⟩), hf⟩
+
+include hm hInt hne hτ in
+private theorem decay_tensor_stage_isEmbedding (k : GoodCompact) :
+    IsEmbedding (show ModulatedExponentialDecayStage m I k → E from
+      modulatedExponentialDecayStageInclusion m I k) := by
+  obtain ⟨s, _, hcof, he, _, _⟩ := modulatedExponentialDecay_stageLimit m I hm hτ.surjective hInt hne
+  obtain ⟨n, hn⟩ := hcof k
+  obtain ⟨j, hj, hval⟩ := modulatedExponentialDecayStage_transition m I hm hτ.surjective hInt hne k (s n) hn
+  let i (b : GoodCompact) : ModulatedExponentialDecayStage m I b → E :=
+    modulatedExponentialDecayStageInclusion m I b
+  have hcomp : i (s n) ∘ j = i k := funext fun f ↦ Subtype.ext (funext (hval f))
+  exact (congrArg IsEmbedding hcomp).mp ((he n).comp hj)
+
+include hne in
+private theorem decay_profile_evaluation (x : ℝ) :
+    ∃ φ : P →L[ℂ] ℂ, ∀ f, φ f = f.val x := by
+  let a : I := ⟨hne.choose, hne.choose_spec⟩
+  obtain ⟨u, hu⟩ := exists_decay_jet a x 0
+  let w : ℂ := Real.exp (a.val * x)
+  have hw : w ≠ 0 := Complex.ofReal_ne_zero.mpr (Real.exp_pos _).ne'
+  refine ⟨w⁻¹ • u, fun f ↦ ?_⟩
+  change w⁻¹ * u f = _
+  rw [hu, iteratedDeriv_zero]
+  exact (congrArg (w⁻¹ * ·) (logExponentialDecayTwist_apply I a f x)).trans
+    (inv_mul_cancel_left₀ hw _)
+
+include hm hτ in
+/-- A function is invariant under the compact subgroup exactly when every kernel
+slice is fixed by the projection obtained by averaging and pulling back. -/
+private theorem decay_tensor_stage_fixed_slices (k : GoodCompact)
+    (F : E) (D : ℝ≥0ˣ → SchwartzBruhat K)
+    (hD : ∀ t u, D t u = F.val (u.val * τ t))
+    (j : SchwartzBruhat (K ⧸ k.val.comap (Subgroup.subtype K)) →L[ℂ] SchwartzBruhat K)
+    (hj : ∀ h u, j h u = h (u : K ⧸ k.val.comap (Subgroup.subtype K)))
+    (r : SchwartzBruhat K →L[ℂ] SchwartzBruhat (K ⧸ k.val.comap (Subgroup.subtype K)))
+    (hr : ∀ h : SchwartzBruhat K, (∀ u (v : k.val.comap (Subgroup.subtype K)),
+      h (u * v.val) = h u) → ∀ u : K, r h (u : K ⧸ k.val.comap (Subgroup.subtype K)) = h u) :
+    F ∈ (modulatedExponentialDecayStageInclusion m I k).range ↔
+      ∀ t, j (r (D t)) = D t := by
+  refine ((modulatedExponentialDecayStageInclusion_range m I k).2 F).trans ?_
+  obtain ⟨d, hd⟩ := hm.exists_sectionEquiv τ hτ
+  let k₁ := k.val.comap (Subgroup.subtype K)
+  have hmul (t : ℝ≥0ˣ) (u v : K) :
+      (u * v).val * τ t = (u.val * τ t) * v.val := mul_right_comm _ _ _
+  constructor
+  · intro h t
+    refine Subtype.ext (funext fun u ↦ (hj _ u).trans (hr _ ?_ u))
+    intro w v
+    exact (hD t _).trans ((congrArg F.val (hmul t w v.val)).trans
+      ((h _ ⟨v.val.val, v.property⟩).trans (hD t w).symm))
+  · intro h g v
+    obtain ⟨⟨u,t⟩, rfl⟩ := d.surjective g
+    let w : K := ⟨v.val, compactSubgroup_le_modulation_ker m k.val k.property.1 v.property⟩
+    have hw : w ∈ k₁ := v.property
+    have hv (b : K) : D t b = r (D t) (b : K ⧸ k₁) :=
+      (congrArg (fun y : SchwartzBruhat K ↦ y b) (h t).symm).trans (hj _ b)
+    rw [hd (u,t)]
+    exact (congrArg F.val (hmul t u w).symm).trans ((hD t (u*w)).symm.trans
+      ((hv _).trans ((congrArg (r (D t)).val (QuotientGroup.mk_mul_of_mem u hw)).trans
+        ((hv u).symm.trans (hD t u)))))
+
+include hm hτ in
+private theorem decay_tensor_stage_ext {F H : E}
+    (h : ∀ (u : K) t, F.val (u.val * τ t) = H.val (u.val * τ t)) : F = H := by
+  obtain ⟨d, hd⟩ := hm.exists_sectionEquiv τ hτ
+  refine Subtype.ext (funext (d.surjective.forall.mpr fun p ↦ ?_))
+  exact (congrArg F.val (hd p)).trans ((h p.1 p.2).trans (congrArg H.val (hd p)).symm)
+
 include hSC hm hInt hne hτ in
 /-- Paper: Theorem D.3.3.7(1), p. 806. The tensor isomorphism on a quotient
 stage commutes with the two inclusions into the full spaces, and the inclusion of the stage is
@@ -1002,7 +1154,63 @@ theorem modulatedExponentialDecay_tensor_stage
       ∀ z : Completion Tₖ,
         modulatedExponentialDecayStageInclusion m I k (eₖ z) =
           e (Completion.map (inductiveTensorMap j.toLinearMap
-            (LinearMap.id : P →ₗ[ℂ] P) : Tₖ → T) z) := by sorry
+            (LinearMap.id : P →ₗ[ℂ] P) : Tₖ → T) z) := by
+  intro k₁ Tₖ
+  let : CompactSpace K := isCompact_iff_compactSpace.mp hm.isCompact_ker
+  let : SecondCountableTopology K := TopologicalSpace.Subtype.secondCountableTopology _
+  let hk₁ : IsClosed (k₁ : Set K) := k.property.1.isClosed.preimage continuous_subtype_val
+  let : SecondCountableTopology (K ⧸ k₁) := QuotientGroup.isOpenQuotientMap_mk.secondCountableTopology
+  let : T2Space (SchwartzBruhat (K ⧸ k₁)) := schwartzBruhat_t2
+  let : T2Space (SchwartzBruhat K) := schwartzBruhat_t2
+  let : CompleteSpace (SchwartzBruhat K) := schwartzBruhat_complete
+  let : T2Space P := (positiveRealExponentialDecay_isEmbedding I hne).t2Space
+  refine (continuous_schwartzBruhat_compactQuotient_pullback k₁ hk₁.isCompact).elim fun j hj ↦ ?_
+  refine (schwartzBruhat_compactQuotient_average k₁ hk₁.isCompact).elim fun r hr ↦ ?_
+  have hleft : LeftInverse r j := by
+    intro h
+    refine Subtype.ext (funext (QuotientGroup.mk_surjective.forall.mpr fun u ↦ ?_))
+    exact (hr _ (fun b v ↦ (hj _ _).trans ((congrArg h.val
+      (QuotientGroup.mk_mul_of_mem b v.property)).trans (hj _ _).symm)) u).trans (hj h u)
+  refine (tensor_stage_retract (V := P) j r hleft).elim fun J h ↦ h.elim fun R h ↦ ?_
+  have hmap := h.1
+  have hJ := h.2.1
+  have hR := h.2.2.1
+  have hslice := h.2.2.2
+  let ev (g : G) : E →L[ℂ] ℂ :=
+    ⟨(LinearMap.proj g).comp (modulatedExponentialDecaySubmodule m I).subtype,
+      continuous_modulatedExponentialDecay_eval m I hne g⟩
+  have hs (t : ℝ≥0ˣ) : ∃ D : Completion T →L[ℂ] SchwartzBruhat K,
+      (∀ z u, D z u = (e z).val (u.val * τ t)) ∧ ∀ z, D (J (R z)) = j (r (D z)) := by
+    refine (decay_profile_evaluation I hne (Real.log (t.val : ℝ))).elim fun φ hφ ↦ ?_
+    refine (hslice φ).elim fun D hD ↦ ?_
+    refine ⟨D, fun z u ↦ tensor_stage_ext ((schwartzBruhatEvalCLM u).comp D)
+      ((ev (u.val * τ t)).comp e.toContinuousLinearMap) (fun h f ↦ ?_) z, hD.2⟩
+    exact (congrArg (fun q : SchwartzBruhat K ↦ q u) (hD.1 h f)).trans
+      ((congrArg (· * h u) (hφ f)).trans ((mul_comm _ _).trans (he h f u t).symm))
+  let D t := (hs t).choose
+  have hval t := (hs t).choose_spec.1
+  have hproj t := (hs t).choose_spec.2
+  let i : ModulatedExponentialDecayStage m I k →ₗ[ℂ] E := modulatedExponentialDecayStageInclusion m I k
+  have hi : IsEmbedding i := decay_tensor_stage_isEmbedding m I hm hInt hne τ hτ k
+  have hfix (z : Completion T) : e z ∈ i.range ↔ J (R z) = z := by
+    apply (decay_tensor_stage_fixed_slices m I hm τ hτ k (e z) (fun t ↦ D t z)
+      (fun t ↦ hval t z) j hj r hr).trans
+    constructor
+    · intro h
+      apply e.injective
+      refine decay_tensor_stage_ext m I hm τ hτ (fun u t ↦ ?_)
+      exact (hval t _ u).symm.trans ((congrArg (fun q : SchwartzBruhat K ↦ q u)
+        ((hproj t z).trans (h t))).trans (hval t z u))
+    · intro h t
+      exact (hproj t z).symm.trans (congrArg (D t) h)
+  refine (tensor_stage_equiv_of_fixed J R hR e i hi hfix).elim fun v hv ↦ ?_
+  refine ⟨v, j, hj, fun h f u t ↦ ?_, hi.continuous, fun z ↦ (hv z).trans
+    (congrArg e (congrFun hmap z))⟩
+  let z := Completion.coe' (α := Tₖ) (h ⊗ₜ[ℂ] f)
+  let g := u.val * τ t
+  exact (congrArg (fun F : E ↦ F.val g) (hv z)).trans
+    ((congrArg (fun y : Completion T ↦ (e y).val g) (hJ h f)).trans
+      ((he (j h) f u t).trans (congrArg (· * f.val (Real.log (t.val : ℝ))) (hj h u))))
 
 /-- An elementary group has a largest Bruhat stage, whose realization is a homeomorphism. -/
 private theorem schwartzBruhat_frechet_of_elementary {Q : Type*} [CommGroup Q] [TopologicalSpace Q]
@@ -2189,13 +2397,47 @@ local notation "compareTensors" => @Completion.map TI _ TP _ id
 
 include hSC hm hInt hne hτ
 
+omit hSC hm hInt hne hτ in
+/-- The ranges of the cofinal Bruhat stages exhibit the Schwartz space as a strict LF-space. -/
+private theorem tensor_comparison_schwartz_strictLF {H : Type*} [CommGroup H] [TopologicalSpace H]
+    [IsTopologicalGroup H] [T2Space H] [LocallyCompactSpace H] [SecondCountableTopology H] :
+    IsStrictLFSpace (SchwartzBruhat H) := by
+  obtain ⟨a, e, j, _, _, _, _, hlim⟩ := schwartzBruhat_exists_cofinal_system (G := H)
+  let i n := (schwartzBruhatStageCLM (a n) (e n)).toLinearMap
+  have hmono : Monotone (fun n ↦ (i n).range) := monotone_nat_of_le_succ fun n ↦ by
+    rintro _ ⟨z, rfl⟩
+    exact ⟨j n z, DFunLike.congr_fun (hlim.compatible n) z⟩
+  exact strictLF_of_embedded_stages (X := fun n ↦ SchwartzBruhatStage (e n))
+    i id schwartzBruhat_t2 hmono (fun _ ↦ elementarySchwartz_isFrechet)
+    (fun n ↦ schwartzBruhatStage_isEmbedding (a n) (e n)) hlim.exhaustive hlim.topology_eq
+
 /-- Paper: Proposition D.3.3.10, p. 807. The continuous linear comparison from the
 completed inductive tensor product to the completed projective tensor product is bijective
 and identifies their bounded subsets. -/
 theorem modulatedExponentialDecay_tensor_comparison_bounded :
     ∃ C : Completion TI →L[ℂ] Completion TP, (C : Completion TI → Completion TP) = compareTensors ∧
       Bijective C ∧ ∀ B : Set (Completion TI), IsVonNBounded ℂ (C '' B) ↔ IsVonNBounded ℂ B :=
-  by sorry
+  by
+  let : CompactSpace K := isCompact_iff_compactSpace.mp hm.isCompact_ker
+  let : SecondCountableTopology K := TopologicalSpace.Subtype.secondCountableTopology _
+  let : CompleteSpace (SchwartzBruhat K) := schwartzBruhat_complete
+  let : T2Space P := (positiveRealExponentialDecay_isEmbedding I hne).t2Space
+  let : MontelSpace ℂ P := (positiveRealExponentialDecay_montel I hInt hne).2
+  let : BarrelledSpace ℂ (StrongDual ℂ P) := (positiveRealExponentialDecay_strongDual_montel I hInt hne).1
+  let a : I := ⟨hne.choose, hne.choose_spec⟩
+  let twist : P →L[ℂ] SchwartzMap ℝ ℂ := ⟨logExponentialDecayTwist I a,
+    (continuous_apply a).comp (positiveRealExponentialDecay_isEmbedding I hne).continuous⟩
+  let L := (SchwartzMap.toBoundedContinuousFunctionCLM ℂ ℝ ℂ).comp twist
+  let p := (normSeminorm ℂ _).comp L.toLinearMap
+  have hsep (f : P) (hf : p f = 0) : f = 0 := by
+    have hz : L f = 0 := norm_eq_zero.mp hf
+    refine Subtype.ext (funext fun x ↦ ?_)
+    have hv : logExponentialDecayTwist I a f x = 0 := congrArg (fun g : BoundedContinuousFunction ℝ ℂ ↦ g x) hz
+    exact (mul_eq_zero.mp ((logExponentialDecayTwist_apply I a f x).symm.trans hv)).resolve_left
+      (Complex.ofReal_ne_zero.mpr (Real.exp_pos _).ne')
+  exact completedTensor_comparison_bounded_of_strictLF (Y := SchwartzBruhat K)
+    (positiveRealExponentialDecay_frechet I hInt hne) (positiveRealExponentialDecay_nuclear I hInt hne)
+    p L.continuous.norm hsep tensor_comparison_schwartz_strictLF
 
 omit hSC hm hInt hne hτ in
 private theorem continuous_inductiveTensor_flip (A B : Type*) [AddCommGroup A] [Module ℂ A]

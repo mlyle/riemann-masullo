@@ -48,11 +48,41 @@ def sLocalOrbitalArchimedeanFlatTests :
   let coords := LinearMap.funLeft ℂ ℂ (fun x : ArchCoordinates ↦ Multiplicative.ofAdd (assemble(x)))
   flat.comap (coords.comp (schwartzBruhatSubmodule (Multiplicative (InfiniteAdeleRing F))).subtype)
 
+/-- The archimedean coordinates of the origin assemble to the origin. -/
+private theorem sLocalOrbitalArchimedeanFlatTests_zero_assemble :
+    assemble((0 : ArchCoordinates)) = 0 := by
+  funext w
+  by_cases hw : w.IsReal
+  · simp only [hw, dite_true, Prod.fst_zero, Pi.zero_apply, map_zero]
+    rfl
+  · simp only [hw, dite_false, Prod.snd_zero, Pi.zero_apply, map_zero]
+    rfl
+
+/-- The origin of the archimedean coordinates lies on a coordinate hyperplane. -/
+private theorem sLocalOrbitalArchimedeanFlatTests_zero_meetsWall :
+    (∃ i, (0 : ArchCoordinates).1 i = 0) ∨ (∃ j, (0 : ArchCoordinates).2 j = 0) := by
+  obtain ⟨w⟩ := (inferInstance : Nonempty (InfinitePlace F))
+  by_cases hw : w.IsReal
+  · exact Or.inl ⟨⟨w, hw⟩, rfl⟩
+  · exact Or.inr ⟨⟨w, InfinitePlace.not_isReal_iff_isComplex.mp hw⟩, rfl⟩
+
 /-- Paper: Equations (8.1.0.2) and (8.1.0.4), p. 382.
 Every archimedean-flat test in the displayed tensor products vanishes at the origin. -/
 theorem sLocalOrbitalArchimedeanFlatTests_zero
     (f : sLocalOrbitalArchimedeanFlatTests F) :
-    f.val (Multiplicative.ofAdd 0) = 0 := by sorry
+    f.val (Multiplicative.ofAdd 0) = 0 := by
+  have hf := f.property
+  unfold sLocalOrbitalArchimedeanFlatTests at hf
+  obtain ⟨φ, hφ, hφf⟩ := Submodule.mem_map.mp (Submodule.mem_comap.mp hf)
+  have h0 := (Submodule.mem_iInf _).mp ((Submodule.mem_iInf _).mp ((Submodule.mem_iInf _).mp hφ
+    ⟨0, sLocalOrbitalArchimedeanFlatTests_zero_meetsWall⟩) 0) Fin.elim0
+  have hφ0 : (φ : ArchCoordinates → ℂ) 0 = 0 := by
+    have := LinearMap.mem_ker.mp h0
+    simpa only [IsLinearMap.mk'_apply, iteratedFDeriv_zero_apply] using this
+  have hv : (φ : ArchCoordinates → ℂ) 0 =
+      f.val (Multiplicative.ofAdd (assemble((0 : ArchCoordinates)))) := congrFun hφf 0
+  rw [sLocalOrbitalArchimedeanFlatTests_zero_assemble] at hv
+  exact hv.symm.trans hφ0
 
 /-- Paper: Equations (8.1.0.2) and (8.1.0.4), p. 382.
 These are the restricted S-adelic tests, with the fibre or singleton entered as T.
@@ -76,6 +106,53 @@ local notation "q(" η ")" => (sLocalHomogeneousAdelicThetaLinearMap F S η).ker
 local notation "D(" hT ", " η ")" =>
   (sLocalHomogeneousThetaPrincipalValue (F := F) hT η).range
 
+/-- On each finite fibre, a restricted test is archimedean-flat in the coordinates of §5.3.3. -/
+private theorem sLocalOrbitalSupportTests_tmul_iff_fibre (g : B(S)) (hg : g ∈ U(S, T))
+    (y : ∀ w : S, w.val.adicCompletion F) :
+    (fun x : ArchCoordinates ↦ g (Multiplicative.ofAdd (show SAdeleRing F S from (assemble(x), y))))
+      ∈ (archimedeanFlatSchwartz (ι := RealPlaces) (κ := ComplexPlaces)).map
+        ((archimedeanSchwartz_coe_isLinear (F := F)).mk' _) := by
+  unfold sLocalOrbitalSupportTests at hg
+  dsimp only at hg
+  induction hg using Submodule.span_induction with
+  | mem g hg =>
+    obtain ⟨a, b, _, rfl⟩ := hg
+    have ha := a.property
+    unfold sLocalOrbitalArchimedeanFlatTests at ha
+    have ha' := Submodule.mem_comap.mp ha
+    have key : (fun x : ArchCoordinates ↦
+        (sAdeleSchwartz_inductiveTensor_equiv F S).choose (a.val ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, b w))
+          (Multiplicative.ofAdd (show SAdeleRing F S from (assemble(x), y)))) =
+        (∏ w : S, b w (Multiplicative.ofAdd (y w))) •
+          (fun x : ArchCoordinates ↦ a.val (Multiplicative.ofAdd (assemble(x)))) := by
+      funext x
+      rw [(sAdeleSchwartz_inductiveTensor_equiv F S).choose_spec, Pi.smul_apply, smul_eq_mul,
+        mul_comm]
+    rw [key]
+    exact Submodule.smul_mem _ _ ha'
+  | zero => exact Submodule.zero_mem _
+  | add x y _ _ hx hy => exact add_mem hx hy
+  | smul c x _ hx => exact Submodule.smul_mem _ c hx
+
+/-- A restricted test vanishes wherever a finite coordinate outside T is zero. -/
+private theorem sLocalOrbitalSupportTests_tmul_iff_zero (g : B(S)) (hg : g ∈ U(S, T))
+    (x : SAdeleRing F S) (w : S) (hw : w.val ∉ T) (hx : x.2 w = 0) :
+    g (Multiplicative.ofAdd x) = 0 := by
+  unfold sLocalOrbitalSupportTests at hg
+  dsimp only at hg
+  induction hg using Submodule.span_induction with
+  | mem g hg =>
+    obtain ⟨a, b, hb, rfl⟩ := hg
+    rw [(sAdeleSchwartz_inductiveTensor_equiv F S).choose_spec]
+    refine mul_eq_zero_of_right _ (Finset.prod_eq_zero (Finset.mem_univ w) ?_)
+    rw [hx]
+    exact hb w hw
+  | zero => rfl
+  | add f g _ _ hf hg =>
+    rw [SchwartzBruhat.coe_add, Pi.add_apply, hf, hg, add_zero]
+  | smul c f _ hf =>
+    rw [SchwartzBruhat.coe_smul, Pi.smul_apply, hf, smul_zero]
+
 /-- Paper: Equations (8.1.0.2) and (8.1.0.4), p. 382.
 For a pure tensor with nonzero factors, membership is precisely archimedean flatness
 and vanishing at zero in each finite factor outside T. -/
@@ -85,7 +162,45 @@ theorem sLocalOrbitalSupportTests_tmul_iff
     let e := (sAdeleSchwartz_inductiveTensor_equiv F S).choose
     e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, b w)) ∈ U(S, T) ↔
       a ∈ sLocalOrbitalArchimedeanFlatTests F ∧
-        ∀ w : S, w.val ∉ T → b w (Multiplicative.ofAdd 0) = 0 := by sorry
+        ∀ w : S, w.val ∉ T → b w (Multiplicative.ofAdd 0) = 0 := by
+  intro e
+  have he := (sAdeleSchwartz_inductiveTensor_equiv F S).choose_spec a b
+  constructor
+  · intro h
+    obtain ⟨x₀, hx₀⟩ : ∃ x₀ : InfiniteAdeleRing F, a (Multiplicative.ofAdd x₀) ≠ 0 := by
+      by_contra! hn
+      exact _ha (SchwartzBruhat.ext fun x ↦ hn x.toAdd)
+    have hnon (w : S) : ∃ y : w.val.adicCompletion F, b w (Multiplicative.ofAdd y) ≠ 0 := by
+      by_contra! hn
+      exact _hb w (SchwartzBruhat.ext fun x ↦ hn x.toAdd)
+    choose y hy using hnon
+    refine ⟨?_, fun w hw ↦ ?_⟩
+    · have hc : (∏ w : S, b w (Multiplicative.ofAdd (y w))) ≠ 0 :=
+        Finset.prod_ne_zero_iff.mpr fun w _ ↦ hy w
+      have hf := sLocalOrbitalSupportTests_tmul_iff_fibre _ h y
+      have key : (fun x : ArchCoordinates ↦ e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, b w))
+            (Multiplicative.ofAdd (show SAdeleRing F S from (assemble(x), y)))) =
+          (∏ w : S, b w (Multiplicative.ofAdd (y w))) •
+            (fun x : ArchCoordinates ↦ a (Multiplicative.ofAdd (assemble(x)))) := by
+        funext x
+        rw [he, Pi.smul_apply, smul_eq_mul, mul_comm]
+      rw [key] at hf
+      have hf' := Submodule.smul_mem _ (∏ w : S, b w (Multiplicative.ofAdd (y w)))⁻¹ hf
+      rw [inv_smul_smul₀ hc] at hf'
+      unfold sLocalOrbitalArchimedeanFlatTests
+      exact Submodule.mem_comap.mpr hf'
+    · by_contra hne
+      let z := Function.update y w 0
+      have hz := sLocalOrbitalSupportTests_tmul_iff_zero _ h
+        (show SAdeleRing F S from (x₀, z)) w hw (Function.update_self ..)
+      rw [he] at hz
+      refine mul_ne_zero hx₀ (Finset.prod_ne_zero_iff.mpr fun u _ ↦ ?_) hz
+      by_cases hu : u = w
+      · subst hu
+        simpa only [z, Function.update_self] using hne
+      · simpa only [z, Function.update_of_ne hu] using hy u
+  · rintro ⟨ha, hb⟩
+    exact Submodule.subset_span ⟨⟨a, ha⟩, b, hb, rfl⟩
 
 /-- Paper: Theorem 8.1.0.1(1)–(2), p. 382.
 The corrected test subspaces in (8.1.0.2) and (8.1.0.4) are closed in the S-adelic
@@ -95,7 +210,21 @@ theorem sLocalOrbitalSupportTests_isClosed : IsClosed (↑U(S, T) : Set B(S)) :=
 /-- Paper: Equations (8.1.0.1) and (8.1.0.3), p. 382.
 Principal value on the selected places preserves the restricted test space. -/
 theorem sLocalOrbitalSupportTests_principalValue (hT : T ⊆ S) (f : U(S, T)) :
-    sAdelePrincipalValue F hT f.val ∈ U(S, T) := by sorry
+    sAdelePrincipalValue F hT f.val ∈ U(S, T) := by
+  obtain ⟨f, hf⟩ := f
+  unfold sLocalOrbitalSupportTests at hf ⊢
+  dsimp only at hf ⊢
+  induction hf using Submodule.span_induction with
+  | mem g hg =>
+    obtain ⟨a, b, hb, rfl⟩ := hg
+    apply Submodule.subset_span
+    refine ⟨a, fun w ↦ if w.val ∈ T then finitePlacePrincipalValue w.val (b w) else b w,
+      fun w hw ↦ ?_, (sAdelePrincipalValue_tmul hT a.val b).symm⟩
+    simp only [hw, ↓reduceIte]
+    exact hb w hw
+  | zero => simp only [map_zero, Submodule.zero_mem]
+  | add x y _ _ hx hy => simpa only [map_add] using add_mem hx hy
+  | smul c x _ hx => simpa only [map_smul] using Submodule.smul_mem _ c hx
 
 /-- Paper: Equations (8.1.0.1) and (8.1.0.3), p. 382.
 The source quotient imposes the homogeneous theta kernel and the principal-value
@@ -113,6 +242,30 @@ def sLocalOrbitalSupportRelations (hT : T ⊆ S) (η : PontryaginDual J₁(S)) :
   let K : Submodule ℂ tests := (θ.domRestrict tests).ker
   K ⊔ restrictedPV.range
 
+/-- Abstract form: inside a subspace `U` stable under `P`, the sum of the kernel of `θ` and
+the range of `P` consists of the vectors whose `θ`-class is the image of the class of
+another vector of `U` under the induced map. -/
+private theorem mem_sLocalOrbitalSupportRelations_iff_aux {M N : Type*}
+    [AddCommGroup M] [Module ℂ M] [AddCommGroup N] [Module ℂ N]
+    (U : Submodule ℂ M) (θ : M →ₗ[ℂ] N) (P : M →ₗ[ℂ] M)
+    (hK : LinearMap.ker θ ≤ (LinearMap.ker θ).comap P) (hU : ∀ f : U, P f.val ∈ U) (f : U) :
+    f ∈ LinearMap.ker (θ.domRestrict U) ⊔
+        LinearMap.range (LinearMap.codRestrict U (P.domRestrict U) hU) ↔
+      ∃ g : U, (LinearMap.ker θ).mkQ f.val =
+        (LinearMap.ker θ).mapQ (LinearMap.ker θ) P hK ((LinearMap.ker θ).mkQ g.val) := by
+  simp only [Submodule.mem_sup, LinearMap.mem_range, Submodule.mkQ_apply, Submodule.mapQ_apply,
+    Submodule.Quotient.eq]
+  constructor
+  · rintro ⟨k, hk, _, ⟨g, rfl⟩, rfl⟩
+    refine ⟨g, ?_⟩
+    rw [LinearMap.mem_ker] at hk ⊢
+    change θ (k.val + P g.val - P g.val) = 0
+    rw [add_sub_cancel_right]
+    exact hk
+  · rintro ⟨g, hg⟩
+    exact ⟨f - LinearMap.codRestrict U (P.domRestrict U) hU g, hg, _, ⟨g, rfl⟩,
+      sub_add_cancel _ _⟩
+
 /-- Paper: Equations (8.1.0.1) and (8.1.0.3), p. 382.
 A restricted test represents zero in the source quotient exactly when its theta class
 is the principal value of the theta class of another restricted test. -/
@@ -120,14 +273,21 @@ theorem mem_sLocalOrbitalSupportRelations_iff (hT : T ⊆ S) (η : PontryaginDua
     (f : U(S, T)) :
     f ∈ sLocalOrbitalSupportRelations hT η ↔
       ∃ g : U(S, T), q(η) f.val = sLocalHomogeneousThetaPrincipalValue hT η (q(η) g.val) :=
-  by sorry
+  mem_sLocalOrbitalSupportRelations_iff_aux U(S, T) (sLocalHomogeneousAdelicThetaLinearMap F S η)
+    (sAdelePrincipalValue F hT) (sAdelePrincipalValue_preserves_homogeneousThetaKernel hT η)
+    (fun f ↦ sLocalOrbitalSupportTests_principalValue (F := F) hT f) f
 
 local notation "π(" hT ", " η ")" => (D(hT, η)).mkQL.comp (q(η))
 
 /-- Paper: Equations (8.1.0.1) and (8.1.0.3), p. 382.
 The map to the ambient orbital quotient kills the source relations. -/
 theorem sLocalOrbitalSupportRelations_le_ker (hT : T ⊆ S) (η : PontryaginDual J₁(S)) :
-    sLocalOrbitalSupportRelations hT η ≤ ((π(hT, η)).comp (U(S, T)).subtypeL).ker := by sorry
+    sLocalOrbitalSupportRelations hT η ≤ ((π(hT, η)).comp (U(S, T)).subtypeL).ker := by
+  intro f hf
+  obtain ⟨g, hg⟩ := (mem_sLocalOrbitalSupportRelations_iff hT η f).mp hf
+  change (D(hT, η)).mkQ (q(η) f.val) = 0
+  rw [hg, Submodule.mkQ_apply, Submodule.Quotient.mk_eq_zero]
+  exact LinearMap.mem_range_self _ _
 
 /-- Paper: Equations (8.1.0.1) and (8.1.0.3), p. 382.
 The comparison is the continuous linear map induced by including restricted tests
@@ -142,7 +302,7 @@ The comparison sends the class of a restricted test to its ambient orbital class
 theorem sLocalOrbitalSupportComparison_mk (hT : T ⊆ S) (η : PontryaginDual J₁(S))
     (f : U(S, T)) :
     sLocalOrbitalSupportComparison hT η ((sLocalOrbitalSupportRelations hT η).mkQL f) =
-      π(hT, η) f.val := by sorry
+      π(hT, η) f.val := rfl
 
 -- TODO(paper-gap): On p. 383 the identity Λ/L_out = L_S omits the factor regularizing
 -- the trivial norm-one component. Moreover the surjectivity argument on pp. 383–384
@@ -153,6 +313,17 @@ theorem sLocalOrbitalSupportComparison_mk (hT : T ⊆ S) (η : PontryaginDual J�
 -- In (8.1.0.9), L_S exp(s²) is nonzero at 1, whereas every left-hand member
 -- vanishes there since L_out has a pole. On p. 384 insertion also needs the outside
 -- Tamagawa masses (ERRATA I96). Both quotient comparisons fail in Sec1_Printed.
+
+/-- Abstract form: the map induced on a quotient of a subspace `U` by a map on the ambient
+space has the image of `U` as its range. -/
+private theorem sLocalPrimaryOrbitalSupportComparison_range_aux {M N : Type*}
+    [AddCommGroup M] [Module ℂ M] [TopologicalSpace M]
+    [AddCommGroup N] [Module ℂ N] [TopologicalSpace N]
+    (U : Submodule ℂ M) (R : Submodule ℂ U) (π : M →L[ℂ] N) (h : R ≤ (π.comp U.subtypeL).ker) :
+    LinearMap.range (R.liftQL (π.comp U.subtypeL) h).toLinearMap = U.map π.toLinearMap := by
+  rw [Submodule.toLinearMap_liftQL, Submodule.range_liftQ]
+  exact (LinearMap.range_comp U.subtype π.toLinearMap).trans
+    (congrArg (Submodule.map π.toLinearMap) (Submodule.range_subtype U))
 
 /-- Paper: Theorem 8.1.0.1(1), p. 382.
 The range of the primary comparison consists of the orbital classes that admit
@@ -167,7 +338,10 @@ theorem sLocalPrimaryOrbitalSupportComparison_range (p : Vℚ)
     let η := sLocalNormOneCharacter S ω hω
     let A : (↥U(S, T) ⧸ sLocalOrbitalSupportRelations hT η) →L[ℂ]
         SLocalPrimaryOrbitalQuotient p η := sLocalOrbitalSupportComparison hT η
-    LinearMap.range A.toLinearMap = (U(S, T)).map (π(hT, η)).toLinearMap := by sorry
+    LinearMap.range A.toLinearMap = (U(S, T)).map (π(hT, η)).toLinearMap := by
+  intro T hT η A
+  exact sLocalPrimaryOrbitalSupportComparison_range_aux U(S, T)
+    (sLocalOrbitalSupportRelations hT η) (π(hT, η)) (sLocalOrbitalSupportRelations_le_ker hT η)
 
 /-- Paper: Theorem 8.1.0.1(2), p. 382.
 The range of the single-place comparison consists of the orbital classes that admit
@@ -180,7 +354,10 @@ theorem sLocalPlaceOrbitalSupportComparison_range (v : S) (_hPic : PicTrivial(S)
     let hT : T ⊆ S := Finset.singleton_subset_iff.mpr v.property
     let η := sLocalNormOneCharacter S ω hω
     LinearMap.range (sLocalOrbitalSupportComparison hT η).toLinearMap =
-      (U(S, T)).map (π(hT, η)).toLinearMap := by sorry
+      (U(S, T)).map (π(hT, η)).toLinearMap := by
+  intro T hT η
+  exact sLocalPrimaryOrbitalSupportComparison_range_aux U(S, T)
+    (sLocalOrbitalSupportRelations hT η) (π(hT, η)) (sLocalOrbitalSupportRelations_le_ker hT η)
 
 -- TODO(later): needs §§8.2–8.3 for the announced stack description and the
 -- support of the transposed dual basis elements (Theorem 8.3.0.1, p. 387).

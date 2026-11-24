@@ -407,13 +407,180 @@ theorem adeleFiniteOrbit_transporter (v : HeightOneSpectrum (𝓞 F)) (τ : ℝ�
 already the norm-one orbit of the distinguished base point. -/
 theorem sAdeleNormOneOrbit_infinite_eq_full (v : InfinitePlace F) :
     sAdeleNormOneOrbit F S (some (.inl v)) = sAdeleFullOrbit F S (some (.inl v)) := by
-  sorry
+  ext x
+  constructor
+  · rintro ⟨g, rfl⟩
+    exact ⟨g.val, rfl⟩
+  · rintro ⟨g, rfl⟩
+    let s := singlePlaceIdeleNormSection F v
+    let p := Units.map (adeleProjection F S).toMonoidHom
+    have hτ (t : ℝ≥0ˣ) : sIdeleNorm F S (p (s t)) = t := by
+      let A := integralAdelesOutside F S
+      have hmem (u : ℝ≥0ˣ) : (s u).val ∈ A := by
+        change (s u).val ∈ integralAdelesOutside F S
+        delta integralAdelesOutside
+        rw [Subring.mem_iInf]
+        intro w
+        rw [Subring.mem_iInf]
+        intro _
+        exact (w.adicCompletionIntegers F).one_mem
+      have ht : s t ∈ A.toSubmonoid.units :=
+        ⟨hmem t, by
+          change ((s t)⁻¹).val ∈ A
+          rw [← map_inv]
+          exact hmem t⁻¹⟩
+      let g := A.toSubmonoid.unitsEquivUnitsType ⟨s t, ht⟩
+      exact ((sIdeleNorm_spec F S).1 g).symm.trans
+        (singlePlaceIdeleNormSection_rightInverse F v t)
+    let c := p (s (sIdeleNorm F S g)⁻¹)
+    have hfix : c • sAdeleOrbitBasepoint F S (some (.inl v)) =
+        sAdeleOrbitBasepoint F S (some (.inl v)) := by
+      rw [Units.smul_def]
+      change adeleProjection F S (AdeleRing.ofCompletion (𝓞 F) F v
+          (infinitePlaceRealPower F v (v.mult : ℝ)⁻¹ (sIdeleNorm F S g)⁻¹).val) *
+          adeleProjection F S (AdeleRing.ofCompletion (𝓞 F) F v 0) =
+        adeleProjection F S (AdeleRing.ofCompletion (𝓞 F) F v 0)
+      rw [← map_mul, ← map_mul, mul_zero]
+    refine ⟨⟨g * c, ?_⟩, ?_⟩
+    · rw [MonoidHom.mem_ker, map_mul, hτ, mul_inv_cancel]
+    · change (g * c) • sAdeleOrbitBasepoint F S (some (.inl v)) = g • _
+      rw [mul_smul, hfix]
 
 /-- Paper: Proposition 8.2.0.5, p. 386. At an infinite place the full global orbit is
 already the norm-one orbit of the distinguished base point. -/
 theorem adeleNormOneOrbit_infinite_eq_full (v : InfinitePlace F) :
     adeleNormOneOrbit F (some (.inl v)) = adeleFullOrbit F (some (.inl v)) := by
-  sorry
+  ext x
+  constructor
+  · rintro ⟨g, rfl⟩
+    exact ⟨g.val, rfl⟩
+  · rintro ⟨g, rfl⟩
+    let c := singlePlaceIdeleNormSection F v (ideleNorm F g)⁻¹
+    have hc : ideleNorm F c = (ideleNorm F g)⁻¹ :=
+      singlePlaceIdeleNormSection_rightInverse F v _
+    have hfix : c • adeleOrbitBasepoint F (some (.inl v)) =
+        adeleOrbitBasepoint F (some (.inl v)) := by
+      rw [Units.smul_def]
+      change AdeleRing.ofCompletion (𝓞 F) F v
+          (infinitePlaceRealPower F v (v.mult : ℝ)⁻¹ (ideleNorm F g)⁻¹).val *
+          AdeleRing.ofCompletion (𝓞 F) F v 0 = AdeleRing.ofCompletion (𝓞 F) F v 0
+      rw [← map_mul, mul_zero]
+    refine ⟨⟨g * c, ?_⟩, ?_⟩
+    · rw [MonoidHom.mem_ker, map_mul, hc, mul_inv_cancel]
+    · change (g * c) • adeleOrbitBasepoint F (some (.inl v)) = g • _
+      rw [mul_smul, hfix]
+
+/-- The idele inserted at an infinite place has norm one exactly when the inserted
+unit has norm one. -/
+private theorem sAdeleFullOrbit_real_normOne_stabilizer_iff_ideleNorm (v : InfinitePlace F)
+    (u : v.Completionˣ) :
+    ideleNorm F (IdeleGroup.ofCompletion (𝓞 F) F v u) = 1 ↔ ‖(u : v.Completion)‖ = 1 := by
+  classical
+  rw [Units.ext_iff, Units.val_one, ← NNReal.coe_eq_one, ((ideleNorm_spec F).1 _).2]
+  change (∏ w : InfinitePlace F, ‖Pi.mulSingle v (u : v.Completion) w‖ ^ w.mult) *
+    (∏ᶠ w : HeightOneSpectrum (𝓞 F), ‖(1 : w.adicCompletion F)‖) = 1 ↔ _
+  simp only [norm_one, finprod_one, mul_one]
+  rw [Finset.prod_eq_single_of_mem v (Finset.mem_univ _), Pi.mulSingle_eq_same]
+  · exact pow_eq_one_iff_of_nonneg (norm_nonneg _) InfinitePlace.mult_pos.ne'
+  · intro w _ hw
+    simp only [Pi.mulSingle_eq_of_ne hw, norm_one, one_pow]
+
+/-- At a real place the units of norm one are the two signs. -/
+private theorem sAdeleFullOrbit_real_normOne_stabilizer_iff_unit (v : InfinitePlace F)
+    (hv : v.IsReal) (u : v.Completionˣ) : ‖u.val‖ = 1 ↔ (u.val = 1 ∨ u.val = -1) := by
+  let φ := InfinitePlace.Completion.extensionEmbeddingOfIsReal hv
+  have hiso := InfinitePlace.Completion.isometry_extensionEmbeddingOfIsReal hv
+  rw [← hiso.norm_map_of_map_zero (map_zero φ) u.val, Real.norm_eq_abs, abs_eq zero_le_one]
+  constructor
+  · rintro (h | h)
+    · exact Or.inl (hiso.injective (h.trans (map_one φ).symm))
+    · exact Or.inr (hiso.injective (h.trans (by rw [map_neg, map_one])))
+  · rintro (h | h)
+    · exact Or.inl (by rw [h, map_one])
+    · exact Or.inr (by rw [h, map_neg, map_one])
+
+/-- An S-idele fixes the S-local base point at an infinite place exactly when it is the
+projection of an idele inserted at that place. -/
+private theorem sAdeleFullOrbit_real_normOne_stabilizer_iff_smul (v : InfinitePlace F)
+    (g : (SAdeleRing F S)ˣ) :
+    g • sAdeleOrbitBasepoint F S (some (.inl v)) = sAdeleOrbitBasepoint F S (some (.inl v)) ↔
+      ∃ u : v.Completionˣ, g = Units.map (adeleProjection F S).toMonoidHom
+        (IdeleGroup.ofCompletion (𝓞 F) F v u) := by
+  classical
+  constructor
+  · intro h
+    rw [Units.smul_def] at h
+    have h1 : ∀ w, w ≠ v → g.val.1 w = 1 := by
+      intro w hw
+      have hc := congrFun (congrArg Prod.fst h) w
+      change g.val.1 w * Pi.mulSingle v 0 w = Pi.mulSingle v 0 w at hc
+      rwa [Pi.mulSingle_eq_of_ne hw, mul_one] at hc
+    have h2 : ∀ w : S, g.val.2 w = 1 := by
+      intro w
+      have hc := congrFun (congrArg Prod.snd h) w
+      change g.val.2 w * 1 = 1 at hc
+      rwa [mul_one] at hc
+    let u : v.Completionˣ := ⟨g.val.1 v, g.inv.1 v, congrFun (congrArg Prod.fst g.val_inv) v,
+      congrFun (congrArg Prod.fst g.inv_val) v⟩
+    refine ⟨u, Units.ext (Prod.ext (funext fun w ↦ ?_) (funext fun w ↦ ?_))⟩
+    · change g.val.1 w = Pi.mulSingle v (g.val.1 v) w
+      obtain rfl | hw := eq_or_ne w v
+      · rw [Pi.mulSingle_eq_same]
+      · rw [Pi.mulSingle_eq_of_ne hw, h1 w hw]
+    · change g.val.2 w = 1
+      exact h2 w
+  · rintro ⟨u, rfl⟩
+    rw [Units.smul_def]
+    change adeleProjection F S (AdeleRing.ofCompletion (𝓞 F) F v u.val) *
+        adeleProjection F S (AdeleRing.ofCompletion (𝓞 F) F v 0) =
+      adeleProjection F S (AdeleRing.ofCompletion (𝓞 F) F v 0)
+    rw [← map_mul, ← map_mul, mul_zero]
+
+/-- The projected idele inserted at an infinite place has S-norm one exactly when the
+inserted unit has norm one. -/
+private theorem sAdeleFullOrbit_real_normOne_stabilizer_iff_sIdeleNorm (v : InfinitePlace F)
+    (u : v.Completionˣ) :
+    sIdeleNorm F S (Units.map (adeleProjection F S).toMonoidHom
+      (IdeleGroup.ofCompletion (𝓞 F) F v u)) = 1 ↔ ‖(u : v.Completion)‖ = 1 := by
+  let A := integralAdelesOutside F S
+  let s := IdeleGroup.ofCompletion (𝓞 F) F v
+  have hmem (y : v.Completionˣ) : (s y).val ∈ A := by
+    change (s y).val ∈ integralAdelesOutside F S
+    delta integralAdelesOutside
+    rw [Subring.mem_iInf]
+    intro w
+    rw [Subring.mem_iInf]
+    intro _
+    exact (w.adicCompletionIntegers F).one_mem
+  have ht : s u ∈ A.toSubmonoid.units :=
+    ⟨hmem u, by
+      change ((s u)⁻¹).val ∈ A
+      rw [← map_inv]
+      exact hmem u⁻¹⟩
+  let g := A.toSubmonoid.unitsEquivUnitsType ⟨s u, ht⟩
+  have hg : sIdeleNorm F S (Units.map (adeleProjection F S).toMonoidHom (s u)) =
+      ideleNorm F (s u) := ((sIdeleNorm_spec F S).1 g).symm
+  rw [hg]
+  exact sAdeleFullOrbit_real_normOne_stabilizer_iff_ideleNorm F v u
+
+/-- At an infinite place the S-local norm-one stabilizer of an orbit point consists of
+the projected ideles inserted at that place with a unit of norm one. -/
+private theorem sAdeleFullOrbit_real_normOne_stabilizer_iff_aux (v : InfinitePlace F)
+    (x : SAdeleRing F S) (hx : x ∈ sAdeleFullOrbit F S (some (.inl v)))
+    (g : (SAdeleRing F S)ˣ) :
+    (sIdeleNorm F S g = 1 ∧ g • x = x) ↔
+      ∃ u : v.Completionˣ, ‖u.val‖ = 1 ∧
+        g = Units.map (adeleProjection F S).toMonoidHom (IdeleGroup.ofCompletion (𝓞 F) F v u) := by
+  obtain ⟨h, rfl⟩ := hx
+  change sIdeleNorm F S g = 1 ∧ g • h • sAdeleOrbitBasepoint F S (some (.inl v)) =
+    h • sAdeleOrbitBasepoint F S (some (.inl v)) ↔ _
+  rw [← mul_smul, mul_comm g h, mul_smul, smul_left_cancel_iff,
+    sAdeleFullOrbit_real_normOne_stabilizer_iff_smul]
+  constructor
+  · rintro ⟨hn, u, rfl⟩
+    exact ⟨u, (sAdeleFullOrbit_real_normOne_stabilizer_iff_sIdeleNorm F S v u).mp hn, rfl⟩
+  · rintro ⟨u, hu, rfl⟩
+    exact ⟨(sAdeleFullOrbit_real_normOne_stabilizer_iff_sIdeleNorm F S v u).mpr hu, u, rfl⟩
 
 /-- Paper: Proposition 8.2.0.5(1), p. 386. At a real place the norm-one
 stabilizer of every point of the S-local orbit is the image of the two local signs. -/
@@ -422,7 +589,59 @@ theorem sAdeleFullOrbit_real_normOne_stabilizer_iff (v : InfinitePlace F) (hv : 
     (sIdeleNorm F S g = 1 ∧ g • x = x) ↔
       ∃ u : v.Completionˣ, (u.val = 1 ∨ u.val = -1) ∧
         g = Units.map (adeleProjection F S).toMonoidHom (IdeleGroup.ofCompletion (𝓞 F) F v u) := by
-  sorry
+  rw [sAdeleFullOrbit_real_normOne_stabilizer_iff_aux F S v x hx g]
+  exact exists_congr fun u ↦
+    and_congr (sAdeleFullOrbit_real_normOne_stabilizer_iff_unit F v hv u) Iff.rfl
+
+/-- A global idele fixes the base point at an infinite place exactly when it is inserted
+at that place. -/
+private theorem adeleFullOrbit_real_normOne_stabilizer_iff_smul (v : InfinitePlace F)
+    (g : 𝔸[F]ˣ) :
+    g • adeleOrbitBasepoint F (some (.inl v)) = adeleOrbitBasepoint F (some (.inl v)) ↔
+      ∃ u : v.Completionˣ, g = IdeleGroup.ofCompletion (𝓞 F) F v u := by
+  classical
+  constructor
+  · intro h
+    rw [Units.smul_def] at h
+    change g.val * AdeleRing.ofCompletion (𝓞 F) F v 0 = AdeleRing.ofCompletion (𝓞 F) F v 0 at h
+    have h1 : ∀ w, w ≠ v → g.val.1 w = 1 := by
+      intro w hw
+      have hc := congrFun (congrArg Prod.fst h) w
+      change g.val.1 w * Pi.mulSingle v 0 w = Pi.mulSingle v 0 w at hc
+      rwa [Pi.mulSingle_eq_of_ne hw, mul_one] at hc
+    have h2 : g.val.2 = 1 := by
+      have hc := congrArg Prod.snd h
+      change g.val.2 * 1 = 1 at hc
+      rwa [mul_one] at hc
+    let u : v.Completionˣ := ⟨g.val.1 v, g.inv.1 v, congrFun (congrArg Prod.fst g.val_inv) v,
+      congrFun (congrArg Prod.fst g.inv_val) v⟩
+    refine ⟨u, Units.ext (Prod.ext (funext fun w ↦ ?_) h2)⟩
+    change g.val.1 w = Pi.mulSingle v (g.val.1 v) w
+    obtain rfl | hw := eq_or_ne w v
+    · rw [Pi.mulSingle_eq_same]
+    · rw [Pi.mulSingle_eq_of_ne hw, h1 w hw]
+  · rintro ⟨u, rfl⟩
+    rw [Units.smul_def]
+    change AdeleRing.ofCompletion (𝓞 F) F v u.val * AdeleRing.ofCompletion (𝓞 F) F v 0 =
+      AdeleRing.ofCompletion (𝓞 F) F v 0
+    rw [← map_mul, mul_zero]
+
+/-- At an infinite place the global norm-one stabilizer of an orbit point consists of
+the ideles inserted at that place with a unit of norm one. -/
+private theorem adeleFullOrbit_real_normOne_stabilizer_iff_aux (v : InfinitePlace F)
+    (x : 𝔸[F]) (hx : x ∈ adeleFullOrbit F (some (.inl v))) (g : 𝔸[F]ˣ) :
+    (ideleNorm F g = 1 ∧ g • x = x) ↔
+      ∃ u : v.Completionˣ, ‖u.val‖ = 1 ∧ g = IdeleGroup.ofCompletion (𝓞 F) F v u := by
+  obtain ⟨h, rfl⟩ := hx
+  change ideleNorm F g = 1 ∧ g • h • adeleOrbitBasepoint F (some (.inl v)) =
+    h • adeleOrbitBasepoint F (some (.inl v)) ↔ _
+  rw [← mul_smul, mul_comm g h, mul_smul, smul_left_cancel_iff,
+    adeleFullOrbit_real_normOne_stabilizer_iff_smul]
+  constructor
+  · rintro ⟨hn, u, rfl⟩
+    exact ⟨u, (sAdeleFullOrbit_real_normOne_stabilizer_iff_ideleNorm F v u).mp hn, rfl⟩
+  · rintro ⟨u, hu, rfl⟩
+    exact ⟨(sAdeleFullOrbit_real_normOne_stabilizer_iff_ideleNorm F v u).mpr hu, u, rfl⟩
 
 /-- Paper: Proposition 8.2.0.5(1), p. 386. At a real place the norm-one
 stabilizer of every point of the global orbit is the image of the two local signs. -/
@@ -431,7 +650,9 @@ theorem adeleFullOrbit_real_normOne_stabilizer_iff (v : InfinitePlace F) (hv : v
     (ideleNorm F g = 1 ∧ g • x = x) ↔
       ∃ u : v.Completionˣ, (u.val = 1 ∨ u.val = -1) ∧
         g = IdeleGroup.ofCompletion (𝓞 F) F v u := by
-  sorry
+  rw [adeleFullOrbit_real_normOne_stabilizer_iff_aux F v x hx g]
+  exact exists_congr fun u ↦
+    and_congr (sAdeleFullOrbit_real_normOne_stabilizer_iff_unit F v hv u) Iff.rfl
 
 /-- Paper: Proposition 8.2.0.5(2), p. 387. At a complex place the norm-one
 stabilizer of every point of the S-local orbit is the image of the local unit circle. -/
@@ -440,7 +661,7 @@ theorem sAdeleFullOrbit_complex_normOne_stabilizer_iff (v : InfinitePlace F) (hv
     (sIdeleNorm F S g = 1 ∧ g • x = x) ↔
       ∃ u : v.Completionˣ, ‖u.val‖ = 1 ∧
         g = Units.map (adeleProjection F S).toMonoidHom (IdeleGroup.ofCompletion (𝓞 F) F v u) := by
-  sorry
+  exact sAdeleFullOrbit_real_normOne_stabilizer_iff_aux F S v x hx g
 
 /-- Paper: Proposition 8.2.0.5(2), p. 387. At a complex place the norm-one
 stabilizer of every point of the global orbit is the image of the local unit circle. -/
@@ -449,7 +670,7 @@ theorem adeleFullOrbit_complex_normOne_stabilizer_iff (v : InfinitePlace F) (hv 
     (ideleNorm F g = 1 ∧ g • x = x) ↔
       ∃ u : v.Completionˣ, ‖u.val‖ = 1 ∧
         g = IdeleGroup.ofCompletion (𝓞 F) F v u := by
-  sorry
+  exact adeleFullOrbit_real_normOne_stabilizer_iff_aux F v x hx g
 
 /-- Paper: Proposition 8.2.0.6(1), p. 387. The closure of the positive section ray
 relative to the S-local full-orbit union adds the single-zero base point. -/

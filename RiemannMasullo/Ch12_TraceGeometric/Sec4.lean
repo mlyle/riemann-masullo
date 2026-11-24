@@ -1,7 +1,14 @@
 module
 
 public import RiemannMasullo.Ch12_TraceGeometric.Sec2
-public import RiemannMasullo.Ch11_ShellStructure.Sec2b
+public import RiemannMasullo.Ch05_ThetaZSpaces.Sec3a
+public import RiemannMasullo.Ch07_SchauderBasesZeta.Sec3b
+public import RiemannMasullo.Ch10_TraceSpectral.Sec1
+public import RiemannMasullo.ForMathlib.Analysis.Distribution.SchwartzSpace.WeightedIntegral
+public import RiemannMasullo.ForMathlib.MeasureTheory.Measure.Count
+public import RiemannMasullo.ForMathlib.MeasureTheory.Measure.Haar.Unique
+public import RiemannMasullo.ForMathlib.NumberTheory.NumberField.InfiniteAdeleRing
+public import RiemannMasullo.ForMathlib.Topology.Covering.AddCircle
 public import RiemannMasullo.AppB_AnalyticNT.Sec4b
 public import RiemannMasullo.Ch06_LocalGlobal.Sec1
 import RiemannMasullo.AppA_AlgebraicNT.Sec3

@@ -668,6 +668,54 @@ theorem sLocalRhoPoleOrder_le_card (s : ℂ) :
     exact_mod_cast hb
   omega
 
+/-- Off the imaginary axis the finite Euler factor of a unitary chart is analytic
+and nonzero. In the unramified case the uniformizer value has norm different from one. -/
+private theorem finiteLocalEulerFactor_regular_of_re_ne_zero (v : Primes)
+    (ξ : PontryaginDual (v.adicCompletion F)ˣ) (z : ℂ) (hz : z.re ≠ 0) :
+    let ch := quasiCharacterNormTwist (Units.map nnNormHom.toMonoidHom)
+      (continuous_finiteLocalModule v) ((⟨Circle.coeHom, continuous_subtype_val⟩ :
+        Circle →ₜ* ℂ).comp ξ)
+    let E := fun t ↦ finiteLocalEulerFactor v (ch t)
+    AnalyticAt ℂ E z ∧ E z ≠ 0 := by
+  classical
+  intro ch E
+  let hπ := (Valued.v : Valuation (v.adicCompletion F)
+    (WithZero (Multiplicative ℤ))).exists_isUniformizer_of_isCyclic_of_nontrivial
+  let π : (v.adicCompletion F)ˣ := Units.mk0 hπ.choose hπ.choose_spec.ne_zero
+  let b := ‖π.val‖
+  have hb : 0 < b := norm_pos_iff.mpr π.ne_zero
+  have hb₁ : b < 1 := by
+    change ‖(hπ.choose : v.adicCompletion F)‖ < 1
+    rw [norm_uniformizer_adicCompletion v _ hπ.choose_spec]
+    exact inv_lt_one_of_one_lt₀ (by exact_mod_cast HeightOneSpectrum.one_lt_absNorm v)
+  let ι := Units.map (v.adicCompletionIntegers F).subtype.toMonoidHom
+  have hu (t : ℂ) (u : (v.adicCompletionIntegers F)ˣ) :
+      ch t (ι u) = (ξ (ι u) : ℂ) := by
+    have hn : ‖(ι u).val‖ = 1 := Valued.toNormedField.norm_eq_one_iff.mpr
+      ((HeightOneSpectrum.adicCompletionIntegers.mem_units_iff_valued_eq_one
+        (a := ι u)).mp ⟨u.val.prop, u.inv.prop⟩)
+    change (ξ (ι u) : ℂ) * (‖(ι u).val‖ : ℂ) ^ t = _
+    simp only [hn, Complex.ofReal_one, Complex.one_cpow, mul_one]
+  have hfun (t : ℂ) : E t = if ∀ u, (ξ (ι u) : ℂ) = 1 then
+      (1 - (ξ π : ℂ) * (b : ℂ) ^ t)⁻¹ else 1 := by
+    change (if ∀ u, ch t (ι u) = 1 then (1 - ch t π)⁻¹ else 1) = _
+    simp_rw [hu]
+    rfl
+  by_cases h : ∀ u, (ξ (ι u) : ℂ) = 1
+  · have heq : E = fun t ↦ (1 - (ξ π : ℂ) * (b : ℂ) ^ t)⁻¹ :=
+      funext fun t ↦ (hfun t).trans (ite_eq_left h)
+    have hn : 1 - (ξ π : ℂ) * (b : ℂ) ^ z ≠ 0 := by
+      intro he
+      have he' := congrArg norm (sub_eq_zero.mp he)
+      rw [norm_one, norm_mul, Circle.norm_coe, one_mul,
+        Complex.norm_cpow_eq_rpow_re_of_pos hb] at he'
+      exact hz ((Real.rpow_right_inj hb hb₁.ne).mp (he'.symm.trans (Real.rpow_zero _).symm))
+    have hpow := differentiable_id.const_cpow (Or.inl (Complex.ofReal_ne_zero.mpr hb.ne'))
+    rw [heq]
+    exact ⟨(((hpow.const_mul (ξ π : ℂ)).const_sub 1).analyticAt z).inv hn, inv_ne_zero hn⟩
+  · rw [show E = fun _ ↦ 1 from funext fun t ↦ (hfun t).trans (ite_eq_right h)]
+    exact ⟨analyticAt_const, one_ne_zero⟩
+
 open Classical in
 /-- Paper: Theorem 7.1.3.2(2), p. 324. No finite place of `S` contributes a pole to the
 correcting factor at an abscissa in the open left half-plane: the restricted finite Tate
@@ -677,7 +725,81 @@ private theorem sLocalRhoPoleOrder_le_archimedean_of_re_neg_finite
     (c : QuasiCharacter Jₛ) (_hc : ∀ x : Jₛ, ‖c x‖ = 1) {s : ℂ} (_hs : s.re < 0) :
     (Finset.univ.filter (fun v : S ↦ meromorphicOrderAt (fun z ↦ finiteLocalTateFactor v.val
       (sLocalFiniteRestriction v (twistₛ c z))) s < 0)).card
-      = 0 := by sorry
+      = 0 := by
+  rw [Finset.card_eq_zero, Finset.filter_eq_empty_iff]
+  intro v _
+  let ψ : PontryaginDual Jₛ :=
+    { toFun := fun x ↦ ⟨c x, mem_sphere_zero_iff_norm.mpr (_hc x)⟩
+      map_one' := Subtype.ext (map_one c)
+      map_mul' := fun x y ↦ Subtype.ext (map_mul c x y)
+      continuous_toFun := c.continuous.subtype_mk _ }
+  obtain ⟨η, hη, -⟩ := sLocalFiniteRestriction_exists_normTwistChart ψ v
+  let M := (Units.map nnNormHom.toMonoidHom : (v.val.adicCompletion F)ˣ →* ℝ≥0ˣ)
+  let twist := quasiCharacterNormTwist M (continuous_finiteLocalModule v.val)
+  let ch (ξ : PontryaginDual (v.val.adicCompletion F)ˣ) :=
+    twist ((⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp ξ)
+  have hc (z) : sLocalFiniteRestriction v (twistₛ c z) = ch η z := hη z
+  simp_rw [hc]
+  let E (ξ : PontryaginDual (v.val.adicCompletion F)ˣ) (z : ℂ) :=
+    finiteLocalEulerFactor v.val (ch ξ z)
+  let ρ (z : ℂ) := finiteLocalTateFactor v.val (ch η z)
+  let G (t : ℂ) := (E η (t + s))⁻¹ * E η⁻¹ (1 - (t + s))
+  have hs₁ : (1 - s).re ≠ 0 := by simp only [Complex.sub_re, Complex.one_re]; linarith
+  obtain ⟨hA, hA₀⟩ : AnalyticAt ℂ (E η) s ∧ E η s ≠ 0 :=
+    finiteLocalEulerFactor_regular_of_re_ne_zero v.val η s _hs.ne
+  obtain ⟨hB, hB₀⟩ : AnalyticAt ℂ (E η⁻¹) (1 - s) ∧ E η⁻¹ (1 - s) ≠ 0 :=
+    finiteLocalEulerFactor_regular_of_re_ne_zero v.val η⁻¹ (1 - s) hs₁
+  have hG : AnalyticAt ℂ G 0 := by
+    have ha : AnalyticAt ℂ (E η) (0 + s) := by simpa only [zero_add] using hA
+    have hb : AnalyticAt ℂ (E η⁻¹) (1 - (0 + s)) := by simpa only [zero_add] using hB
+    exact ((ha.inv (by simpa only [zero_add] using hA₀)).comp (f := fun t : ℂ ↦ t + s)
+      (by fun_prop)).mul (hb.comp (f := fun t : ℂ ↦ 1 - (t + s)) (by fun_prop))
+  have hG₀ : G 0 ≠ 0 := by simpa only [G, zero_add] using mul_ne_zero (inv_ne_zero hA₀) hB₀
+  have heps := sLocalEpsilonFactor_ne_zero (twistₛ c s)
+  rw [sLocalEpsilonFactor] at heps
+  have he := Finset.prod_ne_zero_iff.mp (right_ne_zero_of_mul heps) v (Finset.mem_univ v)
+  rw [hc, finiteLocalEpsilonFactor] at he
+  -- Recenter the local epsilon factor. Its normalized value is nonzero, and the Euler
+  -- factors removed in its definition are analytic units at this point.
+  -- The chart identities are the local versions of norm_chart_twist and dual_norm_chart
+  -- in Ch03_IdelicZeta/Sec3b.
+  have hadd (t : ℂ) : twist (ch η s) t = ch η (t + s) := by
+    ext1 x
+    change (η x : ℂ) * (‖x.val‖ : ℂ) ^ s * (‖x.val‖ : ℂ) ^ t = _
+    rw [mul_assoc, ← Complex.cpow_add _ _ (by exact_mod_cast norm_ne_zero_iff.mpr x.ne_zero),
+      add_comm s t]
+    rfl
+  have hdual (z : ℂ) : dualQuasiCharacter M (continuous_finiteLocalModule v.val) (ch η z) =
+      ch η⁻¹ (1 - z) := by
+    ext1 x
+    change (‖x.val‖ : ℂ) * ch η z x⁻¹ = _
+    rw [map_inv]
+    change (‖x.val‖ : ℂ) * ((η x : ℂ) * (‖x.val‖ : ℂ) ^ z)⁻¹ =
+      (η x : ℂ)⁻¹ * (‖x.val‖ : ℂ) ^ (1 - z)
+    rw [mul_inv_rev, Complex.cpow_sub _ _ (by exact_mod_cast norm_ne_zero_iff.mpr x.ne_zero),
+      Complex.cpow_one, div_eq_mul_inv]
+    ac_rfl
+  let H := G * (ρ ∘ (· + s))
+  have heq (t : ℂ) : let d := twist (ch η s) t
+      finiteLocalTateFactor v.val d / finiteLocalEulerFactor v.val d *
+        finiteLocalEulerFactor v.val (dualQuasiCharacter M (continuous_finiteLocalModule v.val) d)
+        = H t := by
+    dsimp only
+    rw [hadd, hdual, div_eq_mul_inv]
+    change ρ (t + s) * (E η (t + s))⁻¹ * E η⁻¹ (1 - (t + s)) =
+      ((E η (t + s))⁻¹ * E η⁻¹ (1 - (t + s))) * ρ (t + s)
+    ac_rfl
+  change toMeromorphicNFOn _ univ 0 ≠ 0 at he
+  rw [funext heq] at he
+  have hm : MeromorphicOn H univ := by
+    by_contra hf
+    exact he (by rw [toMeromorphicNFOn_of_not_meromorphicOn hf]; rfl)
+  have hnf := meromorphicNFOn_toMeromorphicNFOn H univ (mem_univ (0 : ℂ))
+  have ho := hnf.meromorphicOrderAt_eq_zero_iff.mpr he
+  rw [meromorphicOrderAt_toMeromorphicNFOn hm (mem_univ 0),
+    show H = G * (ρ ∘ (· + s)) from rfl, meromorphicOrderAt_mul_of_ne_zero hG hG₀,
+    meromorphicOrderAt_comp_add_const_eq_meromorphicOrderAt, zero_add] at ho
+  exact not_lt.mpr ho.ge
 
 /-- Paper: Theorem 7.1.3.2(2), p. 324.
 In the open left half-plane the pole order is bounded by the number of infinite places.
@@ -1639,7 +1761,47 @@ private theorem sLocalHomogeneousAdelicTheta_log_bound_estimate
           C * |Real.log (normℝ g)| ^ (archCount + S.card - 1) +
             D * |Real.log (normℝ g)| ^ ((m : ℤ) - 1) := by
   intro ω normℝ
-  sorry
+  let μ := sLocalNormOneQuotientMeasure F S
+  have : CompactSpace (MonoidHom.ker mₛ) := isCompact_iff_compactSpace.mp
+    ((isProperMap_sIdeleQuotientNorm F S).isCompact_preimage (isCompact_singleton (x := 1)))
+  let : IsFiniteMeasure μ := ⟨isCompact_univ.measure_lt_top⟩
+  obtain ⟨A, B, hA, hB, hb⟩ := sLocalAdelicTheta_log_growth_bounded F S {f}
+    (Bornology.isVonNBounded_singleton (𝕜 := ℂ) f)
+  have hrank : archCount + S.card - 1 = S.card := by omega
+  simp only [hrank] at hb ⊢
+  let n := S.card
+  let V := μ.real univ
+  have hV : 0 ≤ V := ENNReal.toReal_nonneg
+  refine ⟨(A + B) * V + 1, 0, by positivity, le_rfl, ?_⟩
+  have hsmall : ∀ᶠ g in comap normℝ (𝓝[>] 0), normℝ g < Real.exp (-1) :=
+    tendsto_comap.eventually (nhdsWithin_le_nhds (gt_mem_nhds (Real.exp_pos _)))
+  filter_upwards [hsmall] with g hg
+  have hg₀ : 0 < normℝ g := NNReal.coe_pos.mpr (Units.zero_lt _)
+  have hg₁ : normℝ g < 1 := hg.trans (Real.exp_lt_one_iff.mpr (by norm_num))
+  have hlog : 1 ≤ |Real.log (normℝ g)| := by
+    have h := (Real.log_lt_iff_lt_exp hg₀).mpr hg
+    exact le_trans (by linarith : 1 ≤ -Real.log (normℝ g)) (neg_le_abs _)
+  let L := |Real.log (normℝ g)| ^ n
+  have hL : 1 ≤ L := one_le_pow₀ hlog
+  have hpoint (h : MonoidHom.ker mₛ) :
+      ‖sLocalAdelicThetaOnClasses F S f (g * h.val) * (ω h : ℂ)‖ ≤ (A + B) * L := by
+    obtain ⟨k, hk⟩ := QuotientGroup.mk_surjective (g * h.val)
+    have hn : sIdeleNorm F S k = mₛ g := by
+      rw [← sIdeleQuotientNorm_mk F S k, hk, map_mul, h.property, mul_one]
+    rw [norm_mul, Circle.norm_coe, mul_one, ← hk, sLocalAdelicThetaOnClasses_mk]
+    have he := hb f (mem_singleton f) k (by simpa only [hn] using hg₁)
+    rw [hn] at he
+    refine he.trans ?_
+    change A * L + B ≤ (A + B) * L
+    rw [add_mul]
+    exact add_le_add le_rfl (le_mul_of_one_le_right hB.le hL)
+  have hi := norm_integral_le_of_norm_le_const (μ := μ) (.of_forall hpoint)
+  change ‖∫ h, sLocalAdelicThetaOnClasses F S f (g * h.val) * (ω h : ℂ) ∂μ‖ ≤ _
+  rw [zero_mul, add_zero]
+  change _ ≤ ((A + B) * V + 1) * L
+  calc
+    _ ≤ ((A + B) * L) * V := hi
+    _ ≤ ((A + B) * V + 1) * L := by nlinarith [hL]
 
 /-- Paper: Corollary 7.1.3.3, p. 325.
 With a unique infinite place, the homogeneous theta function has the stated logarithmic

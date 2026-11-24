@@ -1215,6 +1215,168 @@ theorem sAdelePrincipalValue_tmul {S S₀ : Finset V} (h₀ : S₀ ⊆ S)
     exact sAdelePrincipalValue_tmul_aux e (fun w : S ↦ w.val ∈ S₀)
       (fun w ↦ finitePlacePrincipalValue w.val) f g
 
+private theorem sLocalThetaPrincipalValue_transition_ext {ι A X Y : Type*} {M : ι → Type*}
+    [TopologicalSpace A] [AddCommGroup A] [Module ℂ A] [TopologicalSpace X]
+    [AddCommGroup X] [Module ℂ X] [AddCommGroup Y] [Module ℂ Y]
+    [∀ i, AddCommGroup (M i)] [∀ i, Module ℂ (M i)]
+    (e : InductiveTensor A (FinestLocallyConvex (⨂[ℂ] i, M i)) ≃L[ℂ] X)
+    (i : X →ₗ[ℂ] Y) (p : X →ₗ[ℂ] X) (q : Y →ₗ[ℂ] Y)
+    (h : ∀ (a : A) (g : ∀ i, M i),
+      i (p (e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, g w)))) = q (i (e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, g w))))) :
+    i.comp p = q.comp i := by
+  apply (LinearMap.cancel_right (g := e.toLinearMap) e.surjective).mp
+  apply TensorProduct.ext
+  exact LinearMap.ext fun a ↦ LinearMap.ext_on_range PiTensorProduct.span_tprod_eq_top (h a)
+
+namespace AdelePrincipalValueTmul
+local notation "B(" R ")" => SchwartzBruhat (Multiplicative R)
+local notation "E(" S ")" => (sAdeleTailSchwartz_inductiveTensor_equiv F S).choose
+local notation "U(" S ")" => (sAdeleSchwartz_inductiveTensor_equiv F S).choose
+private def ev {G : Type*} [CommGroup G] [TopologicalSpace G] (x : G) :
+    SchwartzBruhat G →ₗ[ℂ] ℂ where
+  toFun f := f x
+  map_add' _ _ := rfl
+  map_smul' _ _ := rfl
+private def slice (S : Finset V) (x : AdeleRing (𝓞 F) F) :
+    B(AdeleRing (𝓞 F) F) →ₗ[ℂ] B(SAdeleRing F S) :=
+  (TensorProduct.lift ((LinearMap.lsmul ℂ (B(SAdeleRing F S))).comp
+    (ev (Multiplicative.ofAdd (finiteAdeleTailProjection F S x.2))))).comp
+      ((TensorProduct.comm ℂ _ _).toLinearMap.comp E(S).symm.toLinearMap)
+private theorem slice_pure (S : Finset V) (x : AdeleRing (𝓞 F) F)
+    (a : B(SAdeleRing F S)) (b : B(FiniteAdeleTail F S)) :
+    slice S x (E(S) (a ⊗ₜ[ℂ] b)) =
+      b (Multiplicative.ofAdd (finiteAdeleTailProjection F S x.2)) • a := by
+  unfold slice
+  simp only [LinearMap.comp_apply]
+  exact congrArg (fun z ↦ TensorProduct.lift ((LinearMap.lsmul ℂ (B(SAdeleRing F S))).comp
+    (ev (Multiplicative.ofAdd (finiteAdeleTailProjection F S x.2)))) (TensorProduct.comm ℂ _ _ z))
+    (E(S).symm_apply_apply (a ⊗ₜ[ℂ] b))
+private theorem slice_eval (S : Finset V) (x y : AdeleRing (𝓞 F) F)
+    (h : finiteAdeleTailProjection F S y.2 = finiteAdeleTailProjection F S x.2)
+    (f : B(AdeleRing (𝓞 F) F)) :
+    slice S x f (Multiplicative.ofAdd (adeleProjection F S y)) = f (Multiplicative.ofAdd y) := by
+  let l := (ev (Multiplicative.ofAdd (adeleProjection F S y))).comp (slice S x)
+  let r := ev (Multiplicative.ofAdd y)
+  have he : l.comp E(S).toLinearMap = r.comp E(S).toLinearMap := by
+    apply TensorProduct.ext'
+    intro a b
+    change slice S x (E(S) (a ⊗ₜ[ℂ] b)) _ = E(S) (a ⊗ₜ[ℂ] b) _
+    rw [slice_pure, (sAdeleTailSchwartz_inductiveTensor_equiv F S).choose_spec a b y, h]
+    exact mul_comm _ _
+  exact LinearMap.congr_fun ((LinearMap.cancel_right E(S).surjective).mp he) f
+private theorem same (S : Finset V) (a : B(SAdeleRing F S)) (b : B(FiniteAdeleTail F S)) :
+    adelePrincipalValue F S (E(S) (a ⊗ₜ[ℂ] b)) =
+      E(S) (sAdelePrincipalValue F (Finset.Subset.refl S) a ⊗ₜ[ℂ] b) := by
+  unfold adelePrincipalValue
+  change E(S) (TensorProduct.map _ _ (E(S).symm (E(S) _))) = _
+  exact congrArg (fun z ↦ E(S) (TensorProduct.map (sAdelePrincipalValue F (Finset.Subset.refl S)) (LinearMap.id : B(FiniteAdeleTail F S) →ₗ[ℂ] _) z)) (E(S).symm_apply_apply (a ⊗ₜ[ℂ] b))
+set_option maxHeartbeats 1000000 in
+private theorem slice_pv (S : Finset V) (x : AdeleRing (𝓞 F) F) (f : B(AdeleRing (𝓞 F) F)) :
+    slice S x (adelePrincipalValue F S f) =
+      sAdelePrincipalValue F (Finset.Subset.refl S) (slice S x f) := by
+  let l := (slice S x).comp (adelePrincipalValue F S)
+  let r := (sAdelePrincipalValue F (Finset.Subset.refl S)).comp (slice S x)
+  have he : l.comp E(S).toLinearMap = r.comp E(S).toLinearMap := by
+    apply TensorProduct.ext'
+    intro a b
+    change slice S x (adelePrincipalValue F S (E(S) (a ⊗ₜ[ℂ] b))) = _
+    erw [same, slice_pure]
+    change _ = sAdelePrincipalValue F (Finset.Subset.refl S) (slice S x (E(S) (a ⊗ₜ[ℂ] b)))
+    erw [slice_pure, map_smul]
+  exact LinearMap.congr_fun ((LinearMap.cancel_right E(S).surjective).mp he) f
+private def pureTest (S : Finset V) (a : B(InfiniteAdeleRing F))
+    (b : ∀ v : V, B(v.adicCompletion F)) : B(SAdeleRing F S) :=
+  U(S) (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w : S, b w.val))
+private theorem pure_val (S : Finset V) (a : B(InfiniteAdeleRing F))
+    (b : ∀ v : V, B(v.adicCompletion F)) (z : SAdeleRing F S) :
+    pureTest S a b (Multiplicative.ofAdd z) =
+      a (Multiplicative.ofAdd z.1) * ∏ w : S, b w.val (Multiplicative.ofAdd (z.2 w)) := by
+  unfold pureTest
+  with_reducible exact (sAdeleSchwartz_inductiveTensor_equiv F S).choose_spec a (fun w ↦ b w.val) z
+set_option maxHeartbeats 1000000 in
+open Classical in
+private theorem sliced (S T : Finset V) (h : T ⊆ S) (a : B(InfiniteAdeleRing F))
+    (b : ∀ v : V, B(v.adicCompletion F)) (g : B(FiniteAdeleTail F S)) (x : AdeleRing (𝓞 F) F) :
+    slice T x (E(S) (pureTest S a b ⊗ₜ[ℂ] g)) =
+      ((∏ w ∈ S \ T, b w (Multiplicative.ofAdd (x.2 w))) *
+        g (Multiplicative.ofAdd (finiteAdeleTailProjection F S x.2))) • pureTest T a b := by
+  apply Subtype.ext
+  funext z
+  let f (w : V) := if hw : w ∈ T then z.toAdd.2 ⟨w,hw⟩ else x.2 w
+  have hf : ∀ᶠ w in Filter.cofinite, f w ∈ w.adicCompletionIntegers F := by
+    filter_upwards [T.eventually_cofinite_notMem, x.2.2] with w hw hx
+    rw [show f w = x.2 w from dite_eq_right hw]
+    exact hx
+  let y : AdeleRing (𝓞 F) F := (z.toAdd.1, ⟨f,hf⟩)
+  have hp : adeleProjection F T y = z.toAdd := Prod.ext rfl (funext fun w ↦ dite_eq_left w.2)
+  have ht (R : Finset V) (hh : T ⊆ R) :
+      finiteAdeleTailProjection F R y.2 = finiteAdeleTailProjection F R x.2 := by
+    apply RestrictedProduct.ext
+    intro w
+    exact dite_eq_right (fun hw ↦ w.2 (hh hw))
+  change slice T x _ (Multiplicative.ofAdd z.toAdd) = _ * pureTest T a b (Multiplicative.ofAdd z.toAdd)
+  conv_lhs => rw [← hp]
+  rw [slice_eval T x y (ht T (Finset.Subset.refl T)), (sAdeleTailSchwartz_inductiveTensor_equiv F S).choose_spec, ht S h, pure_val, ← hp, pure_val]
+  let d (w : V) := b w (Multiplicative.ofAdd (y.2 w))
+  have split := Finset.prod_sdiff (f := d) h
+  have hd : (∏ w ∈ S \ T, d w) = ∏ w ∈ S \ T, b w (Multiplicative.ofAdd (x.2 w)) := by
+    apply Finset.prod_congr rfl
+    intro w hw
+    exact congrArg (fun t ↦ b w (Multiplicative.ofAdd t)) (dite_eq_right (Finset.mem_sdiff.mp hw).2)
+  rw [hd, Finset.prod_subtype T (fun _ ↦ Iff.rfl), Finset.prod_subtype S (fun _ ↦ Iff.rfl)] at split
+  change (a (Multiplicative.ofAdd y.1) * (∏ w : S, d w.val)) * _ = (_ * _) * (a (Multiplicative.ofAdd y.1) * (∏ w : T, d w.val))
+  rw [← split]
+  ring
+open Classical in
+private theorem pure_pv (S T : Finset V) (h : T ⊆ S) (a : B(InfiniteAdeleRing F))
+    (b : ∀ v : V, B(v.adicCompletion F)) :
+    sAdelePrincipalValue F h (pureTest S a b) =
+      pureTest S a (fun v ↦ if v ∈ T then finitePlacePrincipalValue v (b v) else b v) := by
+  exact sAdelePrincipalValue_tmul h a (fun w ↦ b w.val)
+open Classical in
+private theorem checked {S S₀ : Finset V} (h₀ : S₀ ⊆ S)
+    (f : B(SAdeleRing F S)) (g : B(FiniteAdeleTail F S)) :
+    let e := (sAdeleTailSchwartz_inductiveTensor_equiv F S).choose
+    adelePrincipalValue F S₀ (e (f ⊗ₜ[ℂ] g)) = e (sAdelePrincipalValue F h₀ f ⊗ₜ[ℂ] g) := by
+  let ins := E(S).toLinearMap.comp ((TensorProduct.mk ℂ _ _).flip g)
+  suffices he : ins.comp (sAdelePrincipalValue F h₀) = (adelePrincipalValue F S₀).comp ins from
+    (LinearMap.congr_fun he f).symm
+  apply sLocalThetaPrincipalValue_transition_ext U(S)
+  intro a t
+  let b (v : V) : B(v.adicCompletion F) := if hv : v ∈ S then t ⟨v,hv⟩ else 0
+  have hb : (fun w : S ↦ b w.val) = t := funext fun w ↦ dite_eq_left w.2
+  have reduce (a : B(InfiniteAdeleRing F)) (b : ∀ v : V, B(v.adicCompletion F)) :
+      ins (sAdelePrincipalValue F h₀ (pureTest S a b)) = adelePrincipalValue F S₀ (ins (pureTest S a b)) := by
+    let b' (v : V) := if v ∈ S₀ then finitePlacePrincipalValue v (b v) else b v
+    have loc := pure_pv S S₀ h₀ a b
+    have loc₀ := pure_pv S₀ S₀ (Finset.Subset.refl S₀) a b
+    apply Subtype.ext
+    funext xx
+    let x := xx.toAdd
+    let c (k : ∀ v : V, B(v.adicCompletion F)) := (∏ w ∈ S \ S₀, k w (Multiplicative.ofAdd (x.2 w))) *
+      g (Multiplicative.ofAdd (finiteAdeleTailProjection F S x.2))
+    have hc : c b' = c b := by
+      apply congrArg (· * _)
+      apply Finset.prod_congr rfl
+      intro w hw
+      dsimp only [b']
+      rw [ite_eq_right (Finset.mem_sdiff.mp hw).2]
+    have hh : slice S₀ x (ins (sAdelePrincipalValue F h₀ (pureTest S a b))) =
+        slice S₀ x (adelePrincipalValue F S₀ (ins (pureTest S a b))) := by
+      calc
+        _ = slice S₀ x (ins (pureTest S a b')) := congrArg (fun k ↦ slice S₀ x (ins k)) loc
+        _ = c b' • pureTest S₀ a b' := sliced S S₀ h₀ a b' g x
+        _ = c b • sAdelePrincipalValue F (Finset.Subset.refl S₀) (pureTest S₀ a b) :=
+          congrArg₂ (· • ·) hc loc₀.symm
+        _ = sAdelePrincipalValue F (Finset.Subset.refl S₀) (c b • pureTest S₀ a b) := (map_smul _ _ _).symm
+        _ = _ := (congrArg (sAdelePrincipalValue F (Finset.Subset.refl S₀))
+          (sliced S S₀ h₀ a b g x).symm).trans (slice_pv S₀ x _).symm
+    exact ((slice_eval S₀ x x rfl _).symm.trans
+      (congrArg (fun k : B(SAdeleRing F S₀) ↦ k (Multiplicative.ofAdd (adeleProjection F S₀ x))) hh)).trans
+      (slice_eval S₀ x x rfl _)
+  exact hb ▸ reduce a b
+end AdelePrincipalValueTmul
+
 /-- Paper: Definition 5.3.1.4(2), p. 242.
 Through any stage containing S₀ the global operator acts as the S-local operator on the stage
 factor and as the identity on the tail. -/
@@ -1222,7 +1384,7 @@ theorem adelePrincipalValue_tmul {S S₀ : Finset V} (h₀ : S₀ ⊆ S)
     (f : ℬₛ(S)) (g : ℬ(FiniteAdeleTail F S)) :
     let e := (sAdeleTailSchwartz_inductiveTensor_equiv F S).choose
     adelePrincipalValue F S₀ (e (f ⊗ₜ[ℂ] g)) = e (sAdelePrincipalValue F h₀ f ⊗ₜ[ℂ] g) :=
-  by sorry
+  AdelePrincipalValueTmul.checked h₀ f g
 
 section PrincipalValueInjectivity
 
@@ -1794,19 +1956,6 @@ The S-local principal value on theta classes is a closed topological embedding. 
 theorem sLocalThetaPrincipalValue_isClosedEmbedding {S S₀ : Finset V} (h₀ : S₀ ⊆ S)
     (hn : S₀.Nonempty) :
     IsClosedEmbedding (sLocalThetaPrincipalValue F h₀) := by sorry
-
-private theorem sLocalThetaPrincipalValue_transition_ext {ι A X Y : Type*} {M : ι → Type*}
-    [TopologicalSpace A] [AddCommGroup A] [Module ℂ A] [TopologicalSpace X]
-    [AddCommGroup X] [Module ℂ X] [AddCommGroup Y] [Module ℂ Y]
-    [∀ i, AddCommGroup (M i)] [∀ i, Module ℂ (M i)]
-    (e : InductiveTensor A (FinestLocallyConvex (⨂[ℂ] i, M i)) ≃L[ℂ] X)
-    (i : X →ₗ[ℂ] Y) (p : X →ₗ[ℂ] X) (q : Y →ₗ[ℂ] Y)
-    (h : ∀ (a : A) (g : ∀ i, M i),
-      i (p (e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, g w)))) = q (i (e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, g w))))) :
-    i.comp p = q.comp i := by
-  apply (LinearMap.cancel_right (g := e.toLinearMap) e.surjective).mp
-  apply TensorProduct.ext
-  exact LinearMap.ext fun a ↦ LinearMap.ext_on_range PiTensorProduct.span_tprod_eq_top (h a)
 
 private theorem sLocalThetaPrincipalValue_transition_tmul {ι A X : Type*} {M : ι → Type*}
     [TopologicalSpace A] [AddCommGroup A] [Module ℂ A] [TopologicalSpace X]

@@ -1127,6 +1127,68 @@ private theorem rational_cutoffConv_rieszVector_mem
   rw [hω k, one_smul]
   exact rational_cutoffConv_rieszVector_fixed μ m hs f hf hrad (i k) (hi k)
 
+/-- A rational zeta zero on the critical line has positive finite Hecke order. -/
+private theorem rational_cutoffConv_rieszVector_order (γ : ℝ)
+    (hγ : riemannZeta (1 / 2 + γ * Complex.I) = 0) :
+    0 < (meromorphicOrderAt (continuedCompletedHeckeL (1 : PontryaginDual C𝔽(ℚ)))
+      (1 / 2 + γ * Complex.I)).untop₀.toNat := by
+  let z : ℂ := 1 / 2 + γ * Complex.I
+  have hre : z.re = 1 / 2 := by simp [z]
+  have hm : MeromorphicOn riemannZeta univ := by
+    simpa only [DirichletCharacter.LFunction_modOne_eq] using
+      meromorphic_dirichletLFunction (1 : DirichletCharacter ℂ 1)
+  change 0 < (meromorphicOrderAt _ z).untop₀.toNat
+  rw [← meromorphicOrderAt_finiteHeckeL_continuation _ hm (fun s ↦
+    (dedekindZeta_rat_eq_riemannZeta s.property).symm.trans
+      (finiteHeckeL_one_eq_dedekindZeta (K := ℚ) s).symm) (by rw [hre]; norm_num)]
+  have hn : meromorphicOrderAt riemannZeta z ≠ ⊤ := by
+    refine hm.meromorphicOrderAt_ne_top_of_isPreconnected isPreconnected_univ (mem_univ (2 : ℂ))
+      (mem_univ z) ?_
+    exact (meromorphicOrderAt_ne_top_iff_eventually_ne_zero (hm 2 (mem_univ _))).2
+      (((differentiableAt_riemannZeta (by norm_num : (2 : ℂ) ≠ 1)).continuousAt.eventually_ne
+        (riemannZeta_ne_zero_of_one_lt_re (by norm_num))).filter_mono nhdsWithin_le_nhds)
+  have hp : 0 < meromorphicOrderAt riemannZeta z := by
+    apply (tendsto_zero_iff_meromorphicOrderAt_pos (hm z (mem_univ z))).mp
+    change riemannZeta z = 0 at hγ
+    rw [← hγ]
+    exact (differentiableAt_riemannZeta (fun h ↦ by norm_num [h] at hre)).continuousAt.continuousWithinAt
+  rw [← Int.pos_iff_toNat_pos]
+  exact WithTop.coe_lt_coe.mp (by simpa only [WithTop.coe_untop₀_of_ne_top hn, WithTop.coe_zero] using hp)
+
+/-- The degree-two density on the zero-width strip is positive and measurable. -/
+private theorem rational_cutoffConv_weight_two :
+    let w (x : C𝔽(ℚ)) := intervalSobolevDensity (-0) 0 2 (logIdeleClassNorm ℚ x)
+    Measurable w ∧ ∀ x, 0 < w x := by
+  intro w
+  have hl : Continuous (logIdeleClassNorm ℚ) :=
+    (NNReal.continuous_coe.comp (Units.continuous_val.comp (m𝔽(ℚ)).continuous)).log
+      fun x ↦ (NNReal.coe_pos.mpr (Units.zero_lt _)).ne'
+  have hw (x) : w x = 1 + logIdeleClassNorm ℚ x ^ 2 := by simp [w, intervalSobolevDensity]
+  rw [funext hw]
+  exact ⟨(continuous_const.add (hl.pow 2)).measurable, fun x ↦ by positivity⟩
+
+/-- Base-measure almost-everywhere representatives can be recovered from a strictly positive density. -/
+private theorem rational_cutoffConv_haar_ac {X : Type*} [MeasurableSpace X] (μ : Measure X)
+    {w : X → ℝ} (hm : Measurable w) (hw : ∀ x, 0 < w x) :
+    μ ≪ μ.withDensity (fun x ↦ ENNReal.ofReal (w x)) :=
+  withDensity_absolutelyContinuous' hm.ennreal_ofReal.aemeasurable
+    (.of_forall fun x ↦ ENNReal.ofReal_ne_zero_iff.mpr (hw x))
+
+/-- The weighted inner product, written with respect to the base measure. -/
+private theorem rational_cutoffConv_inner {X : Type*} [MeasurableSpace X] (μ : Measure X)
+    (w : X → ℝ) (hm : Measurable w) (hw : ∀ x, 0 ≤ w x)
+    (u v : Lp ℂ 2 (μ.withDensity (fun x ↦ ENNReal.ofReal (w x)))) :
+    Integrable (fun x ↦ (w x : ℂ) * (v x * star (u x))) μ ∧
+      inner ℂ u v = ∫ x, (w x : ℂ) * (v x * star (u x)) ∂μ := by
+  have hfin := ae_of_all μ (fun x ↦ ENNReal.ofReal_lt_top (r := w x))
+  have he (x) : (ENNReal.ofReal (w x)).toReal • inner ℂ (u x) (v x) =
+      (w x : ℂ) * (v x * star (u x)) := by
+    simp only [ENNReal.toReal_ofReal (hw x), RCLike.inner_apply, starRingEnd_apply, Complex.real_smul]
+  refine ⟨((integrable_withDensity_iff_integrable_smul' hm.ennreal_ofReal hfin).mp
+    (L2.integrable_inner u v)).congr (.of_forall he), ?_⟩
+  rw [L2.inner_def, integral_withDensity_eq_integral_toReal_smul hm.ennreal_ofReal hfin]
+  exact integral_congr_ae (.of_forall he)
+
 /-- Paper: Theorem 11.2.1.2(2) and (11.2.1.4), p. 488 (step of the refutation).
 At an ordinate γ of a critical-line zeta zero, the Riesz vector `exp(-iγx)/(1+x²)` of the
 log norm `x` is orthogonal to the half-weighted theta closure: its inner product with
@@ -1138,14 +1200,115 @@ private theorem rational_cutoffConv_rieszVector_theta_orthogonal (hs : (0 : ℝ)
       ((rational_cutoffConv_rieszVector_memLp (m𝔽(ℚ))
         ⟨isProperMap_ideleClassNorm ℚ, ideleClassNorm_ne_one (F := ℚ)⟩
         ratIdeleNormSection_class_rightInverse.surjective (ideleClassTamagawaMeasure ℚ)
-        γ).toLp _) = 0 := by sorry
+        γ).toLp _) = 0 := by
+  let μ := ideleClassTamagawaMeasure ℚ
+  let l := logIdeleClassNorm ℚ
+  let w (x : C𝔽(ℚ)) := intervalSobolevDensity (-0) 0 2 (l x)
+  have hw (x) : w x = 1 + l x ^ 2 := by simp [w, intervalSobolevDensity]
+  obtain ⟨hm, hp⟩ : Measurable w ∧ ∀ x, 0 < w x := rational_cutoffConv_weight_two
+  let χ : PontryaginDual C₁(ℚ) → PontryaginDual C𝔽(ℚ) := fun _ ↦ 1
+  let j : SpectralStripJetIndex χ (1/2) 0 2 := ⟨(1, 0, γ, 0), by
+    rw [spectralStripMultiplicity_boundary le_rfl (Or.inr rfl), lt_spectralBoundaryMultiplicity]
+    refine ⟨?_, by norm_num⟩
+    simpa only [χ, add_zero, Complex.ofReal_div, Complex.ofReal_one, Complex.ofReal_ofNat] using
+      rational_cutoffConv_rieszVector_order γ hγ⟩
+  have hj := spectralStripJet_memLp χ (le_rfl (a := (0 : ℝ))) hs j
+  have hf := rational_cutoffConv_rieszVector_memLp (m𝔽(ℚ))
+    ⟨isProperMap_ideleClassNorm ℚ, ideleClassNorm_ne_one (F := ℚ)⟩
+    ratIdeleNormSection_class_rightInverse.surjective μ γ
+  apply (Submodule.starProjection_apply_eq_zero_iff _).mpr
+  apply (Submodule.mem_orthogonal' _ _).mpr
+  intro y hy
+  have hz := spectralStripJet_commonKernel_forward χ le_rfl hs y hy j
+  rw [(rational_cutoffConv_inner μ w hm (fun x ↦ (hp x).le) _ y).2]
+  refine Eq.trans ?_ hz
+  apply integral_congr_ae
+  have he := (rational_cutoffConv_haar_ac μ hm hp).ae_eq hf.coeFn_toLp
+  have he' := (rational_cutoffConv_haar_ac μ hm.inv (fun x ↦ inv_pos.mpr (hp x))).ae_eq hj.coeFn_toLp
+  filter_upwards [he, he'] with x hx hx'
+  change (w x : ℂ) * (y x * star ((hf.toLp _) x)) = y x * (hj.toLp _) x
+  rw [hx, hx']
+  change (w x : ℂ) * (y x * star (Complex.exp (-((γ * l x : ℝ) : ℂ) * Complex.I) /
+    ((1 + l x ^ 2 : ℝ) : ℂ))) = y x * spectralZeroJet 1 0 γ 0 x
+  rw [hw]
+  simp only [spectralZeroJet, pow_zero, mul_one, Complex.ofReal_zero, zero_add]
+  change _ = y x * (1 * (((ideleClassNorm ℚ x).val : ℝ) : ℂ) ^ ((γ : ℂ) * Complex.I))
+  rw [one_mul, Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr
+    (NNReal.coe_pos.mpr (Units.zero_lt _)).ne'), ← Complex.ofReal_log (NNReal.coe_nonneg _)]
+  simp only [Complex.star_def, map_div₀, Complex.conj_ofReal, ← Complex.exp_conj, map_mul,
+    map_neg, Complex.conj_I, neg_mul_neg]
+  change ((1 + l x ^ 2 : ℝ) : ℂ) * (y x * (Complex.exp _ / _)) = y x * Complex.exp ((l x : ℂ) * _)
+  rw [Complex.ofReal_mul, mul_assoc, mul_left_comm (γ : ℂ)]
+  have hn : ((1 + l x ^ 2 : ℝ) : ℂ) ≠ 0 := Complex.ofReal_ne_zero.mpr (by positivity)
+  field_simp [hn]
+
+/-- Left invariance transfers a simultaneous translation in the two arguments of the
+weighted inner product to a shift of its density. -/
+private theorem rational_cutoffConv_shifted_inner {G : Type*} [Group G] [MeasurableSpace G]
+    [MeasurableMul G] (μ : Measure G) [μ.IsMulLeftInvariant] (w : G → ℝ)
+    (hw : Measurable w) (hp : ∀ x, 0 ≤ w x) (g : G)
+    (u v : Lp ℂ 2 (μ.withDensity (fun x ↦ ENNReal.ofReal (w x)))) (U V : G → ℂ)
+    (hu : (u : G → ℂ) =ᵐ[μ] fun x ↦ U (g⁻¹ * x))
+    (hv : (v : G → ℂ) =ᵐ[μ] fun x ↦ V (g⁻¹ * x)) :
+    Integrable (fun x ↦ (w (g * x) : ℂ) * (V x * star (U x))) μ ∧
+      inner ℂ u v = ∫ x, (w (g * x) : ℂ) * (V x * star (U x)) ∂μ := by
+  let f (x : G) := (w x : ℂ) * (v x * star (u x))
+  obtain ⟨hi, he⟩ := rational_cutoffConv_inner μ w hw hp u v
+  have ha := measurePreserving_mul_left μ g
+  have h : (fun x ↦ f (g * x)) =ᵐ[μ] fun x ↦ (w (g * x) : ℂ) * (V x * star (U x)) := by
+    filter_upwards [ha.quasiMeasurePreserving.ae_eq_comp hu, ha.quasiMeasurePreserving.ae_eq_comp hv]
+      with x hx hy
+    change u (g * x) = U (g⁻¹ * (g * x)) at hx
+    change v (g * x) = V (g⁻¹ * (g * x)) at hy
+    simp only [f, hx, hy, inv_mul_cancel_left]
+  exact ⟨((ha.integrable_comp_emb (measurableEmbedding_mulLeft g)).mpr hi).congr h,
+    he.trans ((integral_mul_left_eq_self f g).symm.trans (integral_congr_ae h))⟩
+
+/-- Three equally spaced shifts of the quadratic density recover the unweighted integral. -/
+private theorem rational_cutoffConv_second_difference {X : Type*} [MeasurableSpace X]
+    (μ : Measure X) (l : X → ℝ) (f : X → ℂ)
+    (h : ∀ t : ℝ, 0 ≤ t →
+      Integrable (fun x ↦ ((1 + (t + l x) ^ 2 : ℝ) : ℂ) * f x) μ ∧
+      (∫ x, ((1 + (t + l x) ^ 2 : ℝ) : ℂ) * f x ∂μ) = 0) :
+    ∫ x, f x ∂μ = 0 := by
+  let p (t : ℝ) (x : X) := ((1 + (t + l x) ^ 2 : ℝ) : ℂ) * f x
+  have hp (t : ℝ) (ht : 0 ≤ t) : Integrable (p t) μ ∧ ∫ x, p t x ∂μ = 0 := h t ht
+  obtain ⟨h₀, e₀⟩ := hp 0 (by norm_num)
+  obtain ⟨h₁, e₁⟩ := hp 1 (by norm_num)
+  obtain ⟨h₂, e₂⟩ := hp 2 (by norm_num)
+  have e (x : X) : 2 * f x = p 2 x - p 1 x - p 1 x + p 0 x := by
+    simp only [p]; push_cast; ring
+  have hzero : 2 * (∫ x, f x ∂μ) = 0 := by
+    have ha := integral_add ((h₂.sub h₁).sub h₁) h₀
+    have hb := integral_sub (h₂.sub h₁) h₁
+    simp only [Pi.sub_apply] at ha hb
+    rw [← integral_const_mul, integral_congr_ae (.of_forall e), ha, hb, integral_sub h₂ h₁,
+      e₀, e₁, e₂]
+    ring
+  exact (mul_eq_zero.mp hzero).resolve_left (by norm_num)
+
+/-- In the width-zero strip at Sobolev order zero, the strict cutoff discards every
+jet. Thus the polar-free theta tests are dense for the unweighted norm. -/
+private theorem rational_cutoffConv_unweighted_mem
+    (u : CompactIntervalSobolev (ideleClassTamagawaMeasure ℚ) (logIdeleClassNorm ℚ) (-0) 0 0) :
+    u ∈ globalThetaSobolev ℚ (1/2) (neg_nonpos.mpr (le_rfl (a := (0 : ℝ)))) (le_rfl (a := (0 : ℝ))) := by
+  obtain ⟨χ, hχ⟩ := exists_spectralBasepointChoice ℚ
+  apply (spectralStripJet_commonKernel χ hχ (le_rfl (a := (0 : ℝ))) le_rfl u).mpr
+  intro j
+  have hb := (SpectralStripJetIndex.mem_strip_order_pos le_rfl j).1
+  have hz : j.val.2.1 = 0 := le_antisymm hb.2 (by simpa only [neg_zero] using hb.1)
+  have hj := j.property
+  simp only [hz, spectralStripMultiplicity_boundary le_rfl (Or.inr rfl),
+    lt_spectralBoundaryMultiplicity] at hj
+  have hn := Nat.cast_nonneg (α := ℝ) j.val.2.2.2
+  linarith [hj.2]
 
 /-- Paper: Theorem 11.2.1.2(2) and (11.2.1.4), p. 488 (step of the refutation).
 At an ordinate γ of a critical-line zeta zero, some translate of the Riesz vector
 `exp(-iγx)/(1+x²)` by an idele class of norm greater than one is not orthogonal to the
-half-weighted theta closure. Up to a phase, the inner products of the translates with a
-nonzero radial theta profile `G` are the convolution of `G(x) exp(iγx)(1+x²)` with the
-Cauchy kernel `1/(1+x²)`, which is real analytic with a nowhere-zero Fourier multiplier. -/
+half-weighted theta closure. Simultaneously translating a theta test shifts the quadratic
+weight in the pairing. At log norms 0, 1 and 2 its second difference recovers twice the
+unweighted pairing, and polar-free theta tests are dense in unweighted L². -/
 private theorem rational_cutoffConv_rieszVector_translate (hs : (0 : ℝ) ≤ 2) (γ : ℝ)
     (hγ : riemannZeta (1 / 2 + γ * Complex.I) = 0) :
     ∃ g : C𝔽(ℚ), 1 < ((m𝔽(ℚ) g).val : ℝ) ∧
@@ -1155,7 +1318,95 @@ private theorem rational_cutoffConv_rieszVector_translate (hs : (0 : ℝ) ≤ 2)
           ((rational_cutoffConv_rieszVector_memLp (m𝔽(ℚ))
             ⟨isProperMap_ideleClassNorm ℚ, ideleClassNorm_ne_one (F := ℚ)⟩
             ratIdeleNormSection_class_rightInverse.surjective (ideleClassTamagawaMeasure ℚ)
-            γ).toLp _)) ≠ 0 := by sorry
+            γ).toLp _)) ≠ 0 := by
+  let μ := ideleClassTamagawaMeasure ℚ
+  let l := logIdeleClassNorm ℚ
+  let w (s : ℝ) (x : C𝔽(ℚ)) := intervalSobolevDensity (-0) 0 s (l x)
+  let W (s : ℝ) := Lp ℂ 2 (μ.withDensity (fun x ↦ ENNReal.ofReal (w s x)))
+  let hl₀ := neg_nonpos.mpr (le_rfl (a := (0 : ℝ)))
+  let Θ := globalThetaSobolev ℚ (1/2) hl₀ hs
+  let τ := hardySobolevTranslation μ (m𝔽(ℚ)) (-0) 0 2 hl₀ hs
+  let U (x : C𝔽(ℚ)) := Complex.exp (-((γ * l x : ℝ) : ℂ) * Complex.I) /
+    ((1 + l x ^ 2 : ℝ) : ℂ)
+  have hU : MemLp U 2 (μ.withDensity (fun x ↦ ENNReal.ofReal (w 2 x))) :=
+    rational_cutoffConv_rieszVector_memLp (m𝔽(ℚ))
+      ⟨isProperMap_ideleClassNorm ℚ, ideleClassNorm_ne_one (F := ℚ)⟩
+      ratIdeleNormSection_class_rightInverse.surjective μ γ
+  have hw (x) : w 2 x = 1 + l x ^ 2 := by simp [w, intervalSobolevDensity]
+  have hw₀ (x) : w 0 x = 1 := by simp [w, intervalSobolevDensity]
+  obtain ⟨hm, hp⟩ : Measurable (w 2) ∧ ∀ x, 0 < w 2 x := rational_cutoffConv_weight_two
+  have hm₀ : Measurable (w 0) := by rw [funext hw₀]; exact measurable_const
+  have hp₀ (x) : 0 < w 0 x := (hw₀ x).symm ▸ zero_lt_one
+  have hU₀ : MemLp U 2 (μ.withDensity (fun x ↦ ENNReal.ofReal (w 0 x))) :=
+    hU.mono_measure (withDensity_mono (.of_forall fun x ↦ ENNReal.ofReal_le_ofReal
+      (by rw [hw₀, hw]; linarith [sq_nonneg (l x)])))
+  let u := hU.toLp U
+  let u₀ := hU₀.toLp U
+  have hu : (u : C𝔽(ℚ) → ℂ) =ᵐ[μ] U := (rational_cutoffConv_haar_ac μ hm hp).ae_eq hU.coeFn_toLp
+  have hu₀ : (u₀ : C𝔽(ℚ) → ℂ) =ᵐ[μ] U := (rational_cutoffConv_haar_ac μ hm₀ hp₀).ae_eq hU₀.coeFn_toLp
+  by_contra! h
+  have hproj (g : C𝔽(ℚ)) (hg : 1 < ((m𝔽(ℚ) g).val : ℝ)) :
+      τ g u ∈ Θ.orthogonal := (Θ.starProjection_apply_eq_zero_iff).mp (h g hg)
+  let E (s : ℝ) (hs' : 0 ≤ s) :=
+    (existsUnique_globalThetaSobolevEmbedding (F := ℚ) (1/2) (-0) 0 s hl₀ hs').exists.choose
+  let L := innerSL ℂ u₀
+  -- Compare the two Sobolev embeddings on the same polar-free theta test.
+  have hR : (E 0 le_rfl).toLinearMap.range ≤ L.ker := by
+    rintro _ ⟨q, rfl⟩
+    obtain ⟨f, rfl⟩ := Submodule.Quotient.mk_surjective _ q
+    let V := modulationWeight (m𝔽(ℚ)) (1/2) (adelicTheta f.val)
+    let v := E 2 hs (Submodule.Quotient.mk f)
+    let v₀ := E 0 le_rfl (Submodule.Quotient.mk f)
+    have hv : (v : C𝔽(ℚ) → ℂ) =ᵐ[μ] V :=
+      (existsUnique_globalThetaSobolevEmbedding (F := ℚ) (1/2) (-0) 0 2 hl₀ hs).exists.choose_spec.2 f
+    have hv₀ : (v₀ : C𝔽(ℚ) → ℂ) =ᵐ[μ] V :=
+      (existsUnique_globalThetaSobolevEmbedding (F := ℚ) (1/2) (-0) 0 0 hl₀ le_rfl).exists.choose_spec.2 f
+    have hvΘ : v ∈ Θ := Submodule.le_topologicalClosure _ (LinearMap.mem_range_self _ _)
+    change inner ℂ u₀ v₀ = 0
+    rw [(rational_cutoffConv_inner μ (w 0) hm₀ (fun x ↦ (hp₀ x).le) u₀ v₀).2]
+    refine (integral_congr_ae (g := fun x ↦ V x * star (U x)) ?_).trans ?_
+    · filter_upwards [hu₀, hv₀] with x hx hy
+      simp only [hw₀, Complex.ofReal_one, one_mul, hx, hy]
+    apply rational_cutoffConv_second_difference μ l
+    intro t ht
+    obtain ⟨g, hlg, hor⟩ : ∃ g : C𝔽(ℚ), l g = t ∧ τ g u ∈ Θ.orthogonal := by
+      rcases ht.eq_or_lt with rfl | ht
+      · refine ⟨1, by simp [l, logIdeleClassNorm], ?_⟩
+        rw [map_one, one_apply_eq_self]
+        exact Θ.starProjection_apply_eq_zero_iff.mp (rational_cutoffConv_rieszVector_theta_orthogonal hs γ hγ)
+      · obtain ⟨g, hg⟩ := ratIdeleNormSection_class_rightInverse.surjective
+          (positiveRealLogEquiv.symm (Multiplicative.ofAdd t))
+        have hlg : l g = t := by
+          change Real.log ((ideleClassNorm ℚ g).val : ℝ) = t
+          rw [← positiveRealLogEquiv_apply, hg, positiveRealLogEquiv.apply_symm_apply]
+          rfl
+        exact ⟨g, hlg, hproj g ((Real.log_pos_iff (NNReal.coe_nonneg _)).mp (hlg.trans_gt ht))⟩
+    have hgw (x) : w 2 (g * x) = 1 + (t + l x) ^ 2 := by
+      rw [hw, ← hlg]
+      have hmul : l (g * x) = l g + l x := by
+        dsimp only [l, logIdeleClassNorm]
+        rw [map_mul, Units.val_mul, NNReal.coe_mul, Real.log_mul
+          (NNReal.coe_pos.mpr (Units.zero_lt _)).ne' (NNReal.coe_pos.mpr (Units.zero_lt _)).ne']
+      rw [hmul]
+    have hcomp (z : W 2) (Z : C𝔽(ℚ) → ℂ) (hz : (z : C𝔽(ℚ) → ℂ) =ᵐ[μ] Z) :
+        (τ g z : C𝔽(ℚ) → ℂ) =ᵐ[μ] fun x ↦ Z (g⁻¹ * x) :=
+      (hardySobolevTranslation_apply μ (m𝔽(ℚ)) (-0) 0 2 hl₀ hs g z).trans
+        ((measurePreserving_mul_left μ g⁻¹).quasiMeasurePreserving.ae_eq_comp hz)
+    obtain ⟨hi, he⟩ := rational_cutoffConv_shifted_inner μ (w 2) hm (fun x ↦ (hp x).le)
+      g (τ g u) (τ g v) U V (hcomp u U hu) (hcomp v V hv)
+    simp only [hgw] at hi he
+    have htv : τ g v ∈ Θ := by
+      obtain ⟨ρ, hρ, _⟩ := exists_globalThetaSobolevAction (F := ℚ) (1/2) hl₀ hs
+      exact hρ g ⟨v, hvΘ⟩ ▸ (ρ g ⟨v, hvΘ⟩).property
+    exact ⟨hi, he.symm.trans ((Submodule.mem_orthogonal' _ _).mp hor _ htv)⟩
+  have hself := (E 0 le_rfl).toLinearMap.range.topologicalClosure_minimal hR L.isClosed_ker
+    (rational_cutoffConv_unweighted_mem u₀)
+  have hz : u₀ = 0 := inner_self_eq_zero.mp (show inner ℂ u₀ u₀ = 0 from hself)
+  have hae : U =ᵐ[μ] 0 := hu₀.symm.trans (by
+    rw [hz]
+    exact (rational_cutoffConv_haar_ac μ hm₀ hp₀).ae_eq (Lp.coeFn_zero ..))
+  obtain ⟨x, hx⟩ := hae.exists
+  exact div_ne_zero (Complex.exp_ne_zero _) (Complex.ofReal_ne_zero.mpr (by positivity)) hx
 
 /-- Assemble the witness from a vector of the isotype, its orthogonality and a translate. -/
 private theorem rational_cutoffConv_theta_orthogonal_translate_of {E G : Type*} [Zero E]
