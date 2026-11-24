@@ -221,14 +221,15 @@ theorem physicalCutoff_trace_zero (hα : 0 ≤ α) (hs : 0 ≤ s)
   have hsur : Surjective m𝔽 := (ideleGroup_quotient.{_, 0} F).2.2.2.2.2.2.2.2.2.1
   exact cutoff_testAction_zero μ𝔽 m𝔽 hm hsur (-α) α s (neg_le_self hα) hs φ hφ hρ hband
 
-/-- Paper: §12.3, pp. 513–514. For an increasing family generating the full theta
+/-- Paper: §12.3, p. 514. For an increasing family generating the full theta
 space in the actual strip, the localized band traces converge to the negative localized
 spectral trace. Exhausting the physical cutoffs gives the negative trace of convolution
 after the ambient spectral projection. At integer physical radii all sufficiently large
 choices of bandwidth, with a threshold depending on the radius, give this same limit.
 
-Deviation: The equality of the closed band span with the global theta space is explicit.
-This argument selects bandwidths and supplies no rate uniform in the physical radius. -/
+Deviation: The printed section contains only a heading and footnote. This independent
+argument assumes that the closed band span equals the global theta space. It selects
+bandwidths with thresholds that can depend on the physical radius. -/
 theorem exists_physicalBandTrace (hα : 0 ≤ α) (hs : 1 < s)
     (φ : BruhatCompactSupport C𝔽) (hφ : φ.val 1 = 0)
     (U : ℝ → Submodule ℂ W) [∀ B, (U B).HasOrthogonalProjection] (hu : Monotone U)
