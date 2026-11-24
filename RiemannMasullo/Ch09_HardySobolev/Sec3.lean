@@ -2154,7 +2154,7 @@ private theorem fourier_isotypic_average (K : Subgroup G) [CompactSpace K]
 
 /-- The characters trivial on the compact kernel form an open real line. Its
 coordinate is normalized so the character at t is exp(i t log m). -/
-theorem exists_modulatedFrequencyLine (hm : IsModulation m) (hms : Surjective m) :
+private theorem exists_frequency_line (hm : IsModulation m) (hms : Surjective m) :
     ∃ e : Multiplicative ℝ ≃ₜ* lcaAnnihilator m.toMonoidHom.ker,
       ∀ (t : ℝ) g, (e (Multiplicative.ofAdd t)).val g = Circle.exp (t * Real.log ((m g).val : ℝ)) := by
   obtain ⟨j, hj⟩ := exists_fullModulationSection m hm hms
@@ -2194,6 +2194,13 @@ theorem exists_modulatedFrequencyLine (hm : IsModulation m) (hms : Surjective m)
   congr 1
   change c * (c⁻¹ * t * _) = _
   rw [mul_assoc c⁻¹, mul_inv_cancel_left₀ hc]
+
+/-- The characters trivial on the compact kernel form an open real line. Its
+coordinate is normalized so the character at t is exp(i t log m). -/
+theorem exists_modulatedFrequencyLine (hm : IsModulation m) (hms : Surjective m) :
+    ∃ e : Multiplicative ℝ ≃ₜ* lcaAnnihilator m.toMonoidHom.ker,
+      ∀ (t : ℝ) g, (e (Multiplicative.ofAdd t)).val g = Circle.exp (t * Real.log ((m g).val : ℝ)) :=
+  exists_frequency_line m hm hms
 
 /-- A compact set of frequencies with a fixed restriction to the kernel
 lies in a bounded interval in the corresponding real frequency line. -/
