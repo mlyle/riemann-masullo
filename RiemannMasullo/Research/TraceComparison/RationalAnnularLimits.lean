@@ -94,6 +94,40 @@ private theorem empty_rational_ramification (v : V) (h : differentIdeal ℤ (�
     rfl
   exact (v.isPrime.ne_top (top_unique (hd ▸ h))).elim
 
+/-- For a positive-log radial profile and any actual lift, the faster
+expansion of the lower cutoff gives the real-place integral on every
+fundamental domain. The slower expansion gives zero. -/
+theorem rational_annularTrace_two_limits_of_radial (g : ℝ → ℂ) (hg : Continuous g)
+    {a b : ℝ} (ha : 0 < a) (hs : tsupport g ⊆ Icc a b)
+    (φ : BruhatCompactSupport Cℚ)
+    (hφ : ∀ x, φ.val x = rationalCenteredLogProfile g (Real.log (((ideleClassNorm ℚ) x).val : ℝ)))
+    (f : BruhatCompactSupport I₀) (hf : ∀ x : I₀, HasSum (fun ξ : H₀ ↦ f.val (ξ.val*x))
+      (φ.val (QuotientGroup.mk (sIdeleInsertion ℚ S₀ x))))
+    (D : Set I₀) (hD : IsFundamentalDomain H₀ D μI) :
+    Tendsto (fun t : ℝ ↦ sLocalTraceAnnularOrbitSum f D t⁻¹ t (t*t)) atTop (𝓝 0) ∧
+    Tendsto (fun t : ℝ ↦ sLocalTraceAnnularOrbitSum f D (t*(t*t))⁻¹ t (t*t)) atTop
+      (𝓝 ((vS : ℂ) * ∫ x in Ioi (0:ℝ), g x / (1-Complex.exp (-2*(x:ℂ))))) := by
+  let := finite_rational_empty_sProjectedDiagonal
+  have hn : g 0 = 0 := image_eq_zero_of_notMem_tsupport fun h ↦ (not_le.mpr ha) (hs h).1
+  have hφ₁ : φ.val 1 = 0 := by simp [hφ,rationalCenteredLogProfile,hn]
+  obtain ⟨π, -, hker, hnorm, -⟩ := exists_sLocalTraceQuotient (F := ℚ) (S := S₀) empty_rational_pic
+  have hout (u : outsideIntegralIdeleUnits ℚ S₀) (x : Cℚ) :
+      φ.val (QuotientGroup.mk u.val * x) = φ.val x := by
+    have hu : QuotientGroup.mk u.val ∈ π.toMonoidHom.ker := hker ▸ ⟨u.val,u.property,rfl⟩
+    have he := (hnorm (QuotientGroup.mk u.val)).symm
+    rw [show π (QuotientGroup.mk u.val) = 1 from hu, map_one] at he
+    rw [hφ,hφ,map_mul,he,one_mul]
+  obtain ⟨A,B,hArch, -,hzero,hval⟩ := sLocalTraceAnnularOrbitSum_two_local_limits φ hφ₁
+    empty_rational_pic empty_rational_ramification hout f hf D hD
+  have hreal := rational_real_principalValue_positive_log_profile g hg ha hs (A Rat.infinitePlace) (fun u ↦ by
+    rw [hArch,hφ,ideleClassNorm_ofCompletion,Rat.isReal_infinitePlace.mult_eq_one,pow_one]
+    rfl)
+  have he : (∑ w : InfinitePlace ℚ, infiniteConnesWeilPrincipalValue w (A w)) =
+      ∫ x in Ioi (0:ℝ), g x / (1-Complex.exp (-2*(x:ℂ))) := by
+    rw [Fintype.sum_unique, @Subsingleton.elim (InfinitePlace ℚ) _ default Rat.infinitePlace]
+    exact hreal
+  simpa only [he, Fintype.sum_empty, add_zero] using And.intro hzero hval
+
 /-- Paper: Section 12.4, footnote 2 on p. 514. For any fixed interval of
 positive log norms below log 2 there is an actual rational idèle-class test
 and a compact S-unit lift with two distinct sharp annular trace limits.
@@ -119,15 +153,6 @@ theorem exists_rational_primeFree_annular_cutoff_distinct_limits {a b : ℝ}
     (Complex.contDiff_exp.comp (Complex.ofRealCLM.contDiff.div_const 2)).mul hg
   obtain ⟨f, -, hf⟩ := exists_sLocalTraceLift_radial_of_finite (F := ℚ) (S := S₀)
     (rationalCenteredLogProfile g) hd hc.mul_left φ hφ
-  have hn : g 0 = 0 := image_eq_zero_of_notMem_tsupport fun h ↦ (not_le.mpr ha) (hs h).1
-  have hφ₁ : φ.val 1 = 0 := by simp [hφ,rationalCenteredLogProfile,hn]
-  obtain ⟨π, -, hker, hnorm, -⟩ := exists_sLocalTraceQuotient (F := ℚ) (S := S₀) empty_rational_pic
-  have hout (u : outsideIntegralIdeleUnits ℚ S₀) (x : Cℚ) :
-      φ.val (QuotientGroup.mk u.val * x) = φ.val x := by
-    have hu : QuotientGroup.mk u.val ∈ π.toMonoidHom.ker := hker ▸ ⟨u.val,u.property,rfl⟩
-    have he := (hnorm (QuotientGroup.mk u.val)).symm
-    rw [show π (QuotientGroup.mk u.val) = 1 from hu, map_one] at he
-    rw [hφ,hφ,map_mul,he,one_mul]
   let G := (sIdeleQuotientNorm ℚ S₀).ker
   let : CompactSpace G := isCompact_iff_compactSpace.mp
     ((isProperMap_sIdeleQuotientNorm ℚ S₀).isCompact_preimage (isCompact_singleton (x:=1)))
@@ -137,18 +162,10 @@ theorem exists_rational_primeFree_annular_cutoff_distinct_limits {a b : ℝ}
   refine ⟨g,φ,f,vS*C,hg,hc,hs,hφ,?_,hf,mul_pos hvol hC,fun D hD ↦ ?_⟩
   · intro v u
     exact rational_finite_prime_free_restriction ha hb hs φ hφ v u
-  · obtain ⟨A,B,hArch, -,hzero,hval⟩ := sLocalTraceAnnularOrbitSum_two_local_limits φ hφ₁
-      empty_rational_pic empty_rational_ramification hout f hf D hD
-    refine ⟨hzero,?_⟩
-    have hreal : infiniteConnesWeilPrincipalValue Rat.infinitePlace (A Rat.infinitePlace) = (C:ℂ) := by
-      apply hA
-      intro u
-      rw [hArch,hφ,ideleClassNorm_ofCompletion,Rat.isReal_infinitePlace.mult_eq_one,pow_one]
-      rfl
-    have he : (∑ w : InfinitePlace ℚ, infiniteConnesWeilPrincipalValue w (A w)) = (C:ℂ) := by
-      rw [Fintype.sum_unique, show (default : InfinitePlace ℚ) = Rat.infinitePlace from Subsingleton.elim _ _]
-      exact hreal
-    simpa only [he, Finset.sum_empty, Fintype.sum_empty, add_zero, Complex.ofReal_mul] using hval
+  · obtain ⟨A,hAr⟩ := exists_rational_archimedean_norm_test (rationalCenteredLogProfile g) hd hc.mul_left
+    have he := (rational_real_principalValue_positive_log_profile g hg.continuous ha hs A hAr).symm.trans (hA A hAr)
+    simpa only [he, Complex.ofReal_mul] using rational_annularTrace_two_limits_of_radial g hg.continuous
+      ha hs φ hφ f hf D hD
 
 end RationalLimits
 end RiemannMasullo
