@@ -601,7 +601,7 @@ end RiemannMasullo
 namespace RiemannMasullo
 namespace LineModulation
 open Function Set Filter MeasureTheory Topology IsDedekindDomain NumberField
-open scoped SchwartzMap ContDiff NNReal ENNReal NumberField.AdeleRing
+open scoped ContDiff NNReal ENNReal NumberField.AdeleRing
 set_option quotPrecheck false
 variable {F : Type*} [Field F] [NumberField F]
 attribute [local instance] instIdeleClassMeasurableSpaceSec1 instIdeleClassBorelSpaceSec1
