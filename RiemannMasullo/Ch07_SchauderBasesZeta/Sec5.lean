@@ -1608,6 +1608,431 @@ private theorem strongCoprimality_mem_differenceRange_iff (χ : U) (S : Finset V
     rw [hg]
     exact (mem_strongCoprimalityDifferenceRange ω(χ) _ π _).mpr ⟨j ((K(ω(χ))).mkQ g), hpv g⟩
 
+/-- Cardinal interpolation of summable values on the exponential lattice. The divided
+difference of the exponential is one at zero and vanishes at the other lattice points.
+Its imaginary translates are uniformly bounded on each vertical strip. -/
+private theorem strongCoprimality_exists_sub_mem_cardinal (a : ℤ → ℂ) (ha : Summable fun n ↦ ‖a n‖) :
+    ∃ A : ℂ → ℂ, Differentiable ℂ A ∧
+      (∀ R : ℝ, ∃ C : ℝ, ∀ z : ℂ, |z.re| ≤ R → ‖A z‖ ≤ C) ∧
+      ∀ n : ℤ, A (n * (2 * Real.pi * Complex.I)) = a n := by
+  let K := dslope Complex.exp 0
+  let p (n : ℤ) : ℂ := n * (2 * Real.pi * Complex.I)
+  have hK : Differentiable ℂ K := fun z ↦
+    ((Complex.differentiable_exp.analyticAt z).dslope 0).differentiableAt
+  have hKr (R : ℝ) : ∃ C : ℝ, ∀ z : ℂ, |z.re| ≤ R → ‖K z‖ ≤ C := by
+    obtain ⟨C, hC⟩ :=
+      (isCompact_closedBall (0 : ℂ) 1).exists_bound_of_continuousOn hK.continuous.continuousOn
+    refine ⟨max C (Real.exp R + 1), fun z hz ↦ ?_⟩
+    by_cases h : ‖z‖ ≤ 1
+    · exact (hC z (mem_closedBall_zero_iff.mpr h)).trans (le_max_left ..)
+    · have hne : z ≠ 0 := fun he ↦ h (by simp [he])
+      rw [show K z = (Complex.exp z - 1) / z by simp [K, dslope_of_ne _ hne, slope_def_field], norm_div]
+      apply le_trans _ (le_max_right ..)
+      apply (div_le_self (norm_nonneg _) (by linarith : 1 ≤ ‖z‖)).trans
+      exact (norm_sub_le _ _).trans (by rw [Complex.norm_exp, norm_one]; gcongr; exact (le_abs_self _).trans hz)
+  let F (n : ℤ) (z : ℂ) := a n * K (z - p n)
+  have bound (R : ℝ) : ∃ u : ℤ → ℝ, Summable u ∧
+      ∀ n (z : ℂ), |z.re| ≤ R → ‖F n z‖ ≤ u n := by
+    obtain ⟨C, hC⟩ := hKr R
+    refine ⟨_, ha.mul_right C, fun n z hz ↦ ?_⟩
+    exact (norm_mul ..).le.trans (mul_le_mul_of_nonneg_left
+      (hC (z - p n) (by simpa [p] using hz)) (norm_nonneg _))
+  refine ⟨fun z ↦ ∑' n, F n z, fun z ↦ ?_, fun R ↦ ?_, fun n ↦ ?_⟩
+  · let R := |z.re| + 1
+    obtain ⟨u, hu, hbu⟩ := bound R
+    have hopen : IsOpen {w : ℂ | |w.re| < R} :=
+      isOpen_lt (continuous_abs.comp Complex.continuous_re) continuous_const
+    exact (Complex.differentiableOn_tsum_of_summable_norm hu
+      (fun n ↦ ((hK.comp (differentiable_id.sub_const (p n))).const_mul (a n)).differentiableOn)
+      hopen (fun n w hw ↦ hbu n w (le_of_lt hw))).differentiableAt
+        (hopen.mem_nhds (show |z.re| < R by dsimp [R]; linarith))
+  · obtain ⟨u, hu, hbu⟩ := bound R
+    exact ⟨∑' n, u n, fun z hz ↦ tsum_of_norm_bounded hu.hasSum (fun n ↦ hbu n z hz)⟩
+  · change ∑' m, F m (p n) = _
+    rw [tsum_eq_single n]
+    · simp [F, K, dslope_same, Complex.deriv_exp]
+    · intro m hm
+      have hne : p n - p m ≠ 0 := by
+        rw [show p n - p m = ((n : ℂ) - m) * (2 * Real.pi * Complex.I) by simp [p, sub_mul]]
+        exact mul_ne_zero (sub_ne_zero.mpr (by exact_mod_cast hm.symm)) (by simp [Real.pi_ne_zero])
+      simp [F, K, dslope_of_ne _ hne, slope_def_field, Complex.exp_sub, p,
+        Complex.exp_int_mul_two_pi_mul_I]
+
+/-- At sufficiently large height the completed continuation is analytic. This is the
+two-pole argument used in `finiteHeckeL_continuation_isBigO_exp` in Appendix B. -/
+private theorem strongCoprimality_exists_sub_mem_high (χ : U) :
+    ∃ T : ℝ, ∀ z : ℂ, T ≤ |z.im| → AnalyticAt ℂ (continuedCompletedHeckeL χ) z := by
+  classical
+  let L := continuedCompletedHeckeL χ
+  obtain ⟨hL, hEq⟩ := continuedCompletedHeckeL_spec χ
+  by_cases hχ : χ.toMonoidHom.comp (ideleClassNorm F).ker.subtype = 1
+  · obtain ⟨t, ⟨_, _, _, ha⟩, _⟩ := completedHeckeL_continuation_simplePoles χ L hL hEq hχ
+    refine ⟨|t| + 1, fun z hz ↦ ha z ?_⟩
+    simp only [mem_compl_iff, mem_insert_iff, mem_singleton_iff, not_or]
+    constructor <;> rintro rfl <;> norm_num at hz
+  · exact ⟨0, fun z _ ↦ (completedHeckeL_continuation_entire χ L hL hEq hχ).analyticAt z⟩
+
+/-- A multiple of the regularized completed generator has polynomial growth on strips
+and polynomially bounded reciprocal at large height on the imaginary axis. Multiply by
+the epsilon factor and the reflected inverse gamma factor. The functional equation then
+identifies the result with the pole polynomial times the reflected finite L-function. -/
+private theorem strongCoprimality_exists_sub_mem_multiplier (χ : U) (τ : ℝ≥0ˣ →ₜ* I𝔽)
+    (hτ : RightInverse τ (ideleNorm F)) :
+    let G := regularizedCompletedHeckeL χ τ hτ (continuedCompletedHeckeL χ)
+      (continuedCompletedHeckeL_spec χ).1 (continuedCompletedHeckeL_spec χ).2
+    ∃ A : ℂ → ℂ, Differentiable ℂ A ∧ (∀ z : ℂ, z.re = 0 → G.val z * A z ≠ 0) ∧
+      (∀ R : ℝ, ∃ (k : ℕ) (T : ℝ), ∀ z : ℂ, |z.re| ≤ R → T ≤ |z.im| →
+        ‖G.val z * A z‖ ≤ ‖z‖ ^ k) ∧
+      ∃ (k : ℕ) (C T : ℝ), ∀ z : ℂ, z.re = 0 → T ≤ |z.im| →
+        ‖(G.val z * A z)⁻¹‖ ≤ C * |z.im| ^ k := by
+  classical
+  intro G
+  let L := continuedCompletedHeckeL χ
+  let L' := continuedCompletedHeckeL χ⁻¹
+  obtain ⟨hL, heL⟩ := continuedCompletedHeckeL_spec χ
+  obtain ⟨hL', heL'⟩ := continuedCompletedHeckeL_spec χ⁻¹
+  obtain ⟨ε, hε, hε₀, hFE⟩ :=
+    completedHeckeL_continuation_functionalEquation χ L L' hL heL hL' heL'
+  let Γi (s : ℂ) := (heckeGammaFactor χ⁻¹ s)⁻¹
+  have hΓ := differentiable_inv_heckeGammaFactor χ⁻¹
+  let raw := Γi * L'
+  have hm : MeromorphicOn raw univ :=
+    fun s hs ↦ (hΓ.analyticAt s).meromorphicAt.mul (hL' hs).meromorphicAt
+  let f := toMeromorphicNFOn raw univ
+  have hf := meromorphicNFOn_toMeromorphicNFOn raw univ
+  have hfval (s) (hs : AnalyticAt ℂ L' s) : f s = Γi s * L' s := by
+    rw [show f s = toMeromorphicNFAt raw s s from toMeromorphicNFOn_eq_toMeromorphicNFAt hm (mem_univ s),
+      toMeromorphicNFAt_eq_self.mpr ((hΓ.analyticAt s).mul hs).meromorphicNFAt]
+    rfl
+  have hseries (s : Complex.re ⁻¹' Ioi (1 : ℝ)) : f s = finiteHeckeL χ⁻¹ s := by
+    have hne := heckeGammaFactor_ne_zero_of_re_pos χ⁻¹ (zero_lt_one.trans s.property)
+    have hn := (meromorphicNFAt_mul_iff_right (hΓ.analyticAt s) (inv_ne_zero hne)).2 (hL' (mem_univ _))
+    rw [show f s = toMeromorphicNFAt raw s s from toMeromorphicNFOn_eq_toMeromorphicNFAt hm (mem_univ _),
+      toMeromorphicNFAt_eq_self.mpr hn]
+    change (heckeGammaFactor χ⁻¹ s)⁻¹ * L' s = _
+    rw [show L' s = completedHeckeL χ⁻¹ s from heL' s]
+    simp [completedHeckeL, finiteHeckeL, hne]
+  let b := ((existsUnique_ideleNormSection_character_phase χ τ hτ).exists.choose : ℂ) * Complex.I
+  let δ : ℕ := if χ.toMonoidHom.comp (ideleClassNorm F).ker.subtype = 1 then 1 else 0
+  let polePoly (z : ℂ) := (z + b) ^ δ * (1 - z - b) ^ δ
+  have hP : Differentiable ℂ polePoly := by dsimp [polePoly]; fun_prop
+  let A (z : ℂ) := ε z * Γi (1 - z)
+  have hA : Differentiable ℂ A := hε.mul (hΓ.comp (differentiable_id.const_sub 1))
+  obtain ⟨T₁, ha₁⟩ := strongCoprimality_exists_sub_mem_high χ
+  obtain ⟨T₂, ha₂⟩ := strongCoprimality_exists_sub_mem_high χ⁻¹
+  let T₀ := max T₁ T₂
+  have he (z : ℂ) (hz : T₀ ≤ |z.im|) : G.val z * A z = polePoly z * f (1 - z) := by
+    have h₁ := ha₁ z ((le_max_left ..).trans hz)
+    have h₂ := ha₂ (1 - z) (by simpa using (le_max_right T₁ T₂).trans hz)
+    have hPL : MeromorphicOn (polePoly * L) univ :=
+      fun w hw ↦ (hP.analyticAt w).meromorphicAt.mul (hL hw).meromorphicAt
+    have hG : G.val z = polePoly z * L z := by
+      change toMeromorphicNFOn (polePoly * L) univ z = _
+      rw [toMeromorphicNFOn_eq_toMeromorphicNFAt hPL (mem_univ z),
+        toMeromorphicNFAt_eq_self.mpr ((hP.analyticAt z).mul h₁).meromorphicNFAt]
+      rfl
+    rw [hG, hfval _ h₂, hFE]
+    dsimp only [A]
+    ring
+  refine ⟨A, hA, fun z hz ↦ mul_ne_zero
+    (strongCoprimality_mem_differenceRange_iff_ne_zero_left χ τ hτ z hz.le)
+    (mul_ne_zero (hε₀ z) (inv_ne_zero (heckeGammaFactor_ne_zero_of_re_pos χ⁻¹ (by simp [hz])))), ?_, ?_⟩
+  · intro R
+    let r := |R| + 1
+    obtain ⟨M, _, hM⟩ := finiteHeckeL_continuation_isBigO_rpow χ⁻¹ f hf hseries (1 - r) (1 + r)
+      (by dsimp [r]; linarith [abs_nonneg R])
+    obtain ⟨k, hk⟩ := exists_nat_gt M
+    obtain ⟨c, hc⟩ := hM.bound
+    simp only [Filter.eventually_inf_principal, Filter.eventually_comap, Filter.eventually_atTop] at hc
+    obtain ⟨T, hT⟩ := hc
+    refine ⟨2 * δ + 2 * δ + (k + 1), max (max T₀ T) (max c (‖b‖ + 3)), fun z hz ht ↦ ?_⟩
+    have h₀ := (le_max_left _ _).trans ht
+    have h₁ := (le_max_right _ _).trans ht
+    have hbig : ‖b‖ + 3 ≤ ‖z‖ := ((le_max_right _ _).trans h₁).trans (Complex.abs_im_le_norm z)
+    have hone : 1 ≤ |z.im| := by linarith [(le_max_right _ _).trans h₁, norm_nonneg b]
+    have hs : (1 - z).re ∈ Icc (1 - r) (1 + r) := by
+      simp only [Complex.sub_re, Complex.one_re, mem_Icc]
+      dsimp [r]
+      constructor <;> linarith [(abs_le.mp hz).1, (abs_le.mp hz).2, le_abs_self R]
+    have hbound := hT |z.im| ((le_max_right _ _).trans h₀) (1 - z) (by simp) hs
+    simp only [Complex.sub_im, Complex.one_im, zero_sub, abs_neg,
+      Real.norm_of_nonneg (Real.rpow_nonneg (abs_nonneg _) _)] at hbound
+    have hfbound : ‖f (1 - z)‖ ≤ ‖z‖ ^ (k + 1) := by
+      calc ‖f (1 - z)‖ ≤ c * |z.im| ^ M := hbound
+           _ ≤ |z.im| * |z.im| ^ (k : ℝ) := by gcongr; exact (le_max_left _ _).trans h₁
+           _ ≤ ‖z‖ ^ (k + 1) := by rw [Real.rpow_natCast, pow_succ']; gcongr <;> exact Complex.abs_im_le_norm _
+    have hs₁ : ‖z + b‖ ≤ ‖z‖ ^ 2 := (norm_add_le ..).trans (by nlinarith [norm_nonneg b])
+    have hs₂ : ‖1 - z - b‖ ≤ ‖z‖ ^ 2 := (norm_sub_le ..).trans (by
+      have h := norm_sub_le (1 : ℂ) z
+      rw [norm_one] at h
+      nlinarith [norm_nonneg b])
+    rw [he z ((le_max_left _ _).trans h₀)]
+    dsimp only [polePoly]
+    rw [norm_mul, norm_mul, norm_pow, norm_pow,
+      pow_add, pow_add, pow_mul]
+    gcongr
+  · obtain ⟨_, k, _, hk⟩ := finiteHeckeL_inv_isBigO_oneLine χ⁻¹ f hf hseries
+    obtain ⟨C, hC⟩ := hk.bound
+    simp only [Filter.eventually_comap, Filter.eventually_atTop] at hC
+    obtain ⟨T, hT⟩ := hC
+    refine ⟨k, C, max (max T₀ T) (‖b‖ + 3), fun z hz ht ↦ ?_⟩
+    have h₀ := (le_max_left _ _).trans ht
+    have heq : 1 - z = (⟨1, -z.im⟩ : ℂ) := by apply Complex.ext <;> simp [hz]
+    have h := hT |z.im| ((le_max_right _ _).trans h₀) (-z.im) (abs_neg _)
+    simp only [abs_neg, Real.norm_of_nonneg (pow_nonneg (abs_nonneg _) _)] at h
+    have hbig : ‖b‖ + 3 ≤ ‖z‖ := ((le_max_right _ _).trans ht).trans (Complex.abs_im_le_norm z)
+    have hnorm : 1 ≤ ‖polePoly z‖ := by
+      dsimp only [polePoly]
+      rw [norm_mul, norm_pow, norm_pow]
+      apply one_le_mul_of_one_le_of_one_le <;> apply one_le_pow₀
+      · have h := norm_sub_le (z + b) b
+        rw [add_sub_cancel_right] at h
+        linarith
+      · have h := norm_sub_le (1 - z - b) (1 - b)
+        rw [show 1 - z - b - (1 - b) = -z by ring, norm_neg] at h
+        linarith [norm_sub_le (1 : ℂ) b, norm_one (α := ℂ)]
+    rw [he z ((le_max_left _ _).trans h₀), heq, mul_inv_rev, norm_mul]
+    exact (mul_le_of_le_one_right (norm_nonneg _) (by rw [norm_inv]; exact inv_le_one_of_one_le₀ hnorm)).trans h
+
+/-- Interpolate the inverse of a function on a single Euler lattice. Dividing the samples
+by a power of `1 - z` makes their norms summable. The cardinal series then gives a bounded
+holomorphic interpolant on each strip, and restoring the power recovers the inverse. -/
+private theorem strongCoprimality_exists_sub_mem_inverse (H : ℂ → ℂ)
+    (hne : ∀ z : ℂ, z.re = 0 → H z ≠ 0)
+    (hbound : ∃ (k : ℕ) (C T : ℝ), ∀ z : ℂ, z.re = 0 → T ≤ |z.im| →
+      ‖(H z)⁻¹‖ ≤ C * |z.im| ^ k) (c : ℂ) (hc : ‖c‖ = 1) (l : ℝ) (hl : 0 < l) :
+    ∃ (k : ℕ) (u : ℂ → ℂ), Differentiable ℂ u ∧
+      (∀ R : ℝ, ∃ C : ℝ, ∀ z : ℂ, |z.re| ≤ R → ‖u z‖ ≤ C) ∧
+      ∀ z : ℂ, c * Complex.exp (-(l : ℂ) * z) = 1 → H z * (1 - z) ^ k * u z = 1 := by
+  obtain ⟨k, C, T, hC⟩ := hbound
+  let w (z : ℂ) := Complex.log c - (l : ℂ) * z
+  let d := -(2 * Real.pi) / l
+  let b := -c.arg / (2 * Real.pi)
+  let t (n : ℤ) := d * ((n : ℝ) + b)
+  let s (n : ℤ) : ℂ := ⟨0, t n⟩
+  have hd : d ≠ 0 := div_ne_zero (neg_ne_zero.mpr Real.two_pi_pos.ne') hl.ne'
+  have hw (n : ℤ) : w (s n) = n * (2 * Real.pi * Complex.I) := by
+    apply Complex.ext
+    · simp [w, s, Complex.log_re, hc]
+    · simp [w, s, t, d, b, Complex.log_im, Complex.mul_im]
+      field_simp
+      ring
+  let a (n : ℤ) := (H (s n))⁻¹ / (1 - s n) ^ (k + 2)
+  have ha : Summable fun n ↦ ‖a n‖ := by
+    have hs := (Real.summable_one_div_int_add_rpow b 2).2 (by norm_num)
+    simp only [Real.rpow_two] at hs
+    apply (hs.mul_left (C / |d| ^ 2)).of_norm_bounded_eventually
+    have hlim : Filter.Tendsto (fun n : ℤ ↦ |(n : ℝ)|) Filter.cofinite Filter.atTop :=
+      tendsto_norm_cocompact_atTop.comp Int.tendsto_coe_cofinite
+    filter_upwards [hlim.eventually_gt_atTop (|b| + (max T 1) / |d|)] with n hn
+    have htd : max T 1 < |t n| := by
+      rw [show |t n| = |((n : ℝ) + b)| * |d| by rw [mul_comm]; exact abs_mul ..]
+      apply (div_lt_iff₀ (abs_pos.mpr hd)).mp
+      have h := abs_sub ((n : ℝ) + b) b
+      rw [add_sub_cancel_right] at h
+      linarith
+    have ht := (le_max_left T 1).trans htd.le
+    have hpos : 0 < |t n| := zero_lt_one.trans ((le_max_right ..).trans_lt htd)
+    have hnorm : |t n| ≤ ‖1 - s n‖ := by simpa [s] using Complex.abs_im_le_norm (1 - s n)
+    rw [Real.norm_eq_abs, abs_of_nonneg (norm_nonneg _)]
+    change ‖(H (s n))⁻¹ / (1 - s n) ^ (k + 2)‖ ≤ _
+    rw [norm_div, norm_pow]
+    calc
+      _ ≤ (C * |t n| ^ k) / |t n| ^ (k + 2) :=
+        (div_le_div_of_nonneg_left (norm_nonneg _) (pow_pos hpos _)
+          (pow_le_pow_left₀ hpos.le hnorm _)).trans
+            (div_le_div_of_nonneg_right (hC (s n) rfl ht) (pow_nonneg hpos.le _))
+      _ = (C / |d| ^ 2) * (1 / |(n : ℝ) + b| ^ 2) := by
+        rw [pow_add, mul_comm (|t n| ^ k), mul_div_mul_right _ _ (pow_ne_zero k hpos.ne')]
+        simp [t, abs_mul, mul_pow, div_eq_mul_inv, mul_left_comm, mul_comm]
+  obtain ⟨A, hA, hstrip, hval⟩ := strongCoprimality_exists_sub_mem_cardinal a ha
+  have hlog : (Complex.log c).re = 0 := by rw [Complex.log_re, hc, Real.log_one]
+  refine ⟨k + 2, A ∘ w, hA.comp ((differentiable_const _).sub (differentiable_id.const_mul _)),
+    fun R ↦ ?_, fun z hz ↦ ?_⟩
+  · obtain ⟨C, hC⟩ := hstrip (l * R)
+    refine ⟨C, fun z hz ↦ hC _ ?_⟩
+    simpa [w, Complex.mul_re, hlog, abs_mul, abs_of_pos hl] using mul_le_mul_of_nonneg_left hz hl.le
+  · have hexp : Complex.exp (w z) = 1 := by
+      simpa [w, sub_eq_add_neg, Complex.exp_add,
+        Complex.exp_log (norm_ne_zero_iff.mp (hc.trans_ne one_ne_zero))] using hz
+    obtain ⟨n, hn⟩ := Complex.exp_eq_one_iff.mp hexp
+    have hzinj : Injective w := fun _ _ h ↦
+      mul_left_cancel₀ (Complex.ofReal_ne_zero.mpr hl.ne') (sub_right_injective h)
+    have hzs := hzinj (hn.trans (hw n).symm)
+    rw [hzs, Function.comp_apply, hw, hval]
+    have h₁ : (1 : ℂ) - s n ≠ 0 := by intro e; have := congrArg Complex.re e; simp [s] at this
+    dsimp only [a]
+    field_simp [hne (s n) rfl, h₁]
+
+/-- The entire interpolating multiplier preserves rapid decay on each vertical strip.
+Above the height threshold its polynomial growth is absorbed by a higher Schwartz weight.
+The remaining rectangle is compact. -/
+private theorem strongCoprimality_exists_sub_mem_rapid (H u : ℂ → ℂ)
+    (hH : Differentiable ℂ H) (hu : Differentiable ℂ u) (k : ℕ)
+    (hpoly : ∀ R : ℝ, ∃ (m : ℕ) (T : ℝ), ∀ z : ℂ, |z.re| ≤ R → T ≤ |z.im| →
+      ‖H z‖ ≤ ‖z‖ ^ m) (hb : ∀ R : ℝ, ∃ C : ℝ, ∀ z : ℂ, |z.re| ≤ R → ‖u z‖ ≤ C)
+    (φ : B) : (fun z ↦ H z * (1 - z) ^ k * u z * φ.val z) ∈ schwartzBergmanSubmodule univ := by
+  let f (z : ℂ) := H z * (1 - z) ^ k * u z * φ.val z
+  have hφ : Differentiable ℂ φ.val := differentiableOn_univ.mp (by simpa using φ.property.2.1)
+  have hf : Differentiable ℂ f := ((hH.mul ((differentiable_id.const_sub 1).pow k)).mul hu).mul hφ
+  refine ⟨fun z hz ↦ (hz (mem_univ _)).elim, hf.differentiableOn, fun a b hab hI N ↦ ?_⟩
+  let R := |a| + |b|
+  obtain ⟨m, T, hT⟩ := hpoly R
+  obtain ⟨C, hC⟩ := hb R
+  obtain ⟨Bφ, hBφ⟩ := φ.property.2.2 a b hab hI (N + m + 2 * k)
+  obtain ⟨B₀, hB₀⟩ := (isCompact_closedBall (0 : ℂ) (R + max T 3)).exists_bound_of_continuousOn
+    (((continuous_id.pow N).mul hf.continuous).continuousOn)
+  refine ⟨max B₀ (max C 0 * Bφ), ?_⟩
+  rintro _ ⟨z, hz, rfl⟩
+  change ‖z ^ N * f z‖ ≤ _
+  have hre : |z.re| ≤ R := by
+    apply abs_le.mpr
+    dsimp [R]
+    constructor <;> linarith [hz.1, hz.2, neg_abs_le a, le_abs_self b, abs_nonneg a, abs_nonneg b]
+  by_cases ht : max T 3 ≤ |z.im|
+  · have hn : 3 ≤ ‖z‖ := ((le_max_right _ _).trans ht).trans (Complex.abs_im_le_norm z)
+    have h₁ : ‖1 - z‖ ≤ ‖z‖ ^ 2 := (norm_sub_le ..).trans (by rw [norm_one]; nlinarith)
+    have h₂ : ‖z ^ (N + m + 2 * k) * φ.val z‖ ≤ Bφ := hBφ ⟨z, hz, rfl⟩
+    apply le_trans _ (le_max_right ..)
+    calc
+      ‖z ^ N * f z‖ = ‖u z‖ * (‖z‖ ^ N * ‖H z‖ * ‖1 - z‖ ^ k * ‖φ.val z‖) := by
+        simp only [f, norm_mul, norm_pow]; ring
+      _ ≤ max C 0 * (‖z‖ ^ N * ‖z‖ ^ m * (‖z‖ ^ 2) ^ k * ‖φ.val z‖) := by
+        gcongr
+        · exact (hC z hre).trans (le_max_left ..)
+        · exact hT z hre ((le_max_left ..).trans ht)
+      _ = max C 0 * ‖z ^ (N + m + 2 * k) * φ.val z‖ := by rw [norm_mul, norm_pow, pow_add, pow_add, pow_mul]
+      _ ≤ _ := mul_le_mul_of_nonneg_left h₂ (le_max_right ..)
+  · exact (hB₀ z (mem_closedBall_zero_iff.mpr ((Complex.norm_le_abs_re_add_abs_im z).trans
+      (add_le_add hre (le_of_not_ge ht))))).trans (le_max_left ..)
+
+/-- The reciprocal Euler factor in exponential coordinates on the Mellin line. -/
+private theorem strongCoprimality_exists_sub_mem_factor (χ : U) (v : V)
+    (hv : (ideleClassNormTwist χ 0).IsUnramifiedAt v) (z : ℂ) :
+    reciprocalPartialHeckeEulerProduct χ {v} z = 1 - (ideleClassNormTwist χ 0).localValue v *
+      Complex.exp (-(Real.log (v.asIdeal.absNorm : ℝ) : ℂ) * z) := by
+  have hq : (v.asIdeal.absNorm : ℂ) ≠ 0 := Nat.cast_ne_zero.mpr
+    (zero_lt_one.trans (HeightOneSpectrum.one_lt_absNorm v)).ne'
+  rw [reciprocalPartialHeckeEulerProduct_singleton χ v hv, Complex.cpow_def_of_ne_zero hq,
+    ← Complex.natCast_log, mul_neg, neg_mul]
+
+/-- Match the Mellin data of an arbitrary ambient function at all the zeros of one Euler
+factor by a pole-free theta transform, including the value at a canceled pole. -/
+private theorem strongCoprimality_exists_sub_mem_interpolate (χ : U)
+    (τ : ℝ≥0ˣ →ₜ* I𝔽) (hτ : RightInverse τ (ideleNorm F)) (v : V)
+    (hv : (ideleClassNormTwist χ 0).IsUnramifiedAt v) (φ : B) :
+    ∃ w ∈ spectralNuclearityDenominator χ τ hτ 0, ∀ z : ℂ,
+      reciprocalPartialHeckeEulerProduct χ {v} z = 0 → w.val z = φ.val z := by
+  let G := regularizedCompletedHeckeL χ τ hτ (continuedCompletedHeckeL χ)
+    (continuedCompletedHeckeL_spec χ).1 (continuedCompletedHeckeL_spec χ).2
+  obtain ⟨A, hA, hne, hpoly, hinv⟩ := strongCoprimality_exists_sub_mem_multiplier χ τ hτ
+  let H (z : ℂ) := G.val z * A z
+  let c := (ideleClassNormTwist χ 0).localValue v
+  let l := Real.log (v.asIdeal.absNorm : ℝ)
+  have hq : (1 : ℝ) < v.asIdeal.absNorm := by exact_mod_cast HeightOneSpectrum.one_lt_absNorm v
+  have hl := Real.log_pos hq
+  obtain ⟨k, u, hu, hstrip, hmatch⟩ := strongCoprimality_exists_sub_mem_inverse H hne hinv c
+    (norm_ideleClassNormTwist_zero_localValue χ v) l hl
+  let w : B :=
+    ⟨_, strongCoprimality_exists_sub_mem_rapid H u (G.property.mul hA) hu k hpoly hstrip φ⟩
+  refine ⟨w, ?_, fun z hz ↦ ?_⟩
+  · rw [spectralNuclearityDenominator, strongCoprimality_mem_differenceRange_iff_divisible]
+    have hφ : Differentiable ℂ φ.val := differentiableOn_univ.mp (by simpa using φ.property.2.1)
+    refine ⟨fun z ↦ A z * (1 - z) ^ k * u z * φ.val z,
+      ((hA.mul ((differentiable_id.const_sub 1).pow k)).mul hu).mul hφ, fun z ↦ ?_⟩
+    change G.val z * A z * _ * _ * _ = G.val (z + ((0 : ℝ) : ℂ)) * _
+    simp only [Complex.ofReal_zero, add_zero, mul_assoc]
+  · rw [strongCoprimality_exists_sub_mem_factor χ v hv] at hz
+    exact (congrArg (· * φ.val z) (hmatch z (sub_eq_zero.mp hz).symm)).trans (one_mul _)
+
+/-- Removing the simple zeros of one reciprocal Euler factor gives an entire quotient.
+Imaginary periodicity of the factor preserves rapid decay on strips under this division. -/
+private theorem strongCoprimality_exists_sub_mem_divide (χ : U) (v : V)
+    (hv : (ideleClassNormTwist χ 0).IsUnramifiedAt v) (f : B)
+    (hf : ∀ z, reciprocalPartialHeckeEulerProduct χ {v} z = 0 → f.val z = 0) :
+    ∃ b : B, ∀ z, f.val z = reciprocalPartialHeckeEulerProduct χ {v} z * b.val z := by
+  let q : ℝ := v.asIdeal.absNorm
+  let c := (ideleClassNormTwist χ 0).localValue v
+  let D := reciprocalPartialHeckeEulerProduct χ {v}
+  have hq : 1 < q := by dsimp [q]; exact_mod_cast HeightOneSpectrum.one_lt_absNorm v
+  have hq₀ := zero_lt_one.trans hq
+  have hlog := Real.log_pos hq
+  have hD : D = fun z ↦ 1 - c * Complex.exp (-(Real.log q : ℂ) * z) := by
+    funext z
+    exact strongCoprimality_exists_sub_mem_factor χ v hv z
+  have hd := strongCoprimality_mem_differenceRange_iff_euler χ {v}
+  have hfd : Differentiable ℂ f.val := differentiableOn_univ.mp (by simpa using f.property.2.1)
+  obtain ⟨b, hb, he⟩ := strongCoprimality_mem_differenceRange_iff_dvd D f.val hd hfd
+    (fun z ↦ by
+      by_cases hz : D z = 0
+      · have hder : deriv D z ≠ 0 := by
+          rw [hD]
+          apply ((((hasDerivAt_id z).const_mul (-(Real.log q : ℂ))).cexp.const_mul c).const_sub
+            1).deriv.trans_ne
+          have hc : c ≠ 0 := norm_ne_zero_iff.mp
+            ((norm_ideleClassNormTwist_zero_localValue χ v).trans_ne one_ne_zero)
+          simp [hc, hlog.ne']
+        rw [(hd.analyticAt z).analyticOrderAt_eq_one_of_zero_deriv_ne_zero hz hder]
+        exact Order.one_le_iff_ne_zero.mpr ((hfd.analyticAt z).analyticOrderAt_ne_zero.mpr (hf z hz))
+      · rw [(hd.analyticAt z).analyticOrderAt_eq_zero.mpr hz]
+        exact bot_le)
+  let T := 2 * Real.pi / Real.log q
+  have hT : 0 < T := div_pos (by positivity) hlog
+  have hper : Periodic D ((T : ℂ) * Complex.I) := by
+    intro z
+    rw [hD]
+    have hphase : -(Real.log q : ℂ) * ((T : ℂ) * Complex.I) =
+        -(2 * Real.pi * Complex.I) := by
+      dsimp [T]
+      push_cast
+      field_simp [Complex.ofReal_ne_zero.mpr hlog.ne']
+    simp only [mul_add, Complex.exp_add, hphase, Complex.exp_neg, Complex.exp_two_pi_mul_I,
+      inv_one, mul_one]
+  have hne : ∃ z, D z ≠ 0 := by
+    refine ⟨1, ?_⟩
+    rw [hD]
+    apply sub_ne_zero.mpr
+    intro h
+    have hnorm := congrArg norm h
+    simp only [norm_one, norm_mul, c, norm_ideleClassNormTwist_zero_localValue, one_mul,
+      mul_one, Complex.norm_exp, Complex.neg_re, Complex.ofReal_re, Real.exp_neg,
+      Real.exp_log hq₀] at hnorm
+    exact (inv_lt_one_of_one_lt₀ hq).ne' hnorm
+  exact ⟨⟨b, schwartzBergman_of_periodic_mul hd hne hT hper hb (funext he ▸ f.property)⟩, he⟩
+
+/-- Successive single-place divisions keep the theta part divisible by the same entire
+generator. Each next division acts on the preceding quotient, including at shared zeros. -/
+private theorem strongCoprimality_exists_sub_mem_product (χ : U) (τ : ℝ≥0ˣ →ₜ* I𝔽)
+    (hτ : RightInverse τ (ideleNorm F)) (T : Finset V)
+    (hT : ∀ v ∈ T, (ideleClassNormTwist χ 0).IsUnramifiedAt v) (φ : B) :
+    let G := regularizedCompletedHeckeL χ τ hτ (continuedCompletedHeckeL χ)
+      (continuedCompletedHeckeL_spec χ).1 (continuedCompletedHeckeL_spec χ).2
+    ∃ (b : B) (u : ℂ → ℂ), Differentiable ℂ u ∧ ∀ z, φ.val z =
+      G.val z * u z + reciprocalPartialHeckeEulerProduct χ T z * b.val z := by
+  classical
+  intro G
+  induction T using Finset.induction_on generalizing φ with
+  | empty => exact ⟨φ, 0, differentiable_const _, by simp [reciprocalPartialHeckeEulerProduct]⟩
+  | insert v T hnot ih =>
+    have hv := hT v (Finset.mem_insert_self ..)
+    obtain ⟨w, hw, hmatch⟩ := strongCoprimality_exists_sub_mem_interpolate χ τ hτ v hv φ
+    rw [spectralNuclearityDenominator, strongCoprimality_mem_differenceRange_iff_divisible] at hw
+    obtain ⟨a, ha, hwa⟩ := hw
+    have hw' (z : ℂ) : w.val z = G.val z * a z := by
+      have h : w.val z = G.val (z + ((0 : ℝ) : ℂ)) * a z := hwa z
+      simpa only [Complex.ofReal_zero, add_zero] using h
+    obtain ⟨d, hd⟩ := strongCoprimality_exists_sub_mem_divide χ v hv (φ - w)
+      (fun z hz ↦ sub_eq_zero.mpr (hmatch z hz).symm)
+    obtain ⟨b, u, hu, hbu⟩ := ih (fun i hi ↦ hT i (Finset.mem_insert_of_mem hi)) d
+    let D := reciprocalPartialHeckeEulerProduct χ {v}
+    refine ⟨b, fun z ↦ a z + D z * u z,
+      ha.add ((strongCoprimality_mem_differenceRange_iff_euler χ {v}).mul hu), fun z ↦ ?_⟩
+    have he : φ.val z - w.val z = D z * d.val z := hd z
+    rw [hw', hbu] at he
+    simp only [D, reciprocalPartialHeckeEulerProduct, Finset.prod_insert hnot,
+      Finset.prod_singleton] at he ⊢
+    linear_combination he
+
 open Classical in
 /-- Paper: Theorem 7.5.0.1, pp. 375–376.
 Every exponentially decaying function of the isotype is the homogeneous theta function of a
@@ -1622,7 +2047,33 @@ private theorem strongCoprimality_exists_sub_mem (χ : U) (S : Finset V)
       (j ((K(ω(χ))).mkQ f)).val.val g = homogeneousAdelicThetaLinearMap F ω(χ) f.val g)
     (y : StrongCoprimalityDecaySpace ω(χ)) :
     ∃ x, y - j x ∈ strongCoprimalityDifferenceRange ω(χ)
-      (S.filter (fun v ↦ (ideleClassNormTwist χ 0).IsUnramifiedAt v)) π := by sorry
+      (S.filter (fun v ↦ (ideleClassNormTwist χ 0).IsUnramifiedAt v)) π := by
+  let T := S.filter (fun v ↦ (ideleClassNormTwist χ 0).IsUnramifiedAt v)
+  have hT (v) (hv : v ∈ T) := (Finset.mem_filter.mp hv).2
+  have hπT (v) (hv : v ∈ T) := hπ v (Finset.mem_filter.mp hv).1
+  let τ : ℝ≥0ˣ →ₜ* I𝔽 := ⟨canonicalIdeleNormSection F, canonicalIdeleNormSection_continuous F⟩
+  have hτ : RightInverse τ (ideleNorm F) := canonicalIdeleNormSection_rightInverse F
+  obtain ⟨M, hM, hθ⟩ := spectralNuclearityDenominator_isotypeModel χ τ hτ 0
+  obtain ⟨b, u, hu, he⟩ := strongCoprimality_exists_sub_mem_product χ τ hτ T hT (M y)
+  obtain ⟨d, hd⟩ := strongCoprimality_mem_differenceRange_iff_difference ω(χ) T π (M.symm b)
+  have hdiff := strongCoprimality_mem_differenceRange_iff_mellin χ τ hτ T π hπT hT M hM
+    (M.symm b) d hd
+  have hmem : M (y - d) ∈ spectralNuclearityDenominator χ τ hτ 0 := by
+    rw [spectralNuclearityDenominator, strongCoprimality_mem_differenceRange_iff_divisible]
+    refine ⟨u, hu, fun z ↦ ?_⟩
+    rw [map_sub]
+    change (M y).val z - (M d).val z = _
+    rw [hdiff, M.apply_symm_apply, he]
+    simp
+  obtain ⟨f, hf⟩ := (hθ _).mp hmem
+  have hjf : y - d = j ((K(ω(χ))).mkQ f) := by
+    refine Subtype.ext (Subtype.ext (funext fun g ↦ ?_))
+    have h := hf g
+    simp only [Real.rpow_zero, Complex.ofReal_one, one_mul] at h
+    exact h.trans (hj f g).symm
+  refine ⟨(K(ω(χ))).mkQ f, ?_⟩
+  rw [← hjf, sub_sub_cancel]
+  exact (mem_strongCoprimalityDifferenceRange ω(χ) T π d).mpr ⟨M.symm b, hd⟩
 
 open Classical in
 /-- Paper: Theorem 7.5.0.1, p. 374.

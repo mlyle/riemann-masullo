@@ -1111,6 +1111,97 @@ local notation "homTest(" ω ", " φ ")" =>
   ∀ (k : C₁) (x : C𝔽), (φ : BruhatCompactSupport C𝔽).val (k.val⁻¹ * x) =
     (ω k : ℂ) * (φ : BruhatCompactSupport C𝔽).val x
 
+/-- Classical input: the Dixmier–Malliavin factorization theorem on the additive real line,
+from J. Dixmier and P. Malliavin, *Factorisations de fonctions et de vecteurs indéfiniment
+différentiables*, Bull. Sci. Math. 102 (1978), 307–330. Every smooth compactly supported
+function is a finite sum of convolutions of such functions for the chosen Haar measure.
+`mem_bruhatCompactSupportSubmodule_real_iff` identifies the tests here with those functions. -/
+private theorem spectralHomogeneousTest_real_factorization
+    (ν : Measure (Multiplicative ℝ)) [ν.IsHaarMeasure]
+    (f : BruhatCompactSupport (Multiplicative ℝ)) :
+    f ∈ AddSubmonoid.closure {h | ∃ u v : BruhatCompactSupport (Multiplicative ℝ),
+      h.val = lcaConvolution ν u.val v.val} := by
+  sorry
+
+/-- Restriction to a one-parameter subgroup is smooth in the real parameter. -/
+private theorem spectralHomogeneousTest_section_smooth (σ : Multiplicative ℝ →ₜ* C𝔽)
+    (f : bruhatSmoothSubmodule (G := C𝔽)) :
+    ContDiff ℝ (⊤ : ℕ∞) (fun t : ℝ ↦ f.val (σ (Multiplicative.ofAdd t))) := by
+  apply contDiff_infty.mpr
+  intro n
+  induction n generalizing f with
+  | zero =>
+    exact contDiff_zero.mpr ((continuous_of_bruhatSmooth
+      ((mem_bruhatSmoothSubmodule_iff _).mp f.property)).comp σ.continuous)
+  | succ n ih =>
+    let d : bruhatSmoothSubmodule (G := C𝔽) :=
+      ⟨bruhatDirectionalDeriv σ f.val, bruhatDirectionalDeriv_mem_smooth σ f⟩
+    have hd (t : ℝ) : HasDerivAt (fun s : ℝ ↦ f.val (σ (Multiplicative.ofAdd s)))
+        (d.val (σ (Multiplicative.ofAdd t))) t := by
+      have h := hasDerivAt_bruhatDirectionalDeriv σ
+        ((mem_bruhatSmoothSubmodule_iff _).mp f.property 1) (σ (Multiplicative.ofAdd t))
+      have hs := HasDerivAt.comp_sub_const t t (by simpa only [sub_self] using h)
+      apply hs.congr_of_eventuallyEq (.of_forall fun s ↦ ?_)
+      change f.val (σ (Multiplicative.ofAdd s)) =
+        f.val (σ (Multiplicative.ofAdd t) * σ (Multiplicative.ofAdd (s - t)))
+      rw [← map_mul, ← ofAdd_add, add_sub_cancel]
+    rw [Nat.cast_succ, contDiff_succ_iff_deriv]
+    refine ⟨fun t ↦ (hd t).differentiableAt, fun h ↦ absurd h (by simp), ?_⟩
+    rw [show deriv (fun t : ℝ ↦ f.val (σ (Multiplicative.ofAdd t))) =
+      fun t ↦ d.val (σ (Multiplicative.ofAdd t)) from funext fun t ↦ (hd t).deriv]
+    exact ih d
+
+/-- A character times the pullback of a real-line test by the log norm is a Bruhat test. -/
+private theorem spectralHomogeneousTest_lift_mem (hsur : Surjective m𝔽)
+    (χ : PontryaginDual C𝔽) (f : BruhatCompactSupport (Multiplicative ℝ)) :
+    (fun x : C𝔽 ↦ (χ x : ℂ) * f.val (positiveRealLogEquiv (m𝔽 x))) ∈
+      bruhatCompactSupportSubmodule C𝔽 := by
+  let L := (positiveRealLogEquiv : ℝ≥0ˣ →ₜ* Multiplicative ℝ).comp m𝔽
+  have hp : IsProperMap L :=
+    positiveRealLogEquiv.toHomeomorph.isProperMap.comp (isProperMap_ideleClassNorm F)
+  have hc : HasCompactSupport (fun x : C𝔽 ↦ f.val (L x)) :=
+    HasCompactSupport.intro (hp.isCompact_preimage f.property.2) fun _ hx ↦
+      image_eq_zero_of_notMem_tsupport hx
+  have hs := isBruhatSmooth_logProfile m𝔽
+    ((mem_bruhatCompactSupportSubmodule_real_iff _).mp f.property).1
+  have hval (x : C𝔽) : L x = Multiplicative.ofAdd (Real.log ((m𝔽 x).val : ℝ)) :=
+    congrArg Multiplicative.ofAdd (positiveRealLogEquiv_apply _)
+  let r : BruhatCompactSupport C𝔽 := ⟨fun x ↦ f.val (L x),
+    (mem_bruhatSmoothSubmodule_iff _).mpr (by simpa only [hval, Function.comp_apply] using hs), hc⟩
+  -- At weight zero the radial test is Schwartz, so it can be multiplied by the character.
+  have hr := modulationWeight_mem_schwartzBruhat m𝔽 univ ⟨0, mem_univ _⟩
+    ⟨r.val, bruhatCompactSupport_le_modulatedExponentialDecay m𝔽 univ hm𝔽 hsur r.property⟩
+  rw [modulationWeight_zero] at hr
+  obtain ⟨M, hM⟩ := schwartzBruhat_mul_unitaryCharacter χ
+  let w := M (⟨r.val, hr⟩ : SchwartzBruhat C𝔽)
+  have hw : w.val = fun x ↦ (χ x : ℂ) * f.val (L x) := funext (hM _)
+  exact ⟨hw ▸ (mem_bruhatSmoothSubmodule_iff _).mpr (schwartzBruhat_isBruhatSmooth w), hc.mul_left⟩
+
+/-- The two character factors in the convolution integral multiply to `χ x`. The remaining
+integrand factors through the log norm, so it integrates against the pushforward Haar measure. -/
+private theorem spectralHomogeneousTest_lift_convolution (χ : PontryaginDual C𝔽)
+    (u v : BruhatCompactSupport (Multiplicative ℝ)) (x : C𝔽) :
+    let L := (positiveRealLogEquiv : ℝ≥0ˣ →ₜ* Multiplicative ℝ).comp m𝔽
+    (χ x : ℂ) * lcaConvolution ((μ𝔽).map L) u.val v.val (L x) =
+      lcaConvolution μ𝔽 (fun y ↦ (χ y : ℂ) * u.val (L y))
+        (fun y ↦ (χ y : ℂ) * v.val (L y)) x := by
+  intro L
+  let b (t : Multiplicative ℝ) := u.val t * v.val (t⁻¹ * L x)
+  have continuous_test (f : BruhatCompactSupport (Multiplicative ℝ)) : Continuous f.val :=
+    continuous_of_bruhatSmooth ((mem_bruhatSmoothSubmodule_iff _).mp f.property.1)
+  have hb : Continuous b := (continuous_test u).mul
+    ((continuous_test v).comp (continuous_inv.mul continuous_const))
+  change (χ x : ℂ) * (∫ t, b t ∂(μ𝔽).map L) = _
+  rw [integral_map (φ := (L : C𝔽 → Multiplicative ℝ)) L.continuous.measurable.aemeasurable
+    hb.aestronglyMeasurable, ← integral_const_mul]
+  apply integral_congr_ae (.of_forall fun y ↦ ?_)
+  change (χ x : ℂ) * (u.val (L y) * v.val ((L y)⁻¹ * L x)) =
+    ((χ y : ℂ) * u.val (L y)) * ((χ (y⁻¹ * x) : ℂ) * v.val (L (y⁻¹ * x)))
+  have hχ : (χ y : ℂ) * (χ (y⁻¹ * x) : ℂ) = (χ x : ℂ) := by
+    rw [← Circle.coe_mul, ← map_mul, mul_inv_cancel_left]
+  rw [map_mul L, map_inv, ← hχ]
+  ring
+
 /-- Paper: Theorems 10.3.1.1(3) and 10.3.2.1(3), pp. 449 and 454. A homogeneous
 compactly supported Bruhat test is a finite sum of convolutions of pairs of tests
 of the same character. Deviation: Isolate the radial Dixmier–Malliavin
@@ -1121,7 +1212,67 @@ private theorem spectralHomogeneousTest_convolution_factorization (ω : Pontryag
     φ ∈ AddSubmonoid.closure {θ : BruhatCompactSupport C𝔽 |
       ∃ ψ η : BruhatCompactSupport C𝔽,
         homTest(ω, ψ) ∧ homTest(ω, η) ∧ θ.val = lcaConvolution μ𝔽 ψ.val η.val} := by
-  sorry
+  let L := (positiveRealLogEquiv : ℝ≥0ˣ →ₜ* Multiplicative ℝ).comp m𝔽
+  let q : IdeleGroup (𝓞 F) F →ₜ* C𝔽 := ⟨QuotientGroup.mk' _, continuous_quotient_mk'⟩
+  let τ := q.comp ⟨canonicalIdeleNormSection F, canonicalIdeleNormSection_continuous F⟩
+  have hτ : RightInverse τ (ideleClassNorm F) := canonicalIdeleNormSection_rightInverse F
+  let σ := τ.comp (positiveRealLogEquiv.symm : Multiplicative ℝ →ₜ* ℝ≥0ˣ)
+  have hσ (t : Multiplicative ℝ) : L (σ t) = t :=
+    (congrArg positiveRealLogEquiv (hτ _)).trans (positiveRealLogEquiv.apply_symm_apply t)
+  -- The inverse compact component gives the eigencharacter for left translation.
+  let P : C𝔽 →ₜ* C𝔽 := (τ.comp m𝔽) / ContinuousMonoidHom.id C𝔽
+  have hP (x : C𝔽) : P x ∈ (ideleClassNorm F).ker := by
+    change ideleClassNorm F (τ (ideleClassNorm F x) / x) = 1
+    rw [map_div, hτ, div_self']
+  let r : C𝔽 →ₜ* C₁ := ⟨P.toMonoidHom.codRestrict _ hP, P.continuous.subtype_mk _⟩
+  let χ := ω.comp r
+  have hk (k : C₁) : χ k.val⁻¹ = ω k := by
+    apply congrArg ω
+    apply Subtype.ext
+    change τ (ideleClassNorm F k.val⁻¹) / k.val⁻¹ = k.val
+    rw [map_inv, show ideleClassNorm F k.val = 1 from k.property, inv_one, map_one,
+      one_div, inv_inv]
+  let T : BruhatCompactSupport (Multiplicative ℝ) →+ BruhatCompactSupport C𝔽 :=
+    { toFun := fun f ↦ ⟨fun x ↦ (χ x : ℂ) * f.val (L x),
+        spectralHomogeneousTest_lift_mem hτ.surjective χ f⟩
+      map_zero' := Subtype.ext (funext fun _ ↦ mul_zero _)
+      map_add' := fun _ _ ↦ Subtype.ext (funext fun _ ↦ mul_add _ _ _) }
+  have hT (f : BruhatCompactSupport (Multiplicative ℝ)) : homTest(ω, T f) := by
+    intro k x
+    have hL : L k.val = 1 :=
+      (congrArg positiveRealLogEquiv k.property).trans (map_one _)
+    change (χ (k.val⁻¹ * x) : ℂ) * f.val (L (k.val⁻¹ * x)) = _
+    rw [map_mul, hk, Circle.coe_mul, map_mul, map_inv, hL, inv_one, one_mul, mul_assoc]
+    rfl
+  -- Homogeneity recovers the whole test from its restriction to the section.
+  let f : BruhatCompactSupport (Multiplicative ℝ) := ⟨φ.val ∘ σ, (mem_bruhatCompactSupportSubmodule_real_iff _).mpr
+    ⟨spectralHomogeneousTest_section_smooth σ ⟨φ.val, φ.property.1⟩,
+      HasCompactSupport.intro (φ.property.2.image L.continuous) (fun t ht ↦
+        show φ.val (σ (Multiplicative.ofAdd t)) = 0 from
+          image_eq_zero_of_notMem_tsupport fun h ↦ ht ⟨_, h, hσ t⟩)⟩⟩
+  have hφT : φ = T f := by
+    apply Subtype.ext
+    funext x
+    have he : (r x).val⁻¹ * τ (m𝔽 x) = x := by
+      change (τ (m𝔽 x) / x)⁻¹ * τ (m𝔽 x) = x
+      rw [inv_div, div_mul_cancel]
+    have h := hφ (r x) (τ (m𝔽 x))
+    rw [he] at h
+    change φ.val x = (ω (r x) : ℂ) *
+      φ.val (τ (positiveRealLogEquiv.symm (positiveRealLogEquiv (m𝔽 x))))
+    rwa [positiveRealLogEquiv.symm_apply_apply]
+  let ν : Measure (Multiplicative ℝ) := (μ𝔽).map L
+  have hp : IsProperMap L :=
+    positiveRealLogEquiv.toHomeomorph.isProperMap.comp (isProperMap_ideleClassNorm F)
+  have : ν.IsHaarMeasure := Measure.isHaarMeasure_map μ𝔽 L.toMonoidHom L.continuous
+    (RightInverse.surjective hσ) (isProperMap_iff_tendsto_cocompact.mp hp).2
+  rw [hφT, ← AddSubmonoid.mem_comap (f := T)]
+  refine AddSubmonoid.closure_le.mpr ?_ (spectralHomogeneousTest_real_factorization ν f)
+  rintro a ⟨u, v, huv⟩
+  apply AddSubmonoid.mem_comap.mpr
+  refine AddSubmonoid.subset_closure ⟨T u, T v, hT u, hT v, ?_⟩
+  exact funext fun x ↦ (congrArg ((χ x : ℂ) * ·) (congrFun huv (L x))).trans
+    (spectralHomogeneousTest_lift_convolution χ u v x)
 
 /-- An additive convolution action transports finite factorizations to compositions. -/
 private theorem spectralApprox_map_factorization {V O : Type*}

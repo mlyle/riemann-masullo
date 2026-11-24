@@ -8540,13 +8540,64 @@ theorem spectralStripJet_lowerBound (χ : PontryaginDual C₁ → PontryaginDual
     _ = ‖(spectralStripJet_memLp χ hα hs₀ j).toLp (stripJet(χ, j))‖ :=
       Real.sqrt_sq (norm_nonneg _)
 
+/-- Near any real number there are only finitely many distinct pairs of real part and
+multiplicity among multiple completed Hecke zeros, over all ordinates and chosen characters.
+The norm integral on p. 447 gives no such restriction. It would suffice to bound the
+multiplicities on the line with that real part and exclude multiple zeros on all other
+sufficiently nearby vertical lines. -/
+private theorem spectralStripJet_order_and_margin_locally_finite_multiple_zeros
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (_hχ : IsSpectralBasepointChoice χ) (x : ℝ) :
+    ∃ U ∈ 𝓝 x, {p : ℝ × ℕ | p.1 ∈ U ∧ 1 < p.2 ∧ ∃ (ω : PontryaginDual C₁) (t : ℝ),
+      multiplicity(χ ω, shift(p.1, t)) = p.2}.Finite := by sorry
+
 /-- Paper: Proposition 10.2.2.2, pp. 446–447. A uniform strip estimate requires a
 bound on admitted jet orders and a boundary margin for the nonintegrable powers.
 Gap: The paper supplies neither estimate for the actual completed Hecke divisor. -/
 theorem spectralStripJet_order_and_margin (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
     (_hχ : IsSpectralBasepointChoice χ) {a α s : ℝ} (_hα : 0 ≤ α) (_hs : 1 < s) :
     ∃ (K : ℕ) (δ : ℝ), 0 < δ ∧ ∀ j : SpectralStripJetIndex χ a α s,
-      j.val.2.2.2 ≤ K ∧ ((s - 1) / 2 ≤ (j.val.2.2.2 : ℝ) → |j.val.2.1| ≤ α - δ) := by sorry
+      j.val.2.2.2 ≤ K ∧ ((s - 1) / 2 ≤ (j.val.2.2.2 : ℝ) → |j.val.2.1| ≤ α - δ) := by
+  let S := {p : ℝ × ℕ | |p.1 - a| < α ∧ 1 < p.2 ∧ ∃ (ω : PontryaginDual C₁) (t : ℝ),
+    multiplicity(χ ω, shift(p.1, t)) = p.2}
+  -- Compactness turns the local arithmetic input into a finite set for this strip.
+  have hfin : S.Finite := by
+    choose U hU hloc using spectralStripJet_order_and_margin_locally_finite_multiple_zeros χ _hχ
+    obtain ⟨T, _, hcover⟩ := (isCompact_Icc (a := a - α) (b := a + α)).elim_nhds_subcover
+      U (fun x _ ↦ hU x)
+    apply (T.finite_toSet.biUnion fun x _ ↦ hloc x).subset
+    intro p hp
+    obtain ⟨hl, hr⟩ := abs_lt.mp hp.1
+    have hx : p.1 ∈ Icc (a - α) (a + α) := ⟨by linarith, by linarith⟩
+    obtain ⟨x, hxT, hxU⟩ := mem_iUnion₂.mp (hcover hx)
+    exact mem_iUnion₂.mpr ⟨x, hxT, hxU, hp.2⟩
+  obtain ⟨K, hK⟩ := (hfin.image Prod.snd).bddAbove
+  -- Adjoining 1 supplies a positive margin also when the open strip has no multiple zeros.
+  let d (p : ℝ × ℕ) := α - |p.1 - a|
+  obtain ⟨δ, hmem, hmin⟩ := Set.exists_min_image _ id ((hfin.image d).insert 1)
+    (insert_nonempty _ _)
+  have hδ : 0 < δ := by
+    rcases hmem with rfl | ⟨p, hp, rfl⟩
+    · exact one_pos
+    · exact sub_pos.mpr hp.1
+  refine ⟨max K ⌈(s - 1) / 2⌉₊, δ, hδ, fun j ↦ ?_⟩
+  by_cases hlow : (j.val.2.2.2 : ℝ) < (s - 1) / 2
+  · exact ⟨(Nat.lt_ceil.mpr hlow).le.trans (le_max_right _ _), fun h ↦ (hlow.not_ge h).elim⟩
+  have hk : 0 < j.val.2.2.2 := by exact_mod_cast (by linarith : (0 : ℝ) < j.val.2.2.2)
+  have hj := j.property
+  unfold spectralStripMultiplicity at hj
+  split_ifs at hj with hb he
+  · let N := multiplicity(χ j.val.1, shift(a + j.val.2.1, j.val.2.2.1))
+    have hN : j.val.2.2.2 < N := hj
+    let p : ℝ × ℕ := (a + j.val.2.1, N)
+    have hp : p ∈ S :=
+      ⟨by simpa [p] using abs_lt.mpr hb, show 1 < N by omega,
+        j.val.1, j.val.2.2.1, rfl⟩
+    have horder : N ≤ K := hK (mem_image_of_mem Prod.snd hp)
+    have hdist : δ ≤ α - |j.val.2.1| := by
+      simpa [d, p] using hmin (d p) (Or.inr (mem_image_of_mem d hp))
+    exact ⟨hN.le.trans (horder.trans (le_max_left _ _)), fun _ ↦ by linarith⟩
+  · exact (hlow ((lt_spectralBoundaryMultiplicity _ _ _).mp hj).2).elim
+  · omega
 
 /-- Paper: Proposition 10.2.2.2, pp. 446–447. Finitely many integrable
 boundary powers and a positive exponential margin on all other powers give
