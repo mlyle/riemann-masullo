@@ -103,13 +103,13 @@ private theorem rational_real_PV_coordinates (g : ℝ → ℂ) (g₀ : g 0 = 0)
   · have ht : ((|t| : ℝ) : ℂ) ≠ 0 := by exact_mod_cast (abs_ne_zero.mpr h)
     simp [Complex.real_smul, F, ht, mul_div_assoc]
 
-/-- A norm radial test has an actual compact Bruhat restriction to the real place. -/
-theorem exists_rational_archimedean_norm_test (G : ℝ → ℂ) (hg : ContDiff ℝ (∞) G)
-    (hc : HasCompactSupport G) : ∃ u : BruhatCompactSupport Kℝˣ, ∀ x, u.val x = G (Real.log ‖x.val‖) := by
-  let e := (InfinitePlace.Completion.isometryEquivRealOfIsReal Rat.isReal_infinitePlace).symm
-  let : ProperSpace Kℝ := e.isometry.antilipschitzWith.properSpace e.continuous e.surjective
-  let n := (Units.map nnNormHom.toMonoidHom : Kℝˣ →* ℝ≥0ˣ)
-  have hn : IsProperMap n := by simpa only [pow_one] using isProperMap_units_nnNorm_pow (K := Kℝ) 1 one_ne_zero
+/-- A compact smooth log-norm profile gives a compact Bruhat test on the units
+of any proper normed field. -/
+theorem exists_normedField_logNorm_test {K : Type*} [NormedField K] [ProperSpace K]
+    (G : ℝ → ℂ) (hg : ContDiff ℝ (∞) G) (hc : HasCompactSupport G) :
+    ∃ u : BruhatCompactSupport Kˣ, ∀ x, u.val x = G (Real.log ‖x.val‖) := by
+  let n := (Units.map nnNormHom.toMonoidHom : Kˣ →* ℝ≥0ˣ)
+  have hn : IsProperMap n := by simpa only [pow_one] using isProperMap_units_nnNorm_pow (K := K) 1 one_ne_zero
   let L := (radialExponential.symm : ℝ≥0ˣ →ₜ* Multiplicative ℝ).comp ⟨n,hn.continuous⟩
   have hL : IsProperMap L := radialExponential.symm.toHomeomorph.isProperMap.comp hn
   obtain ⟨u,hu⟩ := exists_bruhatCompactSupport_of_proper_realHom L hL G hg hc
@@ -118,6 +118,13 @@ theorem exists_rational_archimedean_norm_test (G : ℝ → ℂ) (hg : ContDiff �
   obtain ⟨t,ht⟩ := radialExponential.surjective (n x)
   rw [← ht,ContinuousMulEquiv.symm_apply_apply]
   exact (Real.log_exp t.toAdd).symm
+
+/-- A norm radial test has an actual compact Bruhat restriction to the real place. -/
+theorem exists_rational_archimedean_norm_test (G : ℝ → ℂ) (hg : ContDiff ℝ (∞) G)
+    (hc : HasCompactSupport G) : ∃ u : BruhatCompactSupport Kℝˣ, ∀ x, u.val x = G (Real.log ‖x.val‖) := by
+  let e := (InfinitePlace.Completion.isometryEquivRealOfIsReal Rat.isReal_infinitePlace).symm
+  let : ProperSpace Kℝ := e.isometry.antilipschitzWith.properSpace e.continuous e.surjective
+  exact exists_normedField_logNorm_test G hg hc
 
 /-- A uniformizer has norm equal to the reciprocal of an integer at least two,
 so there is no nonarchimedean unit whose norm is strictly between one and two. -/
@@ -229,6 +236,18 @@ private theorem real_log_kernel (g : ℝ → ℂ) (hg : Continuous g) {a b : ℝ
   ring
 
 end RealLogCoordinate
+
+/-- The real-place principal value of a positive-log rational radial profile
+is the classical real gamma integral. No upper bound on its norm is needed. -/
+theorem rational_real_principalValue_positive_log_profile (g : ℝ → ℂ) (hg : Continuous g)
+    {a b : ℝ} (ha : 0 < a) (hs : tsupport g ⊆ Icc a b)
+    (φ : BruhatCompactSupport Kℝˣ)
+    (hφ : ∀ u, φ.val u = rationalCenteredLogProfile g (Real.log ‖u.val‖)) :
+    infiniteConnesWeilPrincipalValue wℝ φ =
+      ∫ x in Ioi (0 : ℝ), g x / (1 - Complex.exp (-2 * (x : ℂ))) :=
+  (rational_real_PV_coordinates g
+    (image_eq_zero_of_notMem_tsupport fun ht ↦ (not_le.mpr ha) (hs ht).1) φ hφ).trans
+    (real_log_kernel g hg ha hs)
 
 private theorem rational_prime_free_value (g : ℝ → ℂ) {a b : ℝ} (ha : 0 < a)
     (hb : b < Real.log 2) (hs : tsupport g ⊆ Icc a b) :
