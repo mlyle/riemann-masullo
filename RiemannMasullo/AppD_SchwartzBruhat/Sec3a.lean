@@ -3157,7 +3157,7 @@ private theorem stage_mul_logModulation (a : BruhatStructuralPair G)
 
 /-- Schwartz–Bruhat functions are stable under multiplication by `φ (log m)` when `φ`
 is smooth with bounded derivatives of all orders. -/
-private theorem logModulation_mul_mem_schwartzBruhat {φ : ℝ → ℂ} (hφ : ContDiff ℝ ∞ φ)
+theorem logModulation_mul_mem_schwartzBruhat {φ : ℝ → ℂ} (hφ : ContDiff ℝ ∞ φ)
     (hφb : ∀ k, ∃ C, ∀ t, ‖iteratedFDeriv ℝ k φ t‖ ≤ C) {F : G → ℂ}
     (hF : F ∈ schwartzBruhatSubmodule G) :
     (fun g ↦ φ (Real.log ((m g : ℝ≥0) : ℝ)) * F g) ∈ schwartzBruhatSubmodule G := by
@@ -3741,7 +3741,8 @@ private theorem schwartzBruhat_realCoordinate_equiv {G : Type*} [CommGroup G] [T
     dite_eq_left (hm x), hT]
   exact congrArg f (hw x)
 
-private def positiveRealLogEquiv : ℝ≥0ˣ ≃ₜ* Multiplicative ℝ := by
+/-- The logarithm identifies positive real units with the additive reals. -/
+def positiveRealLogEquiv : ℝ≥0ˣ ≃ₜ* Multiplicative ℝ := by
   let e : ℝ≥0ˣ ≃ₜ Multiplicative ℝ :=
     (Nonneg.unitsHomeomorphPos ℝ).trans Real.expOrderIso.symm.toHomeomorph
   have he (t : ℝ≥0ˣ) : (e t).toAdd = Real.log (t.val : ℝ) :=
@@ -3752,7 +3753,8 @@ private def positiveRealLogEquiv : ℝ≥0ˣ ≃ₜ* Multiplicative ℝ := by
     Real.log_mul (NNReal.coe_pos.mpr (Units.zero_lt s)).ne'
       (NNReal.coe_pos.mpr (Units.zero_lt t)).ne']
 
-private theorem positiveRealLogEquiv_apply (t : ℝ≥0ˣ) :
+/-- On positive real units, the log equivalence applies the real logarithm. -/
+theorem positiveRealLogEquiv_apply (t : ℝ≥0ˣ) :
     (positiveRealLogEquiv t).toAdd = Real.log (t.val : ℝ) :=
   (Real.log_of_pos (NNReal.coe_pos.mpr (Units.zero_lt t))).symm
 
@@ -4028,19 +4030,19 @@ private theorem modulatedDecayStage_twists_isInducing (k : GoodCompact) :
     (Eq.trans ?_ hInduced.symm)⟩
   exact (Equiv.sigmaEquivProd I _).symm.iInf_congr (fun _ ↦ rfl)
 
-/-- Translating the exponent set by the negative of a weight exponent makes
-multiplication by that weight a continuous linear equivalence. -/
-private theorem modulatedDecay_weightTranslation (a : ℝ) :
-    ∃ e : ModulatedExponentialDecay m I ≃L[ℂ]
-        ModulatedExponentialDecay m ((fun b : ℝ ↦ b - a) '' I),
-      ∀ f, (e f).val = modulationWeight m a f.val := by
-  have weight_add {A : Type _} [CommGroup A] [TopologicalSpace A]
+private theorem modulationWeight_add_weight {A : Type _} [CommGroup A] [TopologicalSpace A]
       (n : A →ₜ* ℝ≥0ˣ) (b c : ℝ) (f : A → ℂ) :
       modulationWeight n b (modulationWeight n c f) = modulationWeight n (b + c) f := by
     funext x
     have hx : 0 < ((n x).val : ℝ) := NNReal.coe_pos.mpr (Units.zero_lt (n x))
     simp only [modulationWeight, LinearMap.mulLeft_apply, Pi.mul_apply,
       Real.rpow_add hx, Complex.ofReal_mul, mul_assoc]
+
+/-- A weight by `c` acts continuously between decay spaces whenever each target
+exponent plus `c` belongs to the source. The map uses the same compact quotient at
+each stage. -/
+private def modulatedExponentialDecay_weightMap (S T : Set ℝ) (c : ℝ) (h : ∀ b ∈ T, b + c ∈ S) :
+    ModulatedExponentialDecay m S →L[ℂ] ModulatedExponentialDecay m T := by
   let shift {A : Type _} [CommGroup A] [TopologicalSpace A]
       (n : A →ₜ* ℝ≥0ˣ) (S T : Set ℝ) (c : ℝ) (h : ∀ b ∈ T, b + c ∈ S) :
       modulatedExponentialDecaySubmodule n S →ₗ[ℂ] modulatedExponentialDecaySubmodule n T :=
@@ -4049,35 +4051,47 @@ private theorem modulatedDecay_weightTranslation (a : ℝ) :
         intro f
         refine (Submodule.mem_iInf _).mpr fun b ↦ Submodule.mem_comap.mpr ?_
         change modulationWeight n b (modulationWeight n c f.val) ∈ schwartzBruhatSubmodule A
-        rw [weight_add]
+        rw [modulationWeight_add_weight]
         exact modulationWeight_mem_schwartzBruhat n S ⟨b + c, h b b.property⟩ f)
-  let continuousShift (S T : Set ℝ) (c : ℝ) (h : ∀ b ∈ T, b + c ∈ S) :
-      ModulatedExponentialDecay m S →L[ℂ] ModulatedExponentialDecay m T := by
-    let F : ModulatedExponentialDecay m S →ₗ[ℂ] ModulatedExponentialDecay m T := shift m S T c h
-    refine ⟨F, ?_⟩
-    change Continuous F
-    let FinalSeminorms (U : Set ℝ) := {q : Seminorm ℂ (modulatedExponentialDecaySubmodule m U) //
-      ∀ k : GoodCompact, Continuous (q ∘ modulatedExponentialDecayStageInclusion m U k)}
-    have generating (U : Set ℝ) :=
-      withGeneratingSeminorms_spec _ (Subtype.val : FinalSeminorms U → _)
-    refine (generating T).continuous_of_continuous_comp F fun p ↦ ?_
-    let q : Seminorm ℂ (ModulatedExponentialDecay m S) := p.val.comp F
-    change Continuous q
-    have hq (k : GoodCompact) : Continuous (q ∘ modulatedExponentialDecayStageInclusion m S k) := by
-      let n := quotientModulation m k.val k.property.1
-      let stageShift : ModulatedExponentialDecayStage m S k →ₗ[ℂ]
-          ModulatedExponentialDecayStage m T k := shift n S T c h
-      have hstage : Continuous stageShift := by
-        apply (modulatedDecayStage_twists_isInducing m T k).continuous_iff.mpr
-        apply continuous_pi
-        intro b
-        let d : S := ⟨b + c, h b b.property⟩
-        have htwist : Continuous (fun f : ModulatedExponentialDecayStage m S k ↦
-            modulatedExponentialDecayTwist n S d f) :=
-          (continuous_apply d).comp (modulatedDecayStage_twists_isInducing m S k).continuous
-        exact htwist.congr fun f ↦ Subtype.ext (weight_add n b c f.val).symm
-      exact ((p.property k).comp hstage).congr fun f ↦ congrArg p.val (Subtype.ext rfl)
-    exact (generating S).continuous_seminorm (⟨q, hq⟩ : FinalSeminorms S)
+  let F : ModulatedExponentialDecay m S →ₗ[ℂ] ModulatedExponentialDecay m T := shift m S T c h
+  refine ⟨F, ?_⟩
+  change Continuous F
+  let FinalSeminorms (U : Set ℝ) := {q : Seminorm ℂ (modulatedExponentialDecaySubmodule m U) //
+    ∀ k : GoodCompact, Continuous (q ∘ modulatedExponentialDecayStageInclusion m U k)}
+  have generating (U : Set ℝ) :=
+    withGeneratingSeminorms_spec _ (Subtype.val : FinalSeminorms U → _)
+  refine (generating T).continuous_of_continuous_comp F fun p ↦ ?_
+  let q : Seminorm ℂ (ModulatedExponentialDecay m S) := p.val.comp F
+  change Continuous q
+  have hq (k : GoodCompact) : Continuous (q ∘ modulatedExponentialDecayStageInclusion m S k) := by
+    let n := quotientModulation m k.val k.property.1
+    let stageShift : ModulatedExponentialDecayStage m S k →ₗ[ℂ]
+        ModulatedExponentialDecayStage m T k := shift n S T c h
+    have hstage : Continuous stageShift := by
+      apply (modulatedDecayStage_twists_isInducing m T k).continuous_iff.mpr
+      apply continuous_pi
+      intro b
+      let d : S := ⟨b + c, h b b.property⟩
+      have htwist : Continuous (fun f : ModulatedExponentialDecayStage m S k ↦
+          modulatedExponentialDecayTwist n S d f) :=
+        (continuous_apply d).comp (modulatedDecayStage_twists_isInducing m S k).continuous
+      exact htwist.congr fun f ↦ Subtype.ext (modulationWeight_add_weight n b c f.val).symm
+    exact ((p.property k).comp hstage).congr fun f ↦ congrArg p.val (Subtype.ext rfl)
+  exact (generating S).continuous_seminorm (⟨q, hq⟩ : FinalSeminorms S)
+
+/-- The continuous weight map acts by pointwise multiplication. -/
+theorem modulatedExponentialDecay_exists_weightMap (S T : Set ℝ) (c : ℝ)
+    (h : ∀ b ∈ T, b + c ∈ S) :
+    ∃ M : ModulatedExponentialDecay m S →L[ℂ] ModulatedExponentialDecay m T,
+      ∀ f, (M f).val = modulationWeight m c f.val :=
+  ⟨modulatedExponentialDecay_weightMap m S T c h, fun _ ↦ rfl⟩
+
+/-- Translating the exponent set by the negative of a weight exponent makes
+multiplication by that weight a continuous linear equivalence. -/
+private theorem modulatedDecay_weightTranslation (a : ℝ) :
+    ∃ e : ModulatedExponentialDecay m I ≃L[ℂ]
+        ModulatedExponentialDecay m ((fun b : ℝ ↦ b - a) '' I),
+      ∀ f, (e f).val = modulationWeight m a f.val := by
   let J := (fun b : ℝ ↦ b - a) '' I
   have hforward : ∀ b ∈ J, b + a ∈ I := by
     rintro b ⟨d, hd, rfl⟩
@@ -4085,18 +4099,18 @@ private theorem modulatedDecay_weightTranslation (a : ℝ) :
   have hbackward : ∀ b ∈ I, b + -a ∈ J := by
     intro b hb
     exact ⟨b, hb, sub_eq_add_neg b a⟩
-  let forward : ModulatedExponentialDecay m I →L[ℂ] ModulatedExponentialDecay m J := continuousShift I J a hforward
-  let backward : ModulatedExponentialDecay m J →L[ℂ] ModulatedExponentialDecay m I := continuousShift J I (-a) hbackward
+  let forward : ModulatedExponentialDecay m I →L[ℂ] ModulatedExponentialDecay m J := modulatedExponentialDecay_weightMap m I J a hforward
+  let backward : ModulatedExponentialDecay m J →L[ℂ] ModulatedExponentialDecay m I := modulatedExponentialDecay_weightMap m J I (-a) hbackward
   have hleft : LeftInverse backward forward := by
     intro f
     apply Subtype.ext
     change modulationWeight m (-a) (modulationWeight m a f.val) = f.val
-    rw [weight_add, neg_add_cancel, modulationWeight_zero]
+    rw [modulationWeight_add_weight, neg_add_cancel, modulationWeight_zero]
   have hright : RightInverse backward forward := by
     intro f
     apply Subtype.ext
     change modulationWeight m a (modulationWeight m (-a) f.val) = f.val
-    rw [weight_add, add_neg_cancel, modulationWeight_zero]
+    rw [modulationWeight_add_weight, add_neg_cancel, modulationWeight_zero]
   exact ⟨ContinuousLinearEquiv.equivOfInverse forward backward hleft hright, fun _ ↦ rfl⟩
 
 end WeightTranslation
@@ -4475,7 +4489,7 @@ private theorem logModulation_mul_schwartzBruhat_continuousLinear {φ : ℝ → 
 
 omit hm hms in
 /-- Every twist in a closed interval is recovered continuously from the two endpoint twists. -/
-private theorem modulationWeight_between_continuous (a c b : ℝ) (hac : a ≤ c) (hcb : c ≤ b) :
+theorem modulationWeight_between_continuous (a c b : ℝ) (hac : a ≤ c) (hcb : c ≤ b) :
     ∃ F : SchwartzBruhat G × SchwartzBruhat G →L[ℂ] SchwartzBruhat G,
       ∀ (f : G → ℂ) (p : SchwartzBruhat G × SchwartzBruhat G),
         p.1.val = modulationWeight m a f → p.2.val = modulationWeight m b f →
@@ -4583,7 +4597,7 @@ theorem modulatedExponentialDecayStage_endpoints_closedEmbedding (k : GoodCompac
   exact ⟨T, ⟨⟨hT, hinj⟩, hclosedRange⟩, fun _ ↦ ⟨rfl, rfl⟩⟩
 
 /-- A proper surjective modulation pulls a compact generating neighborhood back to one. -/
-private theorem compactlyGenerated_of_surjective_modulation : IsCompactlyGeneratedGroup G := by
+theorem compactlyGenerated_of_surjective_modulation : IsCompactlyGeneratedGroup G := by
   have : ConnectedSpace (Multiplicative ℝ) := inferInstanceAs (ConnectedSpace ℝ)
   have : ConnectedSpace ℝ≥0ˣ := positiveRealLogEquiv.symm.toHomeomorph.surjective.connectedSpace
     positiveRealLogEquiv.symm.continuous

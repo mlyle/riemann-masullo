@@ -84,8 +84,40 @@ private theorem summable_zeroWeights_of_bins {ι : Type*}
     (h m : ι → ℝ) (hm : ∀ i, 0 ≤ m i) (C : ℝ)
     (hcount : ∀ (n : ℕ) (S : Finset ι), (∀ i ∈ S, ⌊|h i|⌋₊ = n) →
       ∑ i ∈ S, m i ≤ C * ((n : ℝ) + 1) ^ (1 / 2 : ℝ)) :
-    Summable (fun i ↦ m i / (1 + |h i|) ^ 2) :=
-  (tsum_zeroWeights_le_of_bins h m hm C hcount).1
+    Summable (fun i ↦ m i / (1 + |h i|) ^ 2) := by
+  classical
+  let b (i : ι) := ⌊|h i|⌋₊
+  let u (n : ℕ) := C / ((n : ℝ) + 1) ^ (3 / 2 : ℝ)
+  have hu : Summable u := by
+    have h := ((Real.summable_one_div_nat_add_rpow 1 (3 / 2)).2 (by norm_num)).mul_left C
+    simpa [u, abs_of_nonneg, add_nonneg, div_eq_mul_inv] using h
+  have hC : 0 ≤ C := by simpa using hcount 0 ∅ (by simp)
+  apply summable_of_sum_le (c := ∑' n, u n) (fun i ↦ div_nonneg (hm i) (sq_nonneg _))
+  intro S
+  have hf (n : ℕ) : ∑ i ∈ S with b i = n, m i / (1 + |h i|) ^ 2 ≤ u n := by
+    let T := S.filter (fun i ↦ b i = n)
+    have ht : ∀ i ∈ T, ⌊|h i|⌋₊ = n := fun i hi ↦ (Finset.mem_filter.mp hi).2
+    have hn : 0 < (n : ℝ) + 1 := by positivity
+    calc
+      _ ≤ ∑ i ∈ T, m i / ((n : ℝ) + 1)^2 := by
+        apply Finset.sum_le_sum
+        intro i hi
+        have he : b i = n := (Finset.mem_filter.mp hi).2
+        have hle : (n : ℝ) ≤ |h i| := he ▸ Nat.floor_le (abs_nonneg _)
+        exact div_le_div_of_nonneg_left (hm i) (sq_pos_of_pos hn)
+          (pow_le_pow_left₀ hn.le (by linarith) 2)
+      _ = (∑ i ∈ T, m i) / ((n : ℝ) + 1)^2 := by simp only [div_eq_mul_inv, Finset.sum_mul]
+      _ ≤ C * ((n : ℝ) + 1) ^ (1 / 2 : ℝ) / ((n : ℝ) + 1)^2 :=
+        div_le_div_of_nonneg_right (hcount n T ht) (sq_nonneg _)
+      _ = u n := by
+        rw [show (((n : ℝ) + 1)^2) = ((n : ℝ) + 1)^(2 : ℝ) from (Real.rpow_two _).symm,
+          mul_div_assoc, ← Real.rpow_sub hn, show (1 : ℝ)/2-2 = -(3/2) by norm_num, Real.rpow_neg hn.le]
+        rfl
+  calc
+    _ = ∑ n ∈ S.image b, ∑ i ∈ S with b i = n, m i / (1 + |h i|) ^ 2 :=
+      (Finset.sum_fiberwise_of_maps_to (fun i hi ↦ Finset.mem_image_of_mem b hi) _).symm
+    _ ≤ ∑ n ∈ S.image b, u n := Finset.sum_le_sum (fun n _ ↦ hf n)
+    _ ≤ ∑' n, u n := hu.sum_le_tsum _ fun _ _ ↦ div_nonneg hC (Real.rpow_nonneg (by positivity) _)
 
 /-- Jensen’s inequality bounds the sum of orders on any finite subset of the smaller disc. -/
 private theorem zeroCount_disk_sum {f : ℂ → ℂ} {c : ℂ} {r R B : ℝ}

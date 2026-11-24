@@ -1,8 +1,12 @@
 module
 
 public import RiemannMasullo.Ch05_ThetaZSpaces.Sec3b
+import RiemannMasullo.AppD_SchwartzBruhat.Sec1b
 import RiemannMasullo.Ch02_AdelicTheta.Sec2a
+import RiemannMasullo.Ch05_ThetaZSpaces.Sec3b_PolarFreeExamples
 import RiemannMasullo.ForMathlib.Analysis.SpecialFunctions.Gaussian.Schwartz
+import RiemannMasullo.ForMathlib.NumberTheory.NumberField.Completion.FinitePlace
+import Mathlib.Analysis.SpecialFunctions.Complex.Circle
 import Mathlib.Analysis.SpecialFunctions.Gaussian.PoissonSummation
 import RiemannMasullo.ForMathlib.Analysis.Distribution.SchwartzSpace.Gaussian
 
@@ -555,14 +559,209 @@ def Printed.sAdelePolarFree_inclusion : Prop :=
             (c w').val.symm (x.2 w')
         h (Multiplicative.ofAdd (xArch, y)) = f.val x * ∏ v : S, zeroExtension(g v) (y v)
 
-/-- Paper: Definition 5.3.4.1, p. 259. Take ℚ with its real and 3-adic places. Take a
-nonzero smooth real bump supported in (1, 2) and the 3-adic multiplicative test
-g(3ᵏu) = 3⁻ᵏ for k ≥ 0 and zero for k < 0, where u is an integer unit. Its shell sequence
-is Schwartz. At any real point where the bump is nonzero, the finite slice of the prescribed
-product vanishes at zero and is nonzero at every 3ᵏ for k ≥ 0, violating local constancy. -/
+section
+
+open scoped BigOperators
+
+/-- Nontrivial circle powers cannot all have real part greater than one half. -/
+private theorem polarFreeTensor_circle_eq_one (u : Circle)
+    (hu : ∀ n : ℕ, 1 / 2 < ((u : ℂ) ^ n).re) : u = 1 := by
+  by_contra h
+  have hne : (u : ℂ) - 1 ≠ 0 := sub_ne_zero.mpr fun h' ↦ h (Subtype.ext h')
+  obtain ⟨n, hn⟩ := exists_nat_gt (4 / ‖(u : ℂ) - 1‖)
+  have hs : (n : ℝ) / 2 ≤ (∑ k ∈ Finset.range n, (u : ℂ) ^ k).re := by
+    rw [Complex.re_sum]
+    simpa [div_eq_mul_inv] using Finset.sum_le_sum (s := Finset.range n) (fun i _ ↦ (hu i).le)
+  have hb : ‖(u : ℂ) ^ n - 1‖ ≤ 2 := by
+    calc
+      _ ≤ ‖(u : ℂ) ^ n‖ + ‖(1 : ℂ)‖ := norm_sub_le _ _
+      _ = _ := by rw [norm_pow, Circle.norm_coe, one_pow, norm_one]; norm_num
+  rw [← geom_sum_mul _ n, norm_mul] at hb
+  have hmul := mul_le_mul_of_nonneg_right
+    (hs.trans (Complex.re_le_norm _)) (norm_nonneg ((u : ℂ) - 1))
+  have hp := (div_lt_iff₀ (norm_pos_iff.mpr hne)).mp hn
+  nlinarith
+
+/-- An elementary group has an identity neighborhood containing no nontrivial cyclic group. -/
+private theorem polarFreeTensor_elementary_neighborhood {m n r : ℕ} {F : Type*} [AddCommGroup F]
+    [TopologicalSpace F] [DiscreteTopology F] :
+    ∃ U ∈ 𝓝 (0 : ElementaryLieGroup m n r F),
+      ∀ x : ElementaryLieGroup m n r F, (∀ k : ℕ, k • x ∈ U) → x = 0 := by
+  let U : Set (ElementaryLieGroup m n r F) := {x | ‖x.1‖ < 1 ∧
+    (∀ i : Fin n, 1 / 2 < ((AddCircle.toCircle (x.2.1 i) : Circle) : ℂ).re) ∧
+    x.2.2 = 0}
+  have htorus : ∀ i : Fin n, ∀ᶠ x : ElementaryLieGroup m n r F in 𝓝 0,
+      1 / 2 < ((AddCircle.toCircle (x.2.1 i) : Circle) : ℂ).re := by
+    intro i
+    have hc : Continuous fun x : ElementaryLieGroup m n r F ↦
+        ((AddCircle.toCircle (x.2.1 i) : Circle) : ℂ).re :=
+      Complex.continuous_re.comp (continuous_subtype_val.comp
+        (AddCircle.continuous_toCircle.comp ((continuous_apply i).comp continuous_snd.fst)))
+    exact (continuousAt_const.eventually_lt hc.continuousAt (by simp; norm_num))
+  have hreal : ∀ᶠ x : ElementaryLieGroup m n r F in 𝓝 0, ‖x.1‖ < 1 :=
+    continuous_fst.norm.continuousAt.eventually_lt continuousAt_const (by simp)
+  have hdisc : ∀ᶠ x : ElementaryLieGroup m n r F in 𝓝 0, x.2.2 = 0 := by
+    have h : ContinuousAt (fun x : ElementaryLieGroup m n r F ↦ x.2.2) 0 :=
+      (continuous_snd.snd :
+      Continuous (fun x : ElementaryLieGroup m n r F ↦ x.2.2)).continuousAt
+    have hz : ({0} : Set ((Fin r → ℤ) × F)) ∈ 𝓝 0 :=
+      (isOpen_discrete ({0} : Set ((Fin r → ℤ) × F))).mem_nhds (by simp)
+    exact h.eventually hz
+  refine ⟨U, hreal.and ((eventually_all.mpr htorus).and hdisc), fun x hx ↦ ?_⟩
+  have hr : x.1 = 0 := by
+    by_contra h
+    obtain ⟨k, hk⟩ := exists_nat_gt (1 / ‖x.1‖)
+    have hlt := (hx k).1
+    change ‖k • x.1‖ < 1 at hlt
+    rw [← Nat.cast_smul_eq_nsmul ℝ, norm_smul, Real.norm_of_nonneg (Nat.cast_nonneg _)] at hlt
+    exact (not_lt_of_ge ((div_lt_iff₀ (norm_pos_iff.mpr h)).mp hk).le) hlt
+  have ht : x.2.1 = 0 := by
+    funext i
+    apply AddCircle.injective_toCircle (one_ne_zero : (1 : ℝ) ≠ 0)
+    rw [Pi.zero_apply, AddCircle.toCircle_zero]
+    apply polarFreeTensor_circle_eq_one
+    intro k
+    have hki := (hx k).2.1 i
+    change 1 / 2 < ((AddCircle.toCircle (k • x.2.1 i) : Circle) : ℂ).re at hki
+    simpa only [AddCircle.toCircle_nsmul, Circle.coe_pow] using hki
+  exact Prod.ext hr (Prod.ext ht (by simpa using (hx 1).2.2))
+
+private theorem polarFreeTensor_stage_neighborhood {G : Type*} [CommGroup G] [TopologicalSpace G]
+    (a : BruhatStructuralPair G) (e : ElementaryLCAPresentation a.quotient) :
+    ∃ U ∈ 𝓝 (1 : G), ∀ x : G, (∀ k : ℕ, x ^ k ∈ U) → x ∈ OrderDual.ofDual a.val.2 := by
+  let q : a.val.1 →* a.quotient := QuotientGroup.mk' _
+  let f := e.equiv.toMulEquiv.toMonoidHom.comp q
+  obtain ⟨W, hW, hsmall⟩ := polarFreeTensor_elementary_neighborhood
+    (m := e.realDim) (n := e.torusDim) (r := e.latticeRank) (F := e.finiteFactor)
+  have hf : Continuous f := e.equiv.continuous_toFun.comp QuotientGroup.continuous_mk
+  have hpre : f ⁻¹' W ∈ 𝓝 (1 : a.val.1) := by
+    apply hf.continuousAt.preimage_mem_nhds
+    rwa [map_one f]
+  refine ⟨Subtype.val '' (f ⁻¹' W),
+    a.property.1.isOpenEmbedding_subtypeVal.isOpenMap.image_mem_nhds hpre, fun x hx ↦ ?_⟩
+  obtain ⟨y, _, rfl⟩ := (pow_one x ▸ hx 1 : x ∈ Subtype.val '' (f ⁻¹' W))
+  apply (a.quotient_mk_eq_one y).mp
+  apply e.equiv.injective
+  rw [map_one e.equiv]
+  apply hsmall (f y)
+  intro k
+  change (f y) ^ k ∈ W
+  rw [← map_pow]
+  obtain ⟨z, hz, hzy⟩ := hx k
+  exact (Subtype.ext hzy : z = y ^ k) ▸ hz
+
+private theorem polarFreeTensor_stage_period {G : Type*} [CommGroup G] [TopologicalSpace G]
+    (a : BruhatStructuralPair G) (e : ElementaryLCAPresentation a.quotient) (s : SchwartzBruhatStage e)
+    {g : G} (hg : g ∈ OrderDual.ofDual a.val.2) (x : G) :
+    schwartzBruhatStageRealization a e s (g * x) = schwartzBruhatStageRealization a e s x := by
+  classical
+  have hh := a.property.2.2.2 hg
+  simp only [schwartzBruhatStageRealization_apply, a.val.1.mul_mem_cancel_left hh]
+  split_ifs with hx
+  · let u : a.val.1 := ⟨g, hh⟩
+    let v : a.val.1 := ⟨x, hx⟩
+    have hu := (a.quotient_mk_eq_one u).mpr hg
+    have huv : (QuotientGroup.mk (u * v) : a.quotient) = QuotientGroup.mk v := by
+      rw [QuotientGroup.mk_mul, hu, one_mul]
+    exact congrArg (fun q : a.quotient ↦ s (e.equiv q).toAdd) huv
+  · rfl
+
+/-- A structural stage gives a common additive period in each nonarchimedean direction. -/
+private theorem polarFreeTensor_eventually_periodic
+    {G H : Type*} [CommGroup G] [TopologicalSpace G] [IsTopologicalGroup G]
+    [T2Space G] [LocallyCompactSpace G] [AddGroup H] [TopologicalSpace H]
+    [NonarchimedeanAddGroup H] (j : Multiplicative H →* G)
+    (hj : Continuous j) (f : SchwartzBruhat G) :
+    ∀ᶠ y : H in 𝓝 0, ∀ x, f (j (Multiplicative.ofAdd y) * x) = f x := by
+  obtain ⟨a, e, s, hs⟩ := (mem_schwartzBruhatSubmodule_iff (f : G → ℂ)).mp
+    ((SchwartzBruhat.toSubmodule G f).property)
+  obtain ⟨U, hU, hker⟩ := polarFreeTensor_stage_neighborhood a e
+  have hJ : (j ∘ Multiplicative.ofAdd) ⁻¹' U ∈ 𝓝 (0 : H) :=
+    (hj.comp continuous_ofAdd).continuousAt.preimage_mem_nhds (by simpa using hU)
+  obtain ⟨V, hV⟩ := NonarchimedeanAddGroup.is_nonarchimedean _ hJ
+  filter_upwards [V.isOpen.mem_nhds V.zero_mem] with y hy x
+  rw [← hs]
+  apply polarFreeTensor_stage_period a e s _ x
+  apply hker
+  intro k
+  have h := hV (V.nsmul_mem hy k)
+  change j (Multiplicative.ofAdd (k • y)) ∈ U at h
+  simpa only [ofAdd_nsmul, map_pow] using h
+
+end
+
+/-- Paper: Definition 5.3.4.1, p. 259. Take ℚ with its real and 3-adic places.
+Use a flat bump with value one at the archimedean identity and a multiplicative test
+with value q⁻ⁿ on the nonnegative valuation shells, where q is the residue field cardinality.
+At the archimedean identity the finite slice vanishes at zero and takes a nonzero value
+at every nonnegative power of a uniformizer, violating local constancy. -/
 theorem Printed.sAdelePolarFree_inclusion_false :
     ¬ Printed.sAdelePolarFree_inclusion := by
-  sorry
+  classical
+  intro H
+  let v : V(ℚ) := (Rat.HeightOneSpectrum.primesEquiv (R := 𝓞 ℚ)).symm ⟨3, Nat.prime_three⟩
+  let S : Finset V(ℚ) := {v}
+  let w : S := ⟨v, Finset.mem_singleton_self v⟩
+  have hw (u : S) : u = w := Subtype.ext (Finset.mem_singleton.mp u.property)
+  let : Unique S := ⟨⟨w⟩, hw⟩
+  let r (u : RealPlaces(ℚ)) : {e : u.val.Completion ≃+* ℝ // IsHomeomorph (e : u.val.Completion → ℝ)} :=
+    ⟨InfinitePlace.Completion.ringEquivRealOfIsReal u.property,
+      (InfinitePlace.Completion.isometryEquivRealOfIsReal u.property).toHomeomorph.isHomeomorph⟩
+  let c (u : ComplexPlaces(ℚ)) : {e : u.val.Completion ≃+* ℂ // IsHomeomorph (e : u.val.Completion → ℂ)} :=
+    ⟨InfinitePlace.Completion.ringEquivComplexOfIsComplex u.property,
+      (InfinitePlace.Completion.isometryEquivComplexOfIsComplex u.property).toHomeomorph.isHomeomorph⟩
+  obtain ⟨f, hf⟩ := exists_archimedeanFlatSchwartz_one (RealPlaces(ℚ)) (ComplexPlaces(ℚ))
+  obtain ⟨π, g₀, hπ, hg₀⟩ := exists_polarFree_geometric_shell_test v
+  let g (u : S) : SchwartzBruhat (u.val.adicCompletion ℚ)ˣ := (hw u).symm ▸ g₀
+  have hg : g w = g₀ := by dsimp only [g]
+  obtain ⟨h, hh⟩ := H ℚ S r c f g
+  have hslice (y : (u : S) → u.val.adicCompletion ℚ) :
+      h (Multiplicative.ofAdd ((1, y) : SAdeleRing ℚ S)) = zeroExtension(g₀) (y w) := by
+    have h₁ : (fun a : InfinitePlace ℚ ↦
+        if ha : a.IsReal then (r ⟨a, ha⟩).val.symm ((1 : RealPlaces(ℚ) → ℝ) ⟨a, ha⟩)
+        else
+          let a' : ComplexPlaces(ℚ) := ⟨a, InfinitePlace.not_isReal_iff_isComplex.mp ha⟩
+          (c a').val.symm ((1 : ComplexPlaces(ℚ) → ℂ) a')) = (1 : InfiniteAdeleRing ℚ) := by
+      funext a
+      split <;> exact map_one _
+    have hv := hh (1, 1) y
+    dsimp only at hv
+    rw [h₁, hf, one_mul, Fintype.prod_subsingleton _ w, hg] at hv
+    exact hv
+  have hzero : h (Multiplicative.ofAdd ((1, 0) : SAdeleRing ℚ S)) = 0 := by
+    simp [hslice]
+  have hq : 1 < (v.asIdeal.absNorm : ℝ) := by
+    exact_mod_cast NumberField.HeightOneSpectrum.one_lt_absNorm v
+  have hπsmall : ‖π.val‖ < 1 := hπ ▸ inv_lt_one_of_one_lt₀ hq
+  let addSingle := AddMonoidHom.single (fun u : S ↦ u.val.adicCompletion ℚ) w
+  let j : Multiplicative (w.val.adicCompletion ℚ) →* Multiplicative (SAdeleRing ℚ S) :=
+    ((AddMonoidHom.inr (InfiniteAdeleRing ℚ) _).comp addSingle).toMultiplicative
+  have hj : Continuous j := by
+    change Continuous (fun y : Multiplicative (w.val.adicCompletion ℚ) ↦
+      Multiplicative.ofAdd ((0, Pi.single w y.toAdd) : SAdeleRing ℚ S))
+    exact continuous_ofAdd.comp ((continuous_const.prodMk (continuous_single w)).comp continuous_toAdd)
+  let (u : S) : ProperSpace (u.val.adicCompletion ℚ) := properSpace_adicCompletion u.val
+  let : LocallyCompactSpace (Multiplicative (SAdeleRing ℚ S)) :=
+    inferInstanceAs (LocallyCompactSpace
+      (((a : InfinitePlace ℚ) → a.Completion) × ((u : S) → u.val.adicCompletion ℚ)))
+  let : T2Space (Multiplicative (SAdeleRing ℚ S)) :=
+    inferInstanceAs (T2Space
+      (((a : InfinitePlace ℚ) → a.Completion) × ((u : S) → u.val.adicCompletion ℚ)))
+  have hperiod := polarFreeTensor_eventually_periodic j hj h
+  have hlim := tendsto_pow_atTop_nhds_zero_of_norm_lt_one hπsmall
+  obtain ⟨n, hn⟩ := (hlim.eventually hperiod).exists
+  have hpow := hn (Multiplicative.ofAdd ((1, 0) : SAdeleRing ℚ S))
+  change h (Multiplicative.ofAdd
+    ((0 + 1, Pi.single w (π.val ^ n) + 0) : SAdeleRing ℚ S)) = _ at hpow
+  rw [zero_add, add_zero, hzero, hslice, Pi.single_eq_same] at hpow
+  have hn₀ : π.val ^ n ≠ 0 := pow_ne_zero n π.ne_zero
+  have hqpos : 0 < v.asIdeal.absNorm := by exact_mod_cast zero_lt_one.trans hq
+  have hq₀ : (v.asIdeal.absNorm : ℂ) ≠ 0 := by exact_mod_cast hqpos.ne'
+  have hval : zeroExtension(g₀) (π.val ^ n) = g₀ (π ^ n) := by
+    change (if h : π.val ^ n ≠ 0 then g₀ (Units.mk0 (π.val ^ n) h) else 0) = g₀ (π ^ n)
+    rw [dite_eq_left hn₀]
+    exact congrArg (fun u : (v.adicCompletion ℚ)ˣ ↦ g₀ u) (Units.ext (by simp))
+  exact pow_ne_zero n (inv_ne_zero hq₀) ((hg₀ n).symm.trans (hval.symm.trans hpow))
 
 /-- Paper: Lemma 5.3.4.2(2), proof, p. 260. As printed: For every number field, finite set
 of places containing the archimedean places and place in the set, restriction of S-idele

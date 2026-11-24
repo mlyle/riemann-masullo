@@ -1059,7 +1059,7 @@ private theorem Printed.rawIsotype_global_aux (F : Type) [Field F] [NumberField 
           IdeleClassGroup (𝓞 F) F →ₜ* ℝ≥0ˣ) 0 (homogeneousAdelicTheta ω f))) : False := by
   obtain ⟨f, _, hg0⟩ := globalTheta_zero_eval_theta_one F
   have hF := Printed.rawIsotype_factorization_norm h
-    (by simp [intervalSobolevDensity]) f
+    (by simp [intervalSobolevMeasure, intervalSobolevDensity]) f
   simp only [modulationWeight_zero] at hF
   let : BorelSpace (IdeleClassGroup (𝓞 F) F) := ⟨rfl⟩
   let : T2Space (IdeleClassGroup (𝓞 F) F) := (ideleGroup_quotient.{_, 0} F).2.2.2.2.2.1

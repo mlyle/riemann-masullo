@@ -1888,6 +1888,128 @@ private theorem completedHeckeL_continuation_isBigO_one (χ : U[F]) (Λ : ℂ �
 
 end TateBound
 
+section HeckeDiscBound
+
+open IsDedekindDomain Metric
+
+/-- The finite Hecke product on a line to the right of one is bounded below by
+the reciprocal norm of the Dedekind zeta value on the real axis. -/
+private theorem finiteHeckeL_disc_center_lower (χ : U[F]) (x : ℝ) (hx : 1 < x)
+    (s : halfPlane) (hs : (s : ℂ).re = x) :
+    1 ≤ ‖finiteHeckeL χ s‖ * ‖dedekindZeta F (x : ℂ)‖ := by
+  classical
+  have hp := ((finiteHeckeL_hasProd χ s).mul
+    (dedekindZeta_hasProd F (s := (x : ℂ)) (by simpa using hx))).norm
+  rw [norm_mul] at hp
+  apply ge_of_tendsto' hp
+  intro T
+  rw [norm_prod]
+  refine Finset.one_le_prod₀ fun v _ ↦ ?_
+  let q : ℝ := v.asIdeal.absNorm
+  let b := q ^ (-x)
+  have hq : 1 < q := by
+    dsimp [q]
+    exact_mod_cast NumberField.HeightOneSpectrum.one_lt_absNorm v
+  have hb : 0 ≤ b := Real.rpow_nonneg (zero_lt_one.trans hq).le _
+  have hb₁ : b < 1 := Real.rpow_lt_one_of_one_lt_of_neg hq (by linarith)
+  have hzb : (1 - (v.asIdeal.absNorm : ℂ) ^ (-(x : ℂ))) = ((1 - b : ℝ) : ℂ) := by
+    rw [Complex.ofReal_sub, Complex.ofReal_one, show (v.asIdeal.absNorm : ℂ) = (q : ℂ) by
+      exact (Complex.ofReal_natCast _).symm, ← Complex.ofReal_neg,
+      ← Complex.ofReal_cpow (zero_lt_one.trans hq).le]
+  rw [norm_mul, hzb, norm_inv, Complex.norm_real, Real.norm_eq_abs,
+    abs_of_pos (sub_pos.mpr hb₁), finiteHeckeEulerFactor]
+  split_ifs
+  · let u := (ideleClassNormTwist χ 0).localValue v * (v.asIdeal.absNorm : ℂ) ^ (-(s : ℂ))
+    change 1 ≤ ‖(1 - u)⁻¹‖ * (1 - b)⁻¹
+    have hu : ‖u‖ = b := by
+      dsimp only [u, b]
+      rw [norm_mul, norm_ideleClassNormTwist_zero_localValue, one_mul, ← Complex.ofReal_natCast,
+        Complex.norm_cpow_eq_rpow_re_of_pos (zero_lt_one.trans hq), Complex.neg_re, hs]
+    have hne : 1 - u ≠ 0 := fun h ↦ hb₁.ne (by rw [← hu, ← sub_eq_zero.mp h, norm_one])
+    rw [norm_inv, ← mul_inv]
+    apply (one_le_inv₀ (mul_pos (norm_pos_iff.mpr hne) (sub_pos.mpr hb₁))).2
+    have htriangle := norm_sub_le (1 : ℂ) u
+    rw [norm_one, hu] at htriangle
+    exact (mul_le_mul_of_nonneg_right htriangle (sub_nonneg.mpr hb₁.le)).trans (by nlinarith)
+  · rw [norm_one, one_mul]
+    exact (one_le_inv₀ (sub_pos.mpr hb₁)).2 (sub_le_self _ hb)
+
+/-- On any disc of fixed radius centred on a line to the right of one, the ratio of
+the completed continuation to its value at the centre grows at most exponentially
+at large absolute heights. -/
+theorem completedHeckeL_continuation_disc_bound (χ : U[F]) (L : ℂ → ℂ)
+    (hL : MeromorphicNFOn L univ) (hAgree : ∀ s : halfPlane, L s = completedHeckeL χ s)
+    (x r : ℝ) (hx : 1 < x) (hr : 0 ≤ r) :
+    ∃ C > (0 : ℝ), ∀ᶠ t : ℝ in comap abs atTop,
+      L ⟨x, t⟩ ≠ 0 ∧
+        ∀ u ∈ closedBall (⟨x, t⟩ : ℂ) r, ‖L u / L ⟨x, t⟩‖ ≤ Real.exp (C * (1 + |t|)) := by
+  obtain ⟨M, hM⟩ := Asymptotics.isBigO_iff.mp
+    (completedHeckeL_continuation_isBigO_one χ L hL hAgree (x - r - 1) (x + r + 1) (by linarith))
+  rw [eventually_inf_principal, eventually_comap, eventually_atTop] at hM
+  obtain ⟨T₁, hT₁⟩ := hM
+  obtain ⟨B, hB, hGamma⟩ := inv_heckeGammaFactor_isBigO_exp χ (x - 1) (x + 1)
+  obtain ⟨N, hN⟩ := Asymptotics.isBigO_iff.mp hGamma
+  rw [eventually_inf_principal, eventually_comap, eventually_atTop] at hN
+  obtain ⟨T₂, hT₂⟩ := hN
+  let Z := ‖dedekindZeta F (x : ℂ)‖
+  let E := max (M * N * Z) 1
+  have hE : 1 ≤ E := le_max_right _ _
+  let C := B + Real.log E
+  have hC : 0 < C := add_pos_of_pos_of_nonneg hB (Real.log_nonneg hE)
+  refine ⟨C, hC, ?_⟩
+  filter_upwards [tendsto_comap.eventually (eventually_ge_atTop (max (T₁ + r) T₂))] with t ht
+  change max (T₁ + r) T₂ ≤ |t| at ht
+  let z : ℂ := ⟨x, t⟩
+  let w : halfPlane := ⟨z, hx⟩
+  have hZ : 1 ≤ ‖finiteHeckeL χ w‖ * Z := finiteHeckeL_disc_center_lower χ x hx w rfl
+  have hn : finiteHeckeL χ w ≠ 0 := by
+    intro hzero
+    norm_num [hzero] at hZ
+  have hg : heckeGammaFactor χ z ≠ 0 := heckeGammaFactor_ne_zero_of_re_pos _ (zero_lt_one.trans hx)
+  have hEq : L z = heckeGammaFactor χ z * finiteHeckeL χ w := hAgree w
+  refine ⟨by rw [hEq]; exact mul_ne_zero hg hn, fun u hu ↦ ?_⟩
+  change ‖L u / L z‖ ≤ _
+  rw [mem_closedBall, Complex.dist_eq] at hu
+  have hr' : |u.re - x| ≤ r := by
+    have hh := Complex.abs_re_le_norm (u - z)
+    rw [Complex.sub_re] at hh
+    exact hh.trans hu
+  have hi' : |u.im - t| ≤ r := by
+    have hh := Complex.abs_im_le_norm (u - z)
+    rw [Complex.sub_im] at hh
+    exact hh.trans hu
+  have hTU : T₁ ≤ |u.im| := by
+    have := abs_sub_abs_le_abs_sub t u.im
+    rw [abs_sub_comm t u.im] at this
+    linarith [le_trans (le_max_left (T₁ + r) T₂) ht]
+  have hU := hT₁ _ hTU u rfl (show u.re ∈ Icc (x - r - 1) (x + r + 1) by
+    have hh := abs_le.mp hr'
+    exact ⟨by linarith [hh.1], by linarith [hh.2]⟩)
+  have hNZ := hT₂ _ ((le_max_right (T₁ + r) T₂).trans ht) z rfl
+    (show z.re ∈ Icc (x - 1) (x + 1) by constructor <;> dsimp [z] <;> linarith)
+  simp only [norm_one, mul_one] at hU
+  rw [Real.norm_of_nonneg (Real.exp_pos _).le] at hNZ
+  have hM₀ : 0 ≤ M := (norm_nonneg _).trans hU
+  have hFin : ‖(finiteHeckeL χ w)⁻¹‖ ≤ Z := by
+    rw [norm_inv, ← one_div]
+    exact (div_le_iff₀ (norm_pos_iff.mpr hn)).mpr (by simpa [mul_comm] using hZ)
+  rw [div_eq_mul_inv, hEq, mul_inv_rev, norm_mul, norm_mul]
+  calc
+    _ ≤ M * (Z * (N * Real.exp (B * |t|))) := by
+      exact mul_le_mul hU (mul_le_mul hFin hNZ (norm_nonneg _) (norm_nonneg _))
+        (by positivity) hM₀
+    _ = (M * N * Z) * Real.exp (B * |t|) := by ring
+    _ ≤ E * Real.exp (B * |t|) := mul_le_mul_of_nonneg_right (le_max_left _ _) (Real.exp_pos _).le
+    _ = Real.exp (Real.log E + B * |t|) := by
+      rw [Real.exp_add, Real.exp_log (zero_lt_one.trans_le hE)]
+    _ ≤ _ := by
+      apply Real.exp_le_exp.mpr
+      have := mul_nonneg (Real.log_nonneg hE) (abs_nonneg t)
+      dsimp [C]
+      nlinarith
+
+end HeckeDiscBound
+
 /-- A preliminary exponential bound for the finite continuation on a fixed strip.
 Tate's split zeta integral gives boundedness of the completed function at large height, and
 reciprocal gamma factors cost at most an exponential in the absolute height. -/

@@ -4,6 +4,7 @@ public import RiemannMasullo.Ch12_TraceGeometric.Sec4
 import all RiemannMasullo.Ch03_IdelicZeta.Sec3
 import all RiemannMasullo.Ch02_AdelicTheta.Sec1
 import RiemannMasullo.Ch03_IdelicZeta.Sec4
+import RiemannMasullo.ForMathlib.NumberTheory.NumberField.Basic
 
 /-! # The printed Fourier cutoff range in §12.4 -/
 

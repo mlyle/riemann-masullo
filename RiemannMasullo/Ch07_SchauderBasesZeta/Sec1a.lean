@@ -511,7 +511,7 @@ private theorem sLocalRhoFactor_poles_iff_order_of_eq {f e P Q : ℂ → ℂ} {s
 /-- At a real place, the restricted local Tate factor is the epsilon factor times the ratio of
 real Gamma factors. Its poles are those of the Gamma factor of the quasi-character, they are
 simple and lie in the closed left half-plane, where the factor has no zeros. -/
-private theorem sLocalRhoFactor_poles_iff_real (χ : PontryaginDual Jₛ) (w : InfinitePlace F)
+theorem sLocalRhoFactor_poles_iff_real (χ : PontryaginDual Jₛ) (w : InfinitePlace F)
     (hw : w.IsReal) (s : ℂ) :
     let c := fun z : ℂ ↦ twistₛ ((⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp χ) z
     let A := fun z ↦ infiniteLocalTateFactor w (sLocalInfiniteRestriction w (c z))
@@ -714,7 +714,7 @@ private theorem sLocalRhoFactor_poles_iff_complex (χ : PontryaginDual Jₛ) (w 
 the local Euler factors. It has a pole exactly when the restricted character is unramified and
 its Euler factor has a pole, which is simple and lies on the imaginary axis; in the closed left
 half-plane the factor has no zeros. -/
-private theorem sLocalRhoFactor_poles_iff_finite (χ : PontryaginDual Jₛ) (v : S) :
+theorem sLocalRhoFactor_poles_iff_finite (χ : PontryaginDual Jₛ) (v : S) :
     let c := fun z : ℂ ↦ twistₛ ((⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp χ) z
     let B := fun z ↦ finiteLocalTateFactor v.val (sLocalFiniteRestriction v (c z))
     let ψ := sLocalFiniteRestriction v (c 0)
@@ -873,7 +873,7 @@ private theorem sLocalRhoFactor_poles_iff_finite (χ : PontryaginDual Jₛ) (v :
 /-- At a finite place, a unitary character is unramified with value `q^{s}` at a normalized
 uniformizer exactly when it is the norm to the power `i t` for a unique `t` in one period and `s`
 lies on the corresponding lattice of the imaginary axis. -/
-private theorem sLocalRhoFactor_poles_iff_finite_explicit (v : HeightOneSpectrum (𝓞 F))
+theorem sLocalRhoFactor_poles_iff_finite_explicit (v : HeightOneSpectrum (𝓞 F))
     (ψ : QuasiCharacter (v.adicCompletion F)ˣ) (hψ : ∀ x, ‖ψ x‖ = 1)
     (π : (v.adicCompletion F)ˣ) (hπ : ‖π.val‖ = (v.asIdeal.absNorm : ℝ)⁻¹) (s : ℂ) :
     ((∀ u : (v.adicCompletionIntegers F)ˣ,

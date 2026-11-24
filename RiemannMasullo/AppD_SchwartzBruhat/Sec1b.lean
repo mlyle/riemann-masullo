@@ -6,7 +6,7 @@ public import RiemannMasullo.AppA_AlgebraicNT.Sec1
 public import Mathlib.Geometry.Manifold.ChartedSpace
 public import Mathlib.Topology.MetricSpace.Ultra.Basic
 public import Mathlib.Topology.Instances.ZMod
-import all RiemannMasullo.AppC_LCTVS.Sec2b
+import RiemannMasullo.AppC_LCTVS.Sec2b
 import all RiemannMasullo.AppD_SchwartzBruhat.Sec1a
 import Mathlib.Algebra.Category.Grp.Injective
 import RiemannMasullo.ForMathlib.Analysis.Calculus.FDeriv.Symmetric
@@ -4206,7 +4206,7 @@ theorem pontryaginDual_restriction_isBruhatSmooth (χ : PontryaginDual G)
 
 omit hTop hT2 hLC in
 /-- Point evaluations separate Schwartz–Bruhat functions for every group. -/
-private theorem schwartzBruhat_t2_of_stages : T2Space (SchwartzBruhat G) := by
+theorem schwartzBruhat_t2_of_stages : T2Space (SchwartzBruhat G) := by
   refine T2Space.of_injective_continuous (f := fun f : SchwartzBruhat G ↦ f.val)
     (fun _ _ h ↦ Subtype.ext h) (continuous_pi fun x ↦ ?_)
   let ev : SchwartzBruhat G →ₗ[ℂ] ℂ :=

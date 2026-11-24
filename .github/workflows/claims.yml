@@ -47,7 +47,10 @@ jobs:
           python3 scripts/ci/stale_claims.py --apply
 
   claim:
-    if: ${{ github.event_name == 'issue_comment' && !github.event.issue.pull_request }}
+    # Only a comment that claims or releases needs a runner. Every other issue comment used to start
+    # this job too, and waited for a runner with everything else (#6797). `startsWith` ignores
+    # case; the step below still checks the exact form of the first line.
+    if: ${{ github.event_name == 'issue_comment' && !github.event.issue.pull_request && (startsWith(github.event.comment.body, 'claim') || startsWith(github.event.comment.body, 'releas')) }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}

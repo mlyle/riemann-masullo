@@ -376,15 +376,6 @@ theorem map_mul_indentationMeasureLift {ν₀ : Measure Q} [ν₀.Regular] {μ�
   simpa only [integral_complex_ofReal] using
     (show (∫ x, (f (L x) : ℂ) ∂μ₀) = ∫ x, (f x : ℂ) ∂μ₀ from hint)
 
-/-- Paper: Corollary 12.2.1.2(2), p. 506. Fibre integration extends to a surjective
-continuous complex-linear map of L¹ spaces, agreeing with the original map on compact tests. -/
-theorem exists_indentationAverageL1 {ν₀ : Measure Q} [ν₀.Regular] {μ₀ : Measure G}
-    (hμ₀ : IsIndentationMeasureLift H hH μH ν₀ μ₀) :
-    ∃ A : Lp ℂ 1 μ₀ →L[ℂ] Lp ℂ 1 ν₀,
-      Function.Surjective A ∧
-        ∀ (f : C_c(G, ℂ)) (F : Lp ℂ 1 μ₀), (F : G → ℂ) =ᵐ[μ₀] f →
-          (A F : Q → ℂ) =ᵐ[ν₀] indentationAverage H hH μH f := by sorry
-
 include hH in
 omit [T2Space G] [BorelSpace G] [μH.IsHaarMeasure] in
 private theorem exists_indentationLiftL1_compact {b : G → ℝ} (hb : IsIndentation H μH b)
@@ -541,6 +532,115 @@ theorem exists_indentationLiftL1 {ν₀ : Measure Q} [ν₀.Regular] {μ₀ : Me
     have hLF : ⇑(L u) =ᵐ[μ₀] F := hF ▸ hrep u f huf
     exact (hA F (L u) hLF).trans (havg ▸ huf.symm)
   exact fun u ↦ congrFun heq u
+
+include hH in
+/-- Fibre averaging of a compactly supported test does not increase the L¹ norm. -/
+private theorem exists_indentationAverageL1_norm {ν₀ : Measure Q} [ν₀.Regular] {μ₀ : Measure G}
+    (hμ₀ : IsIndentationMeasureLift H hH μH ν₀ μ₀) (f : C_c(G, ℂ)) :
+    ∫ q, ‖indentationAverage H hH μH f q‖ ∂ν₀ ≤ ∫ x, ‖f x‖ ∂μ₀ := by
+  have : BorelSpace Q := ⟨rfl⟩
+  let : μ₀.Regular := hμ₀.1
+  let fn : C_c(G, ℂ) := ⟨⟨fun x ↦ (‖f x‖ : ℂ), Complex.continuous_ofReal.comp f.continuous.norm⟩,
+    f.hasCompactSupport.comp_left (g := fun z : ℂ ↦ (‖z‖ : ℂ)) (by simp)⟩
+  have hint := hμ₀.2 fn
+  have hpt (q : Q) : ‖indentationAverage H hH μH f q‖ ≤ (indentationAverage H hH μH fn q).re := by
+    obtain ⟨x, rfl⟩ := QuotientGroup.mk_surjective q
+    obtain ⟨-, h1⟩ := indentationAverage_apply H hH μH f x
+    obtain ⟨-, h2⟩ := indentationAverage_apply H hH μH fn x
+    change ‖indentationAverage H hH μH f (π x)‖ ≤ (indentationAverage H hH μH fn (π x)).re
+    rw [h1, h2]
+    change _ ≤ (∫ h : H, ((‖f ((h : G)⁻¹ * x)‖ : ℝ) : ℂ) ∂μH).re
+    rw [integral_complex_ofReal, Complex.ofReal_re]
+    exact norm_integral_le_integral_norm _
+  calc ∫ q, ‖indentationAverage H hH μH f q‖ ∂ν₀
+      ≤ ∫ q, (indentationAverage H hH μH fn q).re ∂ν₀ :=
+        integral_mono (indentationAverage H hH μH f).integrable.norm
+          (indentationAverage H hH μH fn).integrable.re hpt
+    _ = (∫ q, indentationAverage H hH μH fn q ∂ν₀).re :=
+        integral_re (indentationAverage H hH μH fn).integrable
+    _ = (∫ x, fn x ∂μ₀).re := by rw [hint]
+    _ = ∫ x, ‖f x‖ ∂μ₀ := by
+        refine (show (∫ x, fn x ∂μ₀).re = ∫ x, (fn x).re ∂μ₀ from
+          (integral_re fn.integrable).symm).trans ?_
+        rfl
+
+/-- Paper: Corollary 12.2.1.2(2), p. 506. Fibre integration extends to a surjective
+continuous complex-linear map of L¹ spaces, agreeing with the original map on compact tests. -/
+theorem exists_indentationAverageL1 {ν₀ : Measure Q} [ν₀.Regular] {μ₀ : Measure G}
+    (hμ₀ : IsIndentationMeasureLift H hH μH ν₀ μ₀) :
+    ∃ A : Lp ℂ 1 μ₀ →L[ℂ] Lp ℂ 1 ν₀,
+      Function.Surjective A ∧
+        ∀ (f : C_c(G, ℂ)) (F : Lp ℂ 1 μ₀), (F : G → ℂ) =ᵐ[μ₀] f →
+          (A F : Q → ℂ) =ᵐ[ν₀] indentationAverage H hH μH f := by
+  have : BorelSpace Q := ⟨rfl⟩
+  let : μ₀.Regular := hμ₀.1
+  let S : C_c(G, ℂ) →ₗ[ℂ] Lp ℂ 1 μ₀ :=
+    { toFun := fun f ↦ (f.integrable (μ := μ₀)).toL1 f
+      map_add' := fun f g ↦ Integrable.toL1_add _ _ f.integrable g.integrable
+      map_smul' := fun c f ↦ Integrable.toL1_smul _ f.integrable c }
+  let T : C_c(G, ℂ) →ₗ[ℂ] Lp ℂ 1 ν₀ :=
+    { toFun := fun f ↦ ((indentationAverage H hH μH f).integrable (μ := ν₀)).toL1 _
+      map_add' := fun f g ↦ by
+        simp only [map_add]
+        exact Integrable.toL1_add _ _ (indentationAverage H hH μH f).integrable
+          (indentationAverage H hH μH g).integrable
+      map_smul' := fun c f ↦ by
+        simp only [map_smul]
+        exact Integrable.toL1_smul _ (indentationAverage H hH μH f).integrable c }
+  have hS (f : C_c(G, ℂ)) : ‖S f‖ = ∫ x, ‖f x‖ ∂μ₀ :=
+    L1.norm_of_fun_eq_integral_norm f.integrable
+  have hT (f : C_c(G, ℂ)) : ‖T f‖ = ∫ q, ‖indentationAverage H hH μH f q‖ ∂ν₀ :=
+    L1.norm_of_fun_eq_integral_norm (indentationAverage H hH μH f).integrable
+  have hle (f : C_c(G, ℂ)) : ‖T f‖ ≤ ‖S f‖ := by
+    rw [hS, hT]
+    exact exists_indentationAverageL1_norm H hH μH hμ₀ f
+  have hker : LinearMap.ker S ≤ LinearMap.ker T := fun f hf ↦ by
+    rw [LinearMap.mem_ker] at hf ⊢
+    exact norm_le_zero_iff.mp ((hle f).trans (by rw [hf, norm_zero]))
+  let A₀ : LinearMap.range S →ₗ[ℂ] Lp ℂ 1 ν₀ :=
+    ((LinearMap.ker S).liftQ T hker).comp S.quotKerEquivRange.symm.toLinearMap
+  have hA₀ (f : C_c(G, ℂ)) : A₀ ⟨S f, f, rfl⟩ = T f := by
+    have : S.quotKerEquivRange.symm ⟨S f, f, rfl⟩ = (LinearMap.ker S).mkQ f :=
+      S.quotKerEquivRange.symm_apply_eq.mpr rfl
+    simp only [A₀, LinearMap.comp_apply, LinearEquiv.coe_coe, this]
+    exact Submodule.liftQ_apply _ _ _
+  have hbound (v : LinearMap.range S) : ‖A₀ v‖ ≤ 1 * ‖v‖ := by
+    obtain ⟨_, f, rfl⟩ := v
+    rw [hA₀, one_mul]
+    exact hle f
+  let A₀c : LinearMap.range S →L[ℂ] Lp ℂ 1 ν₀ := A₀.mkContinuous 1 hbound
+  have hD : Dense (LinearMap.range S : Set (Lp ℂ 1 μ₀)) := by
+    rw [Metric.dense_iff]
+    intro F r hr
+    obtain ⟨v, hvs, hv, hvc, -⟩ := (Lp.memLp F).exists_hasCompactSupport_eLpNorm_sub_le
+      ENNReal.one_ne_top (ENNReal.ofReal_pos.mpr (half_pos hr)).ne'
+    let f : C_c(G, ℂ) := ⟨⟨v, hvc⟩, hvs⟩
+    refine ⟨S f, ?_, f, rfl⟩
+    rw [Metric.mem_ball, dist_comm, dist_eq_norm, Lp.norm_def]
+    have hae : ⇑(F - S f) =ᵐ[μ₀] ⇑F - v :=
+      (Lp.coeFn_sub F (S f)).trans ((Integrable.coeFn_toL1 f.integrable).mono fun x hx ↦ by
+        change F x - (S f) x = F x - v x
+        rw [show (S f) x = v x from hx])
+    rw [eLpNorm_congr_ae hae]
+    calc (eLpNorm (⇑F - v) 1 μ₀).toReal ≤ (ENNReal.ofReal (r / 2)).toReal :=
+          ENNReal.toReal_mono ENNReal.ofReal_ne_top hv
+      _ = r / 2 := ENNReal.toReal_ofReal (half_pos hr).le
+      _ < r := half_lt_self hr
+  have hdense : DenseRange (LinearMap.range S).subtypeL := hD.denseRange_val
+  let A := A₀c.extend (LinearMap.range S).subtypeL
+  have hAS (f : C_c(G, ℂ)) : A (S f) = T f := by
+    have := A₀c.extend_eq hdense isUniformEmbedding_subtype_val.isUniformInducing ⟨S f, f, rfl⟩
+    exact this.trans (hA₀ f)
+  have hAF : ∀ (f : C_c(G, ℂ)) (F : Lp ℂ 1 μ₀), (F : G → ℂ) =ᵐ[μ₀] f →
+      (A F : Q → ℂ) =ᵐ[ν₀] indentationAverage H hH μH f := by
+    intro f F hF
+    have hFS : F = S f := Lp.ext (hF.trans (Integrable.coeFn_toL1 f.integrable).symm)
+    rw [hFS, hAS]
+    exact Integrable.coeFn_toL1 (indentationAverage H hH μH f).integrable
+  obtain ⟨b, hb⟩ := exists_indentation H hH μH
+  obtain ⟨L, -, hL, -⟩ := exists_indentationLiftL1 H hH μH hμ₀ A hAF hb
+  exact ⟨A, hL.surjective, hAF⟩
+
 
 end Indentations
 
@@ -1372,30 +1472,6 @@ theorem aemeasurable_diagonalIndentationLift_right :
   simpa only [hswap] using
     aemeasurable_diagonalIndentationLift_left H hH hν hS hb hu hdiag hi
 
-include hH hν hS hb hu hdiag hi in
-/-- Paper: (12.2.2.3), p. 508. The first skew-diagonal evaluation is absolutely
-integrable on the fundamental domain times the subgroup. -/
-theorem integrable_diagonalIndentationLift_left :
-    Integrable (fun p : G × H ↦ Ψ uSmooth ((p.2 : G)⁻¹ * p.1, p.1))
-      ((μ.restrict D).prod countH) := by sorry
-
-include hH hν hS hb hu hdiag hi in
-/-- Paper: Proposition 12.2.2.2(2), p. 508. The second skew-diagonal evaluation is
-absolutely integrable on the fundamental domain times the subgroup. -/
-theorem integrable_diagonalIndentationLift_right :
-    Integrable (fun p : G × H ↦ Ψ uSmooth (p.1, (p.2 : G)⁻¹ * p.1))
-      ((μ.restrict D).prod countH) := by
-  have hweight (x y : G) :
-      diagonalIndentationWeight H countH b (x, y) = diagonalIndentationWeight H countH b (y, x) :=
-    integral_congr_ae (ae_of_all _ fun k ↦ mul_comm _ _)
-  have hswap (h : H) (x : G) :
-      Ψ uSmooth ((h : G)⁻¹ * x, x) = Ψ uSmooth (x, (h : G)⁻¹ * x) := by
-    have h1 : π (h : G) = 1 := (QuotientGroup.eq_one_iff _).mpr h.property
-    have hπ : π ((h : G)⁻¹ * x) = π x := by rw [map_mul, map_inv, h1, inv_one, one_mul]
-    simp only [diagonalIndentationLift, Prod.map_apply, hπ, hweight ((h : G)⁻¹ * x) x]
-  simpa only [hswap] using
-    integrable_diagonalIndentationLift_left H hH hν hS hb hu hdiag hi
-
 /-- Summing the averaged indentation weight over the translates of the first coordinate gives
 one, since the indentation sums to one over each orbit. -/
 private theorem integral_diagonalIndentationLift_left_weight [Countable H]
@@ -1471,6 +1547,142 @@ private theorem integral_diagonalIndentationLift_left_orbit (x y : G) :
     refine ⟨⟨(x⁻¹ * y)⁻¹, H.inv_mem hxy⟩, ?_⟩
     change (x⁻¹ * y)⁻¹ * y = x
     rw [mul_inv_rev, inv_inv, mul_comm y⁻¹ x, mul_assoc, inv_mul_cancel, mul_one]
+
+include hH hν hS hb hu hdiag hi in
+/-- Paper: (12.2.2.3), p. 508. The first skew-diagonal evaluation is absolutely
+integrable on the fundamental domain times the subgroup. -/
+theorem integrable_diagonalIndentationLift_left :
+    Integrable (fun p : G × H ↦ Ψ uSmooth ((p.2 : G)⁻¹ * p.1, p.1))
+      ((μ.restrict D).prod countH) := by
+  let : Countable H := TopologicalSpace.separableSpace_iff_countable.mp inferInstance
+  have hq (p : G × H) : q₂ ((p.2 : G)⁻¹ * p.1, p.1) = (π p.1, π p.1) := by
+    have h1 : π ((p.2 : G)) = 1 := (QuotientGroup.eq_one_iff _).mpr p.2.property
+    simp only [Prod.map_apply, map_mul, map_inv, h1, inv_one, one_mul]
+  have hw0 (p : G × H) :
+      0 ≤ diagonalIndentationWeight H countH b ((p.2 : G)⁻¹ * p.1, p.1) :=
+    integral_nonneg fun h ↦ mul_nonneg (hb.2.1 _) (hb.2.1 _)
+  have hnorm (p : G × H) : ‖Ψ uSmooth ((p.2 : G)⁻¹ * p.1, p.1)‖ =
+      diagonalIndentationWeight H countH b ((p.2 : G)⁻¹ * p.1, p.1) *
+        ‖uSmooth (π p.1, π p.1)‖ := by
+    simp only [diagonalIndentationLift, hq p, norm_mul, Complex.norm_real]
+    rw [Real.norm_of_nonneg (hw0 p)]
+  have hW (x : G) := integral_diagonalIndentationLift_left_weight H hb x
+  have hWlin (x : G) : ∫⁻ h : H,
+      ENNReal.ofReal (diagonalIndentationWeight H countH b ((h : G)⁻¹ * x, x)) ∂countH = 1 := by
+    rw [← ofReal_integral_eq_lintegral_ofReal (hW x).1
+      (ae_of_all _ fun h ↦ integral_nonneg fun k ↦ mul_nonneg (hb.2.1 _) (hb.2.1 _)),
+      (hW x).2, ENNReal.ofReal_one]
+  have hpt (x : G) (h : H) : ENNReal.ofReal ‖Ψ uSmooth ((h : G)⁻¹ * x, x)‖ =
+      ENNReal.ofReal (diagonalIndentationWeight H countH b ((h : G)⁻¹ * x, x)) *
+        ENNReal.ofReal ‖uSmooth (π x, π x)‖ := by
+    rw [hnorm (x, h), ENNReal.ofReal_mul (hw0 (x, h))]
+  have hlin (x : G) : ∫⁻ h : H, ENNReal.ofReal ‖Ψ uSmooth ((h : G)⁻¹ * x, x)‖ ∂countH =
+      ENNReal.ofReal ‖uSmooth (π x, π x)‖ := by
+    have hm : AEMeasurable (fun h : H ↦ ENNReal.ofReal
+        (diagonalIndentationWeight H countH b ((h : G)⁻¹ * x, x))) countH :=
+      ENNReal.measurable_ofReal.comp_aemeasurable (hW x).1.aestronglyMeasurable.aemeasurable
+    calc ∫⁻ h : H, ENNReal.ofReal ‖Ψ uSmooth ((h : G)⁻¹ * x, x)‖ ∂countH
+        = ∫⁻ h : H, ENNReal.ofReal (diagonalIndentationWeight H countH b ((h : G)⁻¹ * x, x)) *
+            ENNReal.ofReal ‖uSmooth (π x, π x)‖ ∂countH := lintegral_congr (hpt x)
+      _ = (∫⁻ h : H, ENNReal.ofReal
+            (diagonalIndentationWeight H countH b ((h : G)⁻¹ * x, x)) ∂countH) *
+            ENNReal.ofReal ‖uSmooth (π x, π x)‖ := lintegral_mul_const'' _ hm
+      _ = ENNReal.ofReal ‖uSmooth (π x, π x)‖ := by rw [hWlin x, one_mul]
+  -- a Borel fundamental domain for the subgroup and the quotient map on it
+  have hD : IsIndentationFundamentalDomain H μ D := hS.1
+  have hFD : IsFundamentalDomain H D μ := hD.isFundamentalDomain
+  obtain ⟨M, hMD, hMm, -⟩ := hFD.nullMeasurableSet.exists_measurable_subset_ae_eq
+  have hinjM : Set.InjOn (Quotient.mk (MulAction.orbitRel H G)) M := by
+    intro x hx y hy hxy
+    obtain ⟨h, hh⟩ := Quotient.eq.mp hxy
+    have hx' : (h : G) * y = x := hh
+    obtain ⟨a, -, ha⟩ := hD.2.1 y
+    have h1 : h = 1 := (ha h (show h • y ∈ D by
+        rw [Subgroup.smul_def, smul_eq_mul, hx']; exact hMD hx)).trans
+      (ha 1 (show (1 : H) • y ∈ D by rw [one_smul]; exact hMD hy)).symm
+    rw [← hx', h1, OneMemClass.coe_one, one_mul]
+  obtain ⟨Δ, hΔm, -, hΔb⟩ := exists_borel_orbit_transversal hMm hinjM
+  have hbij : Function.Bijective (fun x : Δ ↦ (QuotientGroup.mk x.val : G ⧸ H)) := by
+    refine ⟨fun x y hxy ↦ hΔb.injective
+      ((integral_diagonalIndentationLift_left_orbit H _ _).mpr hxy), fun q ↦ ?_⟩
+    obtain ⟨g, rfl⟩ := QuotientGroup.mk_surjective q
+    obtain ⟨x, hx⟩ := hΔb.surjective (Quotient.mk (MulAction.orbitRel H G) g)
+    exact ⟨x, (integral_diagonalIndentationLift_left_orbit H _ _).mp hx⟩
+  have hΔFD : IsFundamentalDomain H Δ μ := by
+    refine IsFundamentalDomain.mk' hΔm.nullMeasurableSet fun x ↦ ?_
+    obtain ⟨y, hy⟩ := hΔb.surjective (Quotient.mk (MulAction.orbitRel H G) x)
+    obtain ⟨h, hh⟩ := Quotient.eq.mp hy
+    have hh' : h • x = y.val := hh
+    refine ⟨h, show h • x ∈ Δ by rw [hh']; exact y.property, fun h' hh₂ ↦ ?_⟩
+    have hh₂' : h' • x ∈ Δ := hh₂
+    have hsame : (⟨h' • x, hh₂'⟩ : Δ) = y :=
+      hΔb.injective ((Quotient.sound (s := MulAction.orbitRel H G) (a := h' • x) (b := x)
+        ⟨h', rfl⟩).trans hy.symm)
+    have hxy : (h' : G) * x = (h : G) * x := (congrArg Subtype.val hsame).trans hh'.symm
+    exact Subtype.ext (mul_right_cancel hxy)
+  -- integrability on the transversal and the value of its norm integral
+  have hfg : Integrable (fun q : G ⧸ H ↦ ((‖uSmooth (q, q)‖ : ℝ) : ℂ)) ν := hi.norm.ofReal
+  have hind : Integrable (fun x : G ↦ ((‖uSmooth (π x, π x)‖ : ℝ) : ℂ)) (μ.restrict Δ) :=
+    (integrable_indicator_iff hΔm).1
+      ((weilFundamentalDomain_integrable_iff H hH μ hΔm hbij ν hν _).1 hfg)
+  have hIntΔ : Integrable (fun x : G ↦ ‖uSmooth (π x, π x)‖) (μ.restrict Δ) := by
+    simpa using MeasureTheory.Integrable.norm hind
+  have hvalΔ : ∫ x in Δ, ‖uSmooth (π x, π x)‖ ∂μ = ∫ q, ‖uSmooth (q, q)‖ ∂ν := by
+    have h := weilFundamentalDomain_integral H hH μ hΔm hbij ν hν hfg
+    have hL : ∫ q, ((‖uSmooth (q, q)‖ : ℝ) : ℂ) ∂ν =
+        ((∫ q, ‖uSmooth (q, q)‖ ∂ν : ℝ) : ℂ) := integral_ofReal
+    have hR : ∫ x in Δ, ((‖uSmooth (QuotientGroup.mk x, QuotientGroup.mk x)‖ : ℝ) : ℂ) ∂μ =
+        ((∫ x in Δ, ‖uSmooth (QuotientGroup.mk x, QuotientGroup.mk x)‖ ∂μ : ℝ) : ℂ) :=
+      integral_ofReal
+    rw [hL, hR] at h
+    exact Complex.ofReal_injective h.symm
+  -- the upper bound
+  have hinv : ∀ (h : H) (x : G),
+      ENNReal.ofReal ‖uSmooth (π ((h : G) * x), π ((h : G) * x))‖ =
+        ENNReal.ofReal ‖uSmooth (π x, π x)‖ := by
+    intro h x
+    have h1 : π (h : G) = 1 := (QuotientGroup.eq_one_iff _).mpr h.property
+    rw [map_mul, h1, one_mul]
+  have hsm : AEMeasurable (fun q : G ⧸ H ↦ ENNReal.ofReal ‖uSmooth (q, q)‖) ν :=
+    ENNReal.measurable_ofReal.comp_aemeasurable
+      (aemeasurable_dSequenceKernelSmoothening_diagonal H hH hν hS hu hdiag).norm
+  have hprod : ∫⁻ p : G × H, ENNReal.ofReal ‖Ψ uSmooth ((p.2 : G)⁻¹ * p.1, p.1)‖
+      ∂((μ.restrict D).prod countH) ≤ ENNReal.ofReal (∫ q, ‖uSmooth (q, q)‖ ∂ν) := by
+    calc ∫⁻ p : G × H, ENNReal.ofReal ‖Ψ uSmooth ((p.2 : G)⁻¹ * p.1, p.1)‖
+          ∂((μ.restrict D).prod countH)
+        ≤ ∫⁻ x, ∫⁻ h : H, ENNReal.ofReal ‖Ψ uSmooth ((h : G)⁻¹ * x, x)‖ ∂countH
+            ∂(μ.restrict D) := lintegral_prod_le _
+      _ = ∫⁻ x, ENNReal.ofReal ‖uSmooth (π x, π x)‖ ∂(μ.restrict D) := by simp_rw [hlin]
+      _ = ∫⁻ x, ENNReal.ofReal ‖uSmooth (π x, π x)‖ ∂(μ.restrict Δ) :=
+          hFD.setLIntegral_eq hΔFD (fun x ↦ ENNReal.ofReal ‖uSmooth (π x, π x)‖) hinv
+      _ = ENNReal.ofReal (∫ x in Δ, ‖uSmooth (π x, π x)‖ ∂μ) := by
+          rw [← ofReal_integral_eq_lintegral_ofReal hIntΔ (ae_of_all _ fun x ↦ norm_nonneg _)]
+      _ = ENNReal.ofReal (∫ q, ‖uSmooth (q, q)‖ ∂ν) := by rw [hvalΔ]
+  refine ⟨?_, ?_⟩
+  · exact ((aemeasurable_diagonalIndentationLift_left H hH hν hS hb hu hdiag hi).mono_measure
+      (Measure.prod_mono Measure.restrict_le_self le_rfl)).aestronglyMeasurable
+  · rw [hasFiniteIntegral_iff_norm]
+    exact lt_of_le_of_lt hprod ENNReal.ofReal_lt_top
+
+
+include hH hν hS hb hu hdiag hi in
+/-- Paper: Proposition 12.2.2.2(2), p. 508. The second skew-diagonal evaluation is
+absolutely integrable on the fundamental domain times the subgroup. -/
+theorem integrable_diagonalIndentationLift_right :
+    Integrable (fun p : G × H ↦ Ψ uSmooth (p.1, (p.2 : G)⁻¹ * p.1))
+      ((μ.restrict D).prod countH) := by
+  have hweight (x y : G) :
+      diagonalIndentationWeight H countH b (x, y) = diagonalIndentationWeight H countH b (y, x) :=
+    integral_congr_ae (ae_of_all _ fun k ↦ mul_comm _ _)
+  have hswap (h : H) (x : G) :
+      Ψ uSmooth ((h : G)⁻¹ * x, x) = Ψ uSmooth (x, (h : G)⁻¹ * x) := by
+    have h1 : π (h : G) = 1 := (QuotientGroup.eq_one_iff _).mpr h.property
+    have hπ : π ((h : G)⁻¹ * x) = π x := by rw [map_mul, map_inv, h1, inv_one, one_mul]
+    simp only [diagonalIndentationLift, Prod.map_apply, hπ, hweight ((h : G)⁻¹ * x) x]
+  simpa only [hswap] using
+    integrable_diagonalIndentationLift_left H hH hν hS hb hu hdiag hi
+
+
 
 include hH hν hS hb hu hdiag hi in
 /-- Paper: Proposition 12.2.2.2(2), p. 508. The integral of the smoothened quotient diagonal

@@ -29,7 +29,7 @@ local notation "C₁(" F ")" => (ideleClassNorm F).ker
 local notation "μ(" F ")" => ideleClassTamagawaMeasure F
 local notation "m𝔽(" F ")" =>
   (⟨ideleClassNorm F, (isProperMap_ideleClassNorm F).continuous⟩ : C𝔽(F) →ₜ* ℝ≥0ˣ)
-local notation "logNorm(" F ")" => (fun g : C𝔽(F) ↦ Real.log ((ideleClassNorm F g).val : ℝ))
+local notation "logNorm(" F ")" => (logIdeleClassNorm F)
 local notation "h₀" => le_refl (0 : ℝ)
 local notation "hStrip(" hα ")" => (neg_nonpos.mpr hα |>.trans hα)
 local notation "hs₀(" hs ")" => (le_of_lt (zero_lt_one.trans hs))
@@ -545,7 +545,7 @@ private theorem extraWeight_log_ne_zero : ∀ᵐ x ∂μC, logQ x ≠ 0 := by
       map_one' := by change logQ 1 = 0; simp
       map_mul' := fun x y ↦ by
         change logQ (x * y) = logQ x + logQ y
-        simp only [map_mul, Units.val_mul, NNReal.coe_mul, Real.log_mul
+        simp only [logIdeleClassNorm, map_mul, Units.val_mul, NNReal.coe_mul, Real.log_mul
           (NNReal.coe_pos.mpr (Units.zero_lt _)).ne' (NNReal.coe_pos.mpr (Units.zero_lt _)).ne'] }
   have hn : IsProperMap n := by
     change IsProperMap logQ
