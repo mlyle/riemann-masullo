@@ -53,7 +53,9 @@ theorem exists_rationalCenteredNormTest (g : ℝ → ℂ) (hg : ContDiff ℝ ∞
   · exact (Complex.contDiff_exp.comp ((Complex.ofRealCLM.contDiff).div_const 2)).mul hg
   · exact hc.mul_left
 
-private theorem rational_radial_mellin_one (g : ℝ → ℂ) (φ : BruhatCompactSupport Cℚ)
+/-- The Mellin transform on the trivial rational component is the ordinary
+compact log-Mellin transform with the norm-one Tamagawa volume. -/
+theorem rationalCenteredNormTest_mellin (g : ℝ → ℂ) (φ : BruhatCompactSupport Cℚ)
     (hφ : ∀ x, φ.val x = rationalCenteredLogProfile g (Real.log N(x))) (w : ℂ) :
     M(φ, 1, w - 1 / 2) = Vℚ * compactLogMellin g w := by
   let A (t : ℝ) := rationalCenteredLogProfile g (Real.log t)
@@ -177,7 +179,7 @@ theorem rational_radial_zeroSum (g : ℝ → ℂ) (hg : ContDiff ℝ ∞ g)
   · apply ((rational_full_zeroSum g hg hc h₀).mul_left Vℚ).congr_fun
     intro r
     change ((D(χ 1) r.val : ℤ) : ℂ) * M(φ, χ 1, r.val - 1/2) = _
-    rw [map_one, rational_heckeDivisor_at_zetaZero, rational_radial_mellin_one g φ hφ]
+    rw [map_one, rational_heckeDivisor_at_zetaZero, rationalCenteredNormTest_mellin g φ hφ]
     push_cast
     ring
   · have hn : z.val.1 ≠ 1 := by
