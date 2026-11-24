@@ -1,0 +1,27 @@
+Project base 8b40f11bf88cc95e2cb84fcea6d6f4dd81e4b932
+Zeta-lab base a401821c9608526425f3d4cf7ff8e59bc37e1c79
+Lean toolchain leanprover/lean4:v4.36.0
+
+Unmodified Chapter 10 target
+Build completed successfully (9943 jobs).
+
+Supplemental Zeta23 modules checked from source: 95/95.
+The complete modified RiemannMasullo.Ch10_TraceSpectral.Sec3_Printed compiled under its original module name.
+All 10 original public signatures match byte-for-byte.
+
+Lean axiom collection and recursive proof dependency check
+Zeta23.riemannVonMangoldt_zeta: 62069 reached declarations across 2022 modules; zero direct sorryAx dependencies; kernel axioms [propext,
+ Classical.choice,
+ Quot.sound]
+Zeta23.thmA₀: 70292 reached declarations across 2287 modules; zero direct sorryAx dependencies; kernel axioms [propext,
+ Classical.choice,
+ Quot.sound]
+RiemannMasullo.verified_critical_zero_count: 70296 reached declarations across 2288 modules; zero direct sorryAx dependencies; kernel axioms [propext,
+ Classical.choice,
+ Quot.sound]
+_private.RiemannMasullo.Ch10_TraceSpectral.Sec3_Printed.0.RiemannMasullo.spectralLineJet_rational_critical_zero_count: 70297 reached declarations across 2289 modules; zero direct sorryAx dependencies; kernel axioms [propext,
+ Classical.choice,
+ Quot.sound]
+RiemannMasullo.Printed.spectralLineJet_uniformBiorthogonalBound_false: 114570 reached declarations across 3343 modules; zero direct sorryAx dependencies; kernel axioms [propext,
+ Classical.choice,
+ Quot.sound]

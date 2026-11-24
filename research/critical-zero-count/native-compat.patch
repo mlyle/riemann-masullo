@@ -1,0 +1,220 @@
+--- a/Zeta23/Assembly.lean
++++ b/Zeta23/Assembly.lean
+@@ -119,7 +119,7 @@
+
+ lemma frobSq_eq_sum_norm_sq (A : Matrix n n 𝕜) : frobSq A = ∑ i, ∑ j, ‖A i j‖ ^ 2 := by
+   unfold frobSq
+-  simp only [trace, diag_apply, mul_apply, conjTranspose_apply, map_sum, RCLike.star_def]
++  simp only [trace, diag_apply, Matrix.mul_apply, conjTranspose_apply, map_sum, RCLike.star_def]
+   rw [Finset.sum_comm]
+   refine sum_congr rfl fun i _ => sum_congr rfl fun j _ => ?_
+   rw [RCLike.conj_mul, ← RCLike.ofReal_pow, RCLike.ofReal_re]
+--- a/Zeta23/ExplicitFormula.lean
++++ b/Zeta23/ExplicitFormula.lean
+@@ -35,6 +35,8 @@
+ public import RiemannMasullo.External.ZetaLab.Zeta23.Defs
+
+ @[expose] public section
++
++open scoped Pointwise
+
+ open MeasureTheory Complex Filter Set
+ open scoped Real FourierTransform Convolution ComplexConjugate ArithmeticFunction
+--- a/Zeta23/FromPNTPlus/EulerMaclaurin.lean
++++ b/Zeta23/FromPNTPlus/EulerMaclaurin.lean
+@@ -15,6 +15,7 @@
+ module
+
+ public import Mathlib.NumberTheory.AbelSummation
++public import Mathlib.MeasureTheory.Function.Floor
+
+ /-! We prove the 1st order Euler-Maclaurin formula by specialising Abel summation and manipulating integrals. -/
+
+@@ -30,7 +31,7 @@
+ @[fun_prop]
+ lemma aestronglyMeasurable_B1 : AEStronglyMeasurable B1 := by
+   unfold B1
+-  fun_prop
++  exact ((measurable_id.sub ((measurable_of_countable (fun n : ℕ ↦ (n : ℝ))).comp Nat.measurable_floor)).sub measurable_const).aestronglyMeasurable
+
+ lemma abs_B1_le_half {x : ℝ} (hx : 0 ≤ x) : |B1 x| ≤ 1 / 2 := by
+   unfold B1
+--- a/Zeta23/FromPNTPlus/Mertens.lean
++++ b/Zeta23/FromPNTPlus/Mertens.lean
+@@ -36,6 +36,7 @@
+ Modified 2026 by Anthropic PBC.
+ -/
+
++public import Mathlib.Algebra.Order.Floor.Semifield
+ public import Mathlib.Algebra.Order.Field.GeomSum
+ public import Mathlib.Analysis.SumIntegralComparisons
+ public import Mathlib.NumberTheory.Chebyshev
+--- a/Zeta23/FromPNTPlus/StrongPNTPrefix.lean
++++ b/Zeta23/FromPNTPlus/StrongPNTPrefix.lean
+@@ -19,6 +19,7 @@
+ Modified 2026 by Anthropic PBC.
+ -/
+ public import Zeta23.Prelude.InstancePriorities
++public import Mathlib.Analysis.Complex.RemovableSingularity
+ public import Mathlib.Algebra.Lie.OfAssociative
+ public import Mathlib.Algebra.Order.BigOperators.GroupWithZero.Finset
+ public import Mathlib.Analysis.CStarAlgebra.Classes
+@@ -117,7 +118,10 @@
+     (hyp_z : z ∈ Metric.closedBall 0 r) :
+     ‖deriv f z‖ ≤ 16 * M * R ^ 2 / (R - r) ^ 3 := by
+   have hr' : 2 * M * ((R + r) / 2) ^ 2 / ((R - (R + r) / 2) * ((R + r) / 2 - r) ^ 2) =
+-      4 * M * (R + r) ^ 2 / (R - r) ^ 3 := by field_simp; ring
++      4 * M * (R + r) ^ 2 / (R - r) ^ 3 := by
++        rw [show R - (R + r) / 2 = (R-r)/2 by ring, show (R+r)/2 - r = (R-r)/2 by ring]
++        field_simp [sub_ne_zero.mpr hyp_r.ne.symm]
++        <;> ring
+   calc ‖deriv f z‖
+       _ ≤ 4 * M * (R + r) ^ 2 / (R - r) ^ 3 := hr' ▸
+           DerivativeBound Mpos rpos (by linarith) (by linarith) analytic_f zeroAtZero realPartBounded hyp_z
+--- a/Zeta23/FromPNTPlus/ZetaBounds.lean
++++ b/Zeta23/FromPNTPlus/ZetaBounds.lean
+@@ -14,6 +14,7 @@
+ moved to Lean v4.32.2 / Mathlib 905b95818eb32af7874a58b427f50c1711a5e96c.
+ Modified 2026 by Anthropic PBC.
+ -/
++public import Mathlib.Analysis.PSeriesComplex
+ public import Batteries.Tactic.Lemma
+ public import Mathlib.MeasureTheory.Function.Floor
+ public import Mathlib.MeasureTheory.Order.Group.Lattice
+@@ -767,7 +768,7 @@
+     Tendsto (fun k ↦ ∑ n ∈ Finset.Ioc N k, 1 / (n : ℂ) ^ s) atTop
+     (𝓝 (∑' (n : ℕ), 1 / (n + N + 1 : ℂ) ^ s)) := by
+   let f := fun (n : ℕ) ↦ 1 / (n : ℂ) ^ s
+-  have hf := summable_one_div_nat_cpow.mpr s_re_gt
++  have hf := Complex.summable_one_div_nat_cpow.mpr s_re_gt
+   simp_rw [Finset.Ioc_eq_Ico]
+   convert finsetSum_tendsto_tsum (f := fun n ↦ f (n + 1)) (N := N) ?_ using 1
+   · ext k
+@@ -879,7 +880,8 @@
+   linarith [hσ.2]
+
+ lemma isOpen_aux : IsOpen {z : ℂ | z ≠ 1 ∧ 0 < z.re} := by
+-  refine IsOpen.inter isOpen_ne ?_
++  change IsOpen ({z : ℂ | z ≠ 1} ∩ {z : ℂ | 0 < z.re})
++  refine (isOpen_ne (x := (1 : ℂ))).inter ?_
+   exact isOpen_lt (g := fun (z : ℂ) ↦ z.re) (by continuity) (by continuity)
+
+ open MeasureTheory in
+@@ -1178,7 +1180,7 @@
+   simp only [f,g, zeta_eq_tsum_one_div_nat_cpow hz, riemannZeta0_apply]
+   nth_rewrite 2 [neg_div]
+   rw [← sub_eq_add_neg, ← ZetaSum_aux2 N_pos hz,
+-    ← (summable_one_div_nat_cpow.mpr hz).sum_add_tsum_nat_add (N + 1)]
++    ← (Complex.summable_one_div_nat_cpow.mpr hz).sum_add_tsum_nat_add (N + 1)]
+   norm_cast
+
+ lemma DerivZeta0EqDerivZeta {N : ℕ} (N_pos : 0 < N) {s : ℂ} (reS_pos : 0 < s.re)
+--- a/Zeta23/GammaFacts/IntMu.lean
++++ b/Zeta23/GammaFacts/IntMu.lean
+@@ -74,7 +74,7 @@
+     refine ContinuousOn.mul continuousOn_const ?_
+     intro τ hτ
+     have hτ0 : (0 : ℝ) < τ := lt_of_lt_of_le hT hτ.1
+-    exact ((Real.continuousAt_log (by positivity)).comp
++    exact ((Real.continuousAt_log (show τ / (2 * Real.pi) ≠ 0 from div_ne_zero hτ0.ne' (by positivity))).comp (f := fun x : ℝ ↦ x / (2 * Real.pi)) (x := τ)
+       (continuousAt_id.div_const _)).continuousWithinAt
+   rw [integral_eq_sub_of_hasDerivAt hftc hcont]
+   have h2T : Real.log (2 * T / (2 * Real.pi)) = Real.log 2 + Real.log (T / (2 * Real.pi)) := by
+@@ -107,7 +107,7 @@
+     refine ContinuousOn.mul continuousOn_const ?_
+     intro τ hτ
+     have hτ0 : (0 : ℝ) < τ := lt_of_lt_of_le hT0 hτ.1
+-    exact ((Real.continuousAt_log (by positivity)).comp
++    exact ((Real.continuousAt_log (show τ / (2 * Real.pi) ≠ 0 from div_ne_zero hτ0.ne' (by positivity))).comp (f := fun x : ℝ ↦ x / (2 * Real.pi)) (x := τ)
+       (continuousAt_id.div_const _)).continuousWithinAt
+   have hsplit : (∫ τ in T..(2 * T), Zeta23.mu τ)
+       = (∫ τ in T..(2 * T), (1 / (2 * Real.pi)) * Real.log (τ / (2 * Real.pi)))
+@@ -216,7 +216,7 @@
+     rw [Set.uIcc_of_le (by linarith)]
+     intro τ hτ
+     have hτ0 : (0 : ℝ) < τ := lt_of_lt_of_le hT hτ.1
+-    exact (((Real.continuousAt_log (by positivity)).comp
++    exact (((Real.continuousAt_log (show τ / (2 * Real.pi) ≠ 0 from div_ne_zero hτ0.ne' (by positivity))).comp (f := fun x : ℝ ↦ x / (2 * Real.pi)) (x := τ)
+       (continuousAt_id.div_const _)).pow 2).continuousWithinAt
+   rw [integral_eq_sub_of_hasDerivAt hftc hcont]
+   have h2T : Real.log (2 * T / (2 * Real.pi)) = Real.log 2 + Real.log (T / (2 * Real.pi)) := by
+@@ -347,7 +347,7 @@
+     rw [Set.uIcc_of_le (by linarith)]
+     intro τ hτ
+     have hτ0 : (0 : ℝ) < τ := lt_of_lt_of_le hT0 hτ.1
+-    exact ((continuousAt_const.mul ((Real.continuousAt_log (by positivity)).comp
++    exact ((continuousAt_const.mul ((Real.continuousAt_log (show τ / (2 * Real.pi) ≠ 0 from div_ne_zero hτ0.ne' (by positivity))).comp (f := fun x : ℝ ↦ x / (2 * Real.pi)) (x := τ)
+       (continuousAt_id.div_const _))).pow 2).continuousWithinAt
+   have hCtau2 : IntervalIntegrable
+       (fun τ : ℝ => C / τ ^ 2 * (2 * ((L + m) / (2 * Real.pi)) + C)) volume T (2 * T) := by
+--- a/Zeta23/PrimeSideA/EndsCore.lean
++++ b/Zeta23/PrimeSideA/EndsCore.lean
+@@ -411,7 +411,7 @@
+     ∫ r in Set.Ioi Δ, psiA cϱ p r ≤ ∫ r in Set.Ioi 0, psiA cϱ p r :=
+   setIntegral_mono_set hF.psi_integrable.integrableOn
+     (Filter.Eventually.of_forall fun r => psiA_nonneg_of hF r)
+-    (Set.Ioi_subset_Ioi hΔ).eventuallyLE
++    (Filter.Eventually.of_forall fun _ hx ↦ Set.Ioi_subset_Ioi hΔ hx)
+
+ /-- Generic: for f ≥ 0 antitone on [0,∞) and integrable on (Δ,∞), Δ ≥ 0, h > 0:
+ Σ_{j<n} f(Δ + j h) ≤ f(Δ) + h⁻¹ ∫_{(Δ,∞)} f  (j = 0 term + antitone comparison on each cell
+@@ -465,7 +465,7 @@
+           rw [intervalIntegral.integral_of_le h0m]
+           exact setIntegral_mono_set hint
+             (ae_restrict_of_forall_mem measurableSet_Ioi fun x hx => h0 x (hΔ.trans (le_of_lt hx)))
+-            (LE.le.eventuallyLE fun x hx => lt_of_le_of_lt (hΔa 0) hx.1)
++            (Filter.Eventually.of_forall fun _ hx ↦ lt_of_le_of_lt (hΔa 0) hx.1)
+
+ /-- grid sum vs integral (ψ antitone): Σ_{j<n} ψ(Δ + j h) ≤ ψ(Δ) + h⁻¹ ∫_{(Δ,∞)} ψ. -/
+ theorem sum_psiA_grid_le (hF : LocalHypsCoreW cϱ p F) {Δ h : ℝ} (hΔ : 0 ≤ Δ) (hh : 0 < h) (n : ℕ) :
+--- a/Zeta23/PrimeSideA/EndsE1.lean
++++ b/Zeta23/PrimeSideA/EndsE1.lean
+@@ -117,7 +117,7 @@
+ theorem antitone_setIntegral_psiA_sq_Ioi (hF : LocalHypsCoreW cϱ p F) :
+     Antitone (fun u : ℝ => ∫ r in Set.Ioi u, psiA cϱ p r ^ 2) := fun _ _ huv =>
+   setIntegral_mono_set hF.psi_sq_integrable.integrableOn
+-    (Filter.Eventually.of_forall fun _ => sq_nonneg _) (Set.Ioi_subset_Ioi huv).eventuallyLE
++    (Filter.Eventually.of_forall fun _ => sq_nonneg _) (Filter.Eventually.of_forall fun _ hx ↦ Set.Ioi_subset_Ioi huv hx)
+
+ /-- (W1c) ∫_0^1 J(u)(1+u)² du ≤ 32L, J(u) := ∫_{(u,∞)}ψ² ≤ 8L. -/
+ theorem W1c (hF : LocalHypsCoreW cϱ p F) :
+@@ -452,7 +452,7 @@
+   have hJ_anti : Antitone (fun u : ℝ => ∫ r in Set.Ioi u, psiA cϱ p r ^ 2) := by
+     intro u v huv
+     exact setIntegral_mono_set hF.psi_sq_integrable.integrableOn
+-      (ae_of_all _ fun r => sq_nonneg _) (Set.Ioi_subset_Ioi huv).eventuallyLE
++      (ae_of_all _ fun r => sq_nonneg _) (Filter.Eventually.of_forall fun _ hx ↦ Set.Ioi_subset_Ioi huv hx)
+   have hJ_meas : Measurable (fun u : ℝ => ∫ r in Set.Ioi u, psiA cϱ p r ^ 2) :=
+     hJ_anti.measurable
+   have hW_nonneg : ∀ u, 0 ≤ Wfun cϱ p u := fun u =>
+--- a/Zeta23/PrimeSideA/EndsE2.lean
++++ b/Zeta23/PrimeSideA/EndsE2.lean
+@@ -161,7 +161,7 @@
+     have h1 : ∫ q in (sqI p)ᶜ, majK2 cϱ p ν q ≤ ∫ q in S₁ ∪ S₂, majK2 cϱ p ν q :=
+       setIntegral_mono_set habs.integrableOn
+         (Filter.Eventually.of_forall fun q => hMnn q)
+-        hsub.eventuallyLE
++        (Filter.Eventually.of_forall fun _ hx ↦ hsub hx)
+     refine h1.trans ?_
+     rw [← Set.union_sdiff_self]
+     rw [setIntegral_union disjoint_sdiff_self_right (hmS₂.diff hmS₁)
+@@ -169,7 +169,7 @@
+     have hmono : ∫ q in S₂ \ S₁, majK2 cϱ p ν q ≤ ∫ q in S₂, majK2 cϱ p ν q :=
+       setIntegral_mono_set habs.integrableOn
+         (Filter.Eventually.of_forall fun q => hMnn q)
+-        ((Set.sdiff_subset : S₂ \ S₁ ⊆ S₂).eventuallyLE)
++        (Filter.Eventually.of_forall fun _ hx ↦ (Set.sdiff_subset : S₂ \ S₁ ⊆ S₂) hx)
+     linarith
+   -- Step C: iterated-integral bound over S₁ (constrained first coordinate)
+   have hrestrict1 : (volume : Measure (ℝ × ℝ)).restrict S₁
+--- a/Zeta23/PrimeSideB.lean
++++ b/Zeta23/PrimeSideB.lean
+@@ -57,7 +57,7 @@
+ lemma of_isBigO {f g : ℝ → ℝ} (h : f =O[atTop] g) (hg : ∀ᶠ T in atTop, 0 ≤ g T) :
+     EvBound f g := by
+   obtain ⟨C, hC, h⟩ := h.exists_pos
+-  rw [IsBigOWith] at h
++  rw [isBigOWith_iff] at h
+   obtain ⟨T₀, hT₀⟩ := eventually_atTop.mp (h.and hg)
+   refine ⟨C, hC, T₀, fun T hT => ?_⟩
+   obtain ⟨h1, h2⟩ := hT₀ T hT

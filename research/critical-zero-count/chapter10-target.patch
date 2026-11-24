@@ -1,0 +1,20 @@
+--- a/RiemannMasullo/Ch10_TraceSpectral/Sec3_Printed.lean
++++ b/RiemannMasullo/Ch10_TraceSpectral/Sec3_Printed.lean
+@@ -8,6 +8,7 @@
+ import RiemannMasullo.Ch13_ZerosHecke.Targets
+ import RiemannMasullo.ForMathlib.NumberTheory.LSeries.DirichletZeros
+ import RiemannMasullo.External.AlgebraicNumberTheoryLean.Chebotarev.DirichletHecke
++import UnconditionalCount
+ import Mathlib.Analysis.Complex.CauchyIntegral
+ import Mathlib.Analysis.Complex.Polynomial.Basic
+ import Mathlib.NumberTheory.DirichletCharacter.Bounds
+@@ -300,7 +301,8 @@
+ positive proportion of distinct critical-line zeros and the Riemann–von Mangoldt count. -/
+ private theorem spectralLineJet_rational_critical_zero_count (k : ℕ) :
+     ∃ T : ℕ, ∃ S : Finset ℝ, (k + 1) * (T + 1) < S.card ∧
+-      ∀ t ∈ S, t ∈ Ioc (0 : ℝ) T ∧ riemannZeta (1 / 2 + (t : ℂ) * Complex.I) = 0 := by sorry
++      ∀ t ∈ S, t ∈ Ioc (0 : ℝ) T ∧ riemannZeta (1 / 2 + (t : ℂ) * Complex.I) = 0 := by
++  exact verified_critical_zero_count k
+
+ /-- Paper: (10.3.1.18), p. 451. For F = ℚ use the trivial base character,
+ a = 1/2 and s = 2. Take pairs of simple critical-line zeta zeros with
