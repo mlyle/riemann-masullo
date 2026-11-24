@@ -3,6 +3,7 @@ public import RiemannMasullo.Ch10_TraceSpectral.Sec3
 public import RiemannMasullo.Ch07_SchauderBasesZeta.Sec4
 import all RiemannMasullo.ForMathlib.Analysis.Fourier.AbelLimit
 import Mathlib.Analysis.Fourier.Inversion
+import Mathlib.Analysis.SpecialFunctions.Trigonometric.Bounds
 import all RiemannMasullo.Ch10_TraceSpectral.Sec2
 import all RiemannMasullo.Ch09_HardySobolev.Sec2
 import all RiemannMasullo.Ch10_TraceSpectral.Sec3
@@ -46,6 +47,14 @@ the individual admitted derivatives. Their polynomially bounded Sobolev norms
 control the prescribed biorthogonal vectors. The binomial convolution formula
 and the weighted divisor count then sum the complete blocks for every bounded
 insertion, including at multiple zeros.
+
+At positive width every fixed interior line supports synthetic polynomially
+separated sites for which no polynomial cardinal norm bound is possible,
+even at order zero. For the actual quotient, universal rank-one block
+summability requires an inverse-polynomial lower bound for the relative
+distance from the zeroth coordinate at each site to the span of all
+coordinates at all other sites. The explicit grids give a divergent test
+and insertion conditional on their occurrence among the actual zero sites.
 -/
 
 @[expose] public noncomputable section
@@ -2216,4 +2225,408 @@ theorem spectralLine_homogeneous_blocks_iff_separation_all_exponents
 #print axioms spectralLine_polynomiallySeparated_vectorNorm_bound
 #print axioms spectralLine_separated_bounded_blocks
 #print axioms spectralLine_homogeneous_blocks_iff_separation_all_exponents
+
+namespace StripClusters
+
+/-- Base ordinate of the synthetic cluster with index `n`. -/
+def height (n : ℕ) : ℝ := 4*(2:ℝ)^n
+private theorem nat_le_height (n : ℕ) : (n:ℝ)+1 ≤ height n := by
+  induction n with
+  | zero => norm_num [height]
+  | succ n ih =>
+    simp only [height,pow_succ,Nat.cast_succ] at *
+    linarith [show 1≤(2:ℝ)^n from one_le_pow₀ (by norm_num)]
+private theorem four_le_height (n : ℕ) : 4 ≤ height n := by
+  dsimp only [height]
+  linarith [show 1≤(2:ℝ)^n from one_le_pow₀ (by norm_num)]
+private theorem height_pos (n : ℕ) : 0<height n := by dsimp [height]; positivity
+private theorem height_double {n k : ℕ} (hnk : n<k) : 2*height n ≤ height k := by
+  have h := pow_le_pow_right₀ (by norm_num : (1:ℝ)≤2) hnk
+  rw [pow_succ] at h
+  dsimp only [height]
+  linarith
+/-- A synthetic set of ordinates, indexed by the cluster and the site within it. -/
+abbrev Site := (n : ℕ) × Fin (n+1)
+/-- Cluster `n` starts at `4·2ⁿ`. Its `n+1` ordinates are `1/(4·2ⁿ)` apart. -/
+def ordinate (i : Site) : ℝ := height i.1 + (i.2.val:ℝ) / height i.1
+private theorem ordinate_bounds (i : Site) : height i.1 ≤ ordinate i ∧ ordinate i ≤ height i.1+1 := by
+  have hj : (i.2.val:ℝ) ≤ height i.1 := by
+    have hu : (i.2.val:ℝ) ≤ (i.1:ℝ) := by exact_mod_cast Nat.le_of_lt_succ i.2.isLt
+    linarith [nat_le_height i.1]
+  exact ⟨le_add_of_nonneg_right (div_nonneg (Nat.cast_nonneg _) (height_pos _).le),
+    add_le_add (le_refl (height i.1)) ((div_le_one (height_pos _)).mpr hj)⟩
+private theorem cross_gap {i j : Site} (h : i.1<j.1) : 1≤ordinate j-ordinate i := by
+  linarith [(ordinate_bounds i).2,(ordinate_bounds j).1,height_double h,four_le_height i.1]
+theorem polynomial_separation (i j : Site) (hne : i ≠ j) :
+    1/(1+|ordinate i|) ≤ |ordinate i-ordinate j| := by
+  have hi := height_pos i.1
+  have hI := ordinate_bounds i
+  have hpos : 0<ordinate i := hi.trans_le hI.1
+  rw [abs_of_pos hpos]
+  have hsmall : 1/(1+ordinate i) ≤ 1 := (div_le_one (by linarith)).mpr (by linarith)
+  rcases lt_trichotomy i.1 j.1 with hh|hh|hh
+  · exact hsmall.trans (by rw [abs_sub_comm]; exact (cross_gap hh).trans (le_abs_self _))
+  · rcases i with ⟨n,k⟩; rcases j with ⟨r,q⟩
+    change n=r at hh
+    subst r
+    have hk : k.val≠q.val := fun e ↦ hne (congrArg (Sigma.mk n) (Fin.ext e))
+    have hab : 1 ≤ |(k.val:ℝ)-(q.val:ℝ)| := by
+      rcases lt_or_gt_of_ne hk with h|h
+      · rw [abs_of_nonpos (by exact_mod_cast (show (k.val:ℤ)-(q.val:ℤ) ≤ 0 by omega))]
+        exact_mod_cast (show (1:ℤ) ≤ -((k.val:ℤ)-(q.val:ℤ)) by omega)
+      · rw [abs_of_nonneg (by exact_mod_cast (show (0:ℤ) ≤ (k.val:ℤ)-(q.val:ℤ) by omega))]
+        exact_mod_cast (show (1:ℤ) ≤ (k.val:ℤ)-(q.val:ℤ) by omega)
+    have hd : |ordinate ⟨n,k⟩-ordinate ⟨n,q⟩| = |(k.val:ℝ)-(q.val:ℝ)| / height n := by
+      dsimp [ordinate]; rw [add_sub_add_left_eq_sub,←sub_div,abs_div,abs_of_pos (height_pos _)]
+    rw [hd]
+    calc
+      _ ≤ 1/height n := one_div_le_one_div_of_le (height_pos _) (by change height n≤1+ordinate ⟨n,k⟩; linarith [(ordinate_bounds ⟨n,k⟩).1])
+      _ ≤ _ := div_le_div_of_nonneg_right hab (height_pos _).le
+  · exact hsmall.trans ((cross_gap hh).trans (le_abs_self _))
+#print axioms polynomial_separation
+
+local notation "l" => (logIdeleClassNorm F)
+local notation "ν(" α ", " s ")" => intervalSobolevMeasure μ𝔽 l (-α) α s true
+
+/-- Every finite log moment of an interior vertical-line wave belongs to the reciprocal Sobolev space. -/
+theorem interior_mem {α s b : ℝ} (hα : 0<α) (hs : 0≤s) (hb : b ∈ Ioo (-α) α) (ψ : PontryaginDual C𝔽) (t : ℝ) (m : ℕ) :
+    MemLp (spectralZeroJet ψ b t m) 2 ν(α,s) := by
+  have hμ := stripTheta_log_integrable (F:=F) (spectralStripJet_integrable (k:=m) hα.le hs
+    (Or.inl hb))
+  apply (memLp_two_iff_integrable_sq_norm (spectralZeroJet_continuous ψ b t m).aestronglyMeasurable).2
+  apply (integrable_withDensity_iff
+    ((symmIntervalSobolevDensity_inv_continuous hα.le s).measurable.ennreal_ofReal)
+    (.of_forall fun _ ↦ ENNReal.ofReal_lt_top)).2
+  refine hμ.congr (.of_forall fun g ↦ ?_)
+  dsimp only
+  rw [spectralZeroJet_norm_sq,
+    ENNReal.toReal_ofReal (inv_nonneg.mpr (symmIntervalSobolevDensity_pos hα.le s (l g)).le)]
+  simpa only [smul_eq_mul,mul_comm] using (stripJet_integrand_eq hα.le s b m (l g)).symm
+
+/-- The order-zero reciprocal Sobolev representative at the ordinate `t` on the
+vertical line of real offset `b` in the interior of the positive-width strip. -/
+def interiorWave {α s b : ℝ} (hα : 0<α) (hs : 0≤s) (hb : b ∈ Ioo (-α) α) (ψ : PontryaginDual C𝔽) (t : ℝ) : Lp ℂ 2 ν(α,s) :=
+  (interior_mem hα hs hb ψ t 0).toLp _
+
+private def diff {E : Type*} [Sub E] (u : ℝ → E) (h : ℝ) : ℕ → ℝ → E
+  | 0, t => u t
+  | m+1,t => diff u h m t - diff u h m (t+h)
+private def phase (h y : ℝ) : ℂ := Complex.exp ((h:ℂ)*Complex.I*(y:ℂ))
+private theorem raw_shift (ψ : PontryaginDual C𝔽) (b t h : ℝ) (x : C𝔽) :
+    spectralZeroJet ψ b (t+h) 0 x = spectralZeroJet ψ b t 0 x * phase h (l x) := by
+  simp only [stripProfile_jet,pow_zero,mul_one,Complex.ofReal_add,phase]
+  have e : ((b:ℂ)+((t:ℂ)+(h:ℂ))*Complex.I)*(l x:ℂ) = ((b:ℂ)+(t:ℂ)*Complex.I)*(l x:ℂ)+(h:ℂ)*Complex.I*(l x:ℂ) := by ring
+  rw [e,Complex.exp_add]
+  exact (mul_assoc _ _ _).symm
+private theorem diff_rep {α s b : ℝ} (hα : 0<α) (hs : 0≤s) (hb : b ∈ Ioo (-α) α) (ψ : PontryaginDual C𝔽) (m : ℕ) (t h : ℝ) :
+    ⇑(diff (interiorWave hα hs hb ψ) h m t) =ᵐ[ν(α,s)] fun x ↦
+      spectralZeroJet ψ b t 0 x * (1-phase h (l x))^m := by
+  induction m generalizing t with
+  | zero =>
+    simpa only [diff,interiorWave,pow_zero,mul_one] using (interior_mem hα hs hb ψ t 0).coeFn_toLp
+  | succ m ih =>
+    let d := diff (interiorWave hα hs hb ψ) h m
+    filter_upwards [Lp.coeFn_sub (d t) (d (t+h)),ih t,ih (t+h)] with x hx h₁ h₂
+    change (d t-d (t+h)) x = d t x - d (t+h) x at hx
+    change (d t-d (t+h)) x = _
+    rw [hx,show d t x = _ from h₁,show d (t+h) x = _ from h₂,raw_shift,pow_succ]
+    ring
+private theorem raw_norm (ψ : PontryaginDual C𝔽) (b t : ℝ) (m : ℕ) (x : C𝔽) :
+    ‖spectralZeroJet ψ b t m x‖ = Real.exp (b*l x)*|l x|^m := by
+  rw [stripProfile_jet,norm_mul,norm_mul,Circle.norm_coe,one_mul,
+    Complex.norm_exp,norm_pow,Complex.norm_real,Real.norm_eq_abs]
+  simp
+private theorem diff_bound {α s b : ℝ} (hα : 0<α) (hs : 0≤s) (hb : b ∈ Ioo (-α) α) (ψ : PontryaginDual C𝔽) (m : ℕ) :
+    ∃ B> (0:ℝ), ∀ t h : ℝ, ‖diff (interiorWave hα hs hb ψ) h m t‖ ≤ B*|h|^m := by
+  let v := (interior_mem hα hs hb ψ 0 m).toLp (spectralZeroJet ψ b 0 m)
+  refine ⟨1+‖v‖,by positivity,fun t h ↦ ?_⟩
+  have H : ‖diff (interiorWave hα hs hb ψ) h m t‖ ≤ |h|^m*‖v‖ := by
+    apply Lp.norm_le_mul_norm_of_ae_le_mul (g:=v)
+    filter_upwards [diff_rep hα hs hb ψ m t h,(interior_mem hα hs hb ψ 0 m).coeFn_toLp] with x he hv
+    change v x = _ at hv
+    rw [he,hv,norm_mul,norm_pow,raw_norm,raw_norm,pow_zero,mul_one]
+    have e : phase h (l x) = Complex.exp (Complex.I*((h*l x:ℝ):ℂ)) := by
+      dsimp [phase]; rw [Complex.ofReal_mul]; congr 1; ring
+    have H : ‖1-phase h (l x)‖ ≤ |h| * |l x| := by
+      rw [norm_sub_rev,e,←abs_mul]
+      exact Real.norm_exp_I_mul_ofReal_sub_one_le
+    calc
+      _ ≤ Real.exp (b*l x)*(|h| * |l x|)^m :=
+        mul_le_mul_of_nonneg_left (pow_le_pow_left₀ (norm_nonneg _) H m) (Real.exp_pos _).le
+      _ = _ := by rw [mul_pow]; ring
+  nlinarith only [H,pow_nonneg (abs_nonneg h) m]
+
+
+private theorem diff_mem {E : Type*} [AddCommGroup E] [Module ℂ E] (P : Submodule ℂ E) (u : ℝ → E) (h : ℝ)
+    (m : ℕ) (t : ℝ) (H : ∀ j≤m, u (t+(j:ℝ)*h) ∈ P) : diff u h m t ∈ P := by
+  induction m generalizing t with
+  | zero => simpa [diff] using H 0 (by omega)
+  | succ m ih =>
+    apply P.sub_mem (ih t (fun j hj ↦ H j (Nat.le_succ_of_le hj)))
+    apply ih (t+h)
+    intro j hj
+    convert H (j+1) (Nat.succ_le_succ hj) using 2
+    push_cast; ring
+
+private theorem remainder_mem {E : Type*} [AddCommGroup E] [Module ℂ E] (P : Submodule ℂ E) (u : ℝ → E) (h : ℝ)
+    (m : ℕ) (t : ℝ) (H : ∀ j≤m, 0<j → u (t+(j:ℝ)*h) ∈ P) : u t - diff u h m t ∈ P := by
+  induction m with
+  | zero => simp [diff]
+  | succ m ih =>
+    rw [diff,sub_sub_eq_add_sub,add_sub_right_comm]
+    apply P.add_mem (ih (fun j hj ↦ H j (Nat.le_succ_of_le hj)))
+    apply diff_mem P u h m (t+h)
+    intro j hj
+    convert H (j+1) (Nat.succ_le_succ hj) (Nat.zero_lt_succ _) using 2
+    push_cast; ring
+
+/-- The span of the other synthetic order-zero waves after removing index `i`. -/
+def competingSpan {E : Type*} [AddCommGroup E] [Module ℂ E] (u : Site → E) (i : Site) : Submodule ℂ E :=
+  Submodule.span ℂ (u '' {j | j≠i})
+
+/-- Despite polynomial pairwise separation, there is no inverse-polynomial lower
+bound for the distance from a wave to the span of the remaining waves. This uses
+any fixed interior line of the actual positive-width reciprocal Sobolev norm. -/
+theorem no_polynomial_distance {α s b : ℝ} (hα : 0<α) (hs : 0≤s) (hb : b ∈ Ioo (-α) α) (ψ : PontryaginDual C𝔽) :
+    let u (i : Site) := interiorWave hα hs hb ψ (ordinate i)
+    ¬∃ c> (0:ℝ), ∃ k : ℕ, ∀ i : Site,
+      c/(1+|ordinate i|)^k ≤ Metric.infDist (u i) (competingSpan u i : Set (Lp ℂ 2 ν(α,s))) := by
+  intro u
+  rintro ⟨c,hc,k,hus⟩
+  let m := k+1
+  obtain ⟨B,hB,hbd⟩ := diff_bound hα hs hb ψ m
+  obtain ⟨n,hn⟩ := exists_nat_gt (max (m:ℝ) (B*2^k/c))
+  have hn₀ : m≤n := by exact_mod_cast (le_max_left ..).trans hn.le
+  let i : Site := ⟨n,⟨0,Nat.zero_lt_succ _⟩⟩
+  let T := height n
+  have hT : 1≤T := (by norm_num : (1:ℝ)≤4).trans (four_le_height n)
+  have hTp : 0<T := zero_lt_one.trans_le hT
+  let h := T⁻¹
+  let f := interiorWave hα hs hb ψ
+  let P := competingSpan u i
+  have ei : ordinate i = T := by simp [i,ordinate,T]
+  have hm (j : ℕ) (hj : j≤m) (hj' : 0<j) : f (T+j*h) ∈ P := by
+    let v : Site := ⟨n,⟨j,Nat.lt_succ_of_le (hj.trans hn₀)⟩⟩
+    have he : v≠i := fun e ↦ hj'.ne' (congrArg (fun w : Site ↦ w.2.val) e)
+    apply Submodule.subset_span
+    exact ⟨v,he,by dsimp [u,v,f,ordinate,h,T]; rw [div_eq_mul_inv]⟩
+  have hp := remainder_mem P f h m T hm
+  have he : u i = f T := congrArg f ei
+  have hd := Metric.infDist_le_dist_of_mem (x:=u i) (s := (P : Set (Lp ℂ 2 ν(α,s)))) hp
+  rw [dist_eq_norm,show u i - (f T-diff f h m T) = diff f h m T by rw [he,sub_sub_cancel]] at hd
+  have hu := (hus i).trans (hd.trans (hbd T h))
+  rw [ei,abs_of_pos hTp] at hu
+  change c/(1+T)^k ≤ B*|T⁻¹|^(k+1) at hu
+  rw [abs_of_pos (inv_pos.mpr hTp),inv_pow] at hu
+  have HU := (div_le_iff₀ (pow_pos (by positivity) k)).mp hu
+  have hh : c*T^(k+1) ≤ B*(1+T)^k := by
+    calc
+      _ ≤ (B*(T^(k+1))⁻¹*(1+T)^k)*T^(k+1) := mul_le_mul_of_nonneg_right HU (by positivity)
+      _ = _ := by field_simp
+  have hr : (1+T)^k ≤ 2^k*T^k := by rw [←mul_pow]; gcongr; linarith
+  rw [pow_succ] at hh
+  have hcontra : (c*T)*T^k ≤ (B*2^k)*T^k := calc
+    _ = c*(T^k*T) := by ring
+    _ ≤ _ := hh.trans ((mul_le_mul_of_nonneg_left hr hB.le).trans_eq (mul_assoc ..).symm)
+  have hlast := (le_of_mul_le_mul_right hcontra (pow_pos hTp k))
+  have hh' : B*2^k/c < T := ((le_max_right ..).trans_lt hn).trans (by
+    change (n:ℝ) < height n; linarith [nat_le_height n])
+  have ha := (div_lt_iff₀ hc).mp hh'
+  linarith
+
+/-- No biorthogonal coordinate family for these waves can satisfy a common
+polynomial operator-norm bound in the ordinate. -/
+theorem no_polynomial_biorthogonal {α s b : ℝ} (hα : 0<α) (hs : 0≤s) (hb : b ∈ Ioo (-α) α) (ψ : PontryaginDual C𝔽) :
+    let u (i : Site) := interiorWave hα hs hb ψ (ordinate i)
+    ¬∃ (L : Site → StrongDual ℂ (Lp ℂ 2 ν(α,s))) (C : ℝ) (k : ℕ),
+        (∀ i, L i (u i)=1) ∧ (∀ i j, i≠j → L i (u j)=0) ∧ ∀ i, ‖L i‖≤C*(1+|ordinate i|)^k := by
+  intro u
+  rintro ⟨L,C,k,hii,hij,hC⟩
+  obtain ⟨D,hD,hCD⟩ : ∃ D> (0:ℝ), C≤D := ⟨max C 0+1,by positivity,by linarith [le_max_left C 0]⟩
+  apply no_polynomial_distance hα hs hb ψ
+  refine ⟨D⁻¹,inv_pos.mpr hD,k,fun i ↦ ?_⟩
+  let P := competingSpan u i
+  have hP : P ≤ (L i).ker := by
+    apply Submodule.span_le.mpr
+    rintro _ ⟨j,hj,rfl⟩
+    exact hij i j (Ne.symm hj)
+  change D⁻¹ / (1+|ordinate i|)^k ≤ Metric.infDist (u i) (P : Set (Lp ℂ 2 ν(α,s)))
+  apply (Metric.le_infDist (x:=u i) (s := (P : Set (Lp ℂ 2 ν(α,s)))) ⟨0,P.zero_mem⟩).mpr
+  intro y hy
+  have hv : L i y=0 := hP hy
+  have h := (L i).le_opNorm (u i-y)
+  rw [map_sub,hii,hv,sub_zero,norm_one] at h
+  rw [dist_eq_norm,div_le_iff₀ (by positivity)]
+  apply (inv_le_iff_one_le_mul₀ hD).mpr
+  calc
+    (1:ℝ) ≤ ‖L i‖*‖u i-y‖ := h
+    _ ≤ (D*(1+|ordinate i|)^k)*‖u i-y‖ := mul_le_mul_of_nonneg_right
+      ((hC i).trans (mul_le_mul_of_nonneg_right hCD (by positivity))) (norm_nonneg _)
+    _ = _ := by ring
+#print axioms interior_mem
+#print axioms no_polynomial_distance
+#print axioms no_polynomial_biorthogonal
+end StripClusters
+
+set_option maxHeartbeats 1800000 in
+/-- On the realized quotient, universal summability for homogeneous tests and
+rank-one insertions forces the normalized distance from the order-zero form
+to every finite combination of all coordinates at other zero sites to admit
+an inverse-polynomial lower bound on each angular component. -/
+theorem spectralStrip_rankOne_blocks_require_polynomial_angle (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
+    (hχ : IsSpectralBasepointChoice χ) (a : ℝ) {α s : ℝ} (hα : 0≤α) (hs : 1<s)
+    (x : J(χ,a,α,s) → H(a,hα,hs)) (L : J(χ,a,α,s) → StrongDual ℂ H(a,hα,hs))
+    (hb : IsSpectralMarkushevichBasis x L) (hj : ∀ i, D(a,hα,hs) (L i) = raw(χ,hα,hs,i)) (η : PontryaginDual C₁)
+    (hc : ∀ φ : BruhatCompactSupport C𝔽, (hom(φ,η)) → ∀ (v : H(a,hα,hs)) (g : StrongDual ℂ H(a,hα,hs)),
+      Summable (fun z : Z(χ,a,α) ↦ ∑ m : Fin (N(χ,a,α,s,z)),
+        L (jet(z,m)) (A(a,hα,hs,φ) (g (x (jet(z,m))) • v)))) :
+    ∃ C ≥ (0:ℝ), ∃ k : ℕ, ∀ z : X(χ,a,α,s,η), ∀ g ∈ Submodule.span ℂ
+        {f | ∃ (w : Z(χ,a,α)) (_ : w≠z.val) (m : Fin (N(χ,a,α,s,w))), f = L (jet(w,m))},
+      ‖form(L,z)‖ ≤ C*(1+|t(z)|)^k * ‖form(L,z) - g‖ := by
+  classical
+  let X := X(χ,a,α,s,η)
+  let j (z : Z(χ,a,α)) (m : Fin (N(χ,a,α,s,z))) : J(χ,a,α,s) := jet(z,m)
+  have hji : Injective (fun zm : (z : Z(χ,a,α)) × Fin (N(χ,a,α,s,z)) ↦ j zm.1 zm.2) := by
+    rintro ⟨z,m⟩ ⟨w,n⟩ heq
+    have hzw : z = w := Subtype.ext (congrArg (fun i : J(χ,a,α,s) ↦ (i.val.1,i.val.2.1,i.val.2.2.1)) heq)
+    subst w
+    exact congrArg (Sigma.mk z) (Fin.ext (congrArg (fun i : J(χ,a,α,s) ↦ i.val.2.2.2) heq))
+  let i (z : X) := j z.val ⟨0,z.property.2⟩
+  let P (z : X) := Submodule.span ℂ
+    {f | ∃ (w : Z(χ,a,α)) (_ : w≠z.val) (m : Fin (N(χ,a,α,s,w))), f = L (j w m)}
+  let Y := (z : X) × P z
+  have zero_at (z : X) (g : P z) (v : H(a,hα,hs))
+      (H : ∀ (w : Z(χ,a,α)), w≠z.val → ∀ m, L (j w m) v = 0) : g.val v = 0 := by
+    let ev := ContinuousLinearMap.apply ℂ ℂ v
+    have hp : P z ≤ ev.ker := by
+      apply Submodule.span_le.mpr
+      rintro _ ⟨w,hw,m,rfl⟩
+      exact H w hw m
+    exact hp g.property
+  let Δ (p : Y) := ‖L (i p.1) - p.2.val‖
+  let W (p : Y) := ‖L (i p.1)‖ / Δ p
+  have hd (p : Y) : 0 < Δ p := by
+    apply lt_of_le_of_ne (norm_nonneg _)
+    intro hh
+    have hl := sub_eq_zero.mp (norm_eq_zero.mp hh.symm)
+    have hv := DFunLike.congr_fun hl (x (i p.1))
+    rw [hb.1] at hv
+    apply one_ne_zero (hv.trans (zero_at _ _ _ ?_))
+    intro w hw m
+    apply hb.2.1
+    intro eq
+    exact hw (congrArg Sigma.fst (hji
+      (a₁ := ⟨p.1.val,⟨0,p.1.property.2⟩⟩) (a₂ := ⟨w,m⟩) eq)).symm
+  have hm (φ : BruhatCompactSupport C𝔽) (hφ : hom(φ,η)) : BddAbove (range fun p : Y ↦
+      ‖nuclearityTestMellin (χ η) φ (pt(b(p.1),t(p.1)))‖ * W p) := by
+    let A := A(a,hα,hs,φ)
+    obtain ⟨B,hB,hbB⟩ := strip_block_bounds A x L _ j (hc φ hφ)
+    refine ⟨B,forall_mem_range.mpr fun p ↦ ?_⟩
+    let z := p.1
+    let e := nuclearityTestMellin (χ η) φ (pt(b(z),t(z)))
+    have he : (L (i z)).comp A = e • L (i z) := by
+      ext v
+      have h := spectralStripConvolution_jet_top (F := F) a hα hs χ L hj φ z.val ⟨0,z.property.2⟩ v
+        (fun k hk ↦ False.elim (Nat.not_lt_zero _ hk))
+      rw [(spectralConvolution_mellin_integrable _ _ _).2] at h
+      change L (i z) (A v) = nuclearityTestMellin (χ z.val.val.1) φ (pt(b(z),t(z))) * L (i z) v at h
+      change L (i z) (A v) = e * L (i z) v
+      exact h.trans (congrArg (fun θ ↦ nuclearityTestMellin (χ θ) φ (pt(b(z),t(z))) * L (i z) v) z.property.1)
+    let T := spectralConvolutionFiniteSum A x L {z.val} _ j
+    have hx : p.2.val.comp T = 0 := by
+      ext v
+      apply zero_at
+      intro w hw m
+      have h := strip_singleton_restriction A x L hb _ j hji z.val w m
+      rw [ite_eq_right hw] at h
+      exact DFunLike.congr_fun h v
+    have ht := (L (i z)-p.2.val).opNorm_comp_le T
+    rw [ContinuousLinearMap.sub_comp,hx,sub_zero,
+      show (L (i z)).comp T = (L (i z)).comp A from
+        (strip_singleton_restriction A x L hb _ j hji z.val z.val ⟨0,z.property.2⟩).trans (ite_eq_left rfl),
+      he,norm_smul] at ht
+    change ‖e‖*(‖L (i z)‖/Δ p) ≤ B
+    rw [←mul_div_assoc,div_le_iff₀ (hd p)]
+    exact ht.trans ((mul_le_mul_of_nonneg_left (hbB z.val) (norm_nonneg _)).trans_eq (mul_comm _ _))
+  obtain ⟨C,hC,k,hk⟩ := LineModulation.homogeneous_strip_mellin_polynomial hα χ hχ η
+    (fun p : Y ↦ b(p.1)) (fun p : Y ↦ t(p.1)) W
+    (fun p ↦ abs_le.mpr p.1.val.property.1) (fun p ↦ div_nonneg (norm_nonneg _) (hd p).le) hm
+  refine ⟨C,hC,k,fun z g hg ↦ ?_⟩
+  let p : Y := ⟨z,⟨g,hg⟩⟩
+  exact (div_le_iff₀ (hd p)).mp (hk p)
+#print axioms spectralStrip_rankOne_blocks_require_polynomial_angle
+
+/-- If a fixed angular component contains the indicated grids of surviving sites on
+one interior vertical line, one homogeneous test and one compact rank-one insertion
+give a divergent series of complete zero blocks. The occurrence of those grids is
+an explicit hypothesis about the actual divisor. -/
+theorem spectralStrip_exists_divergent_rankOne_of_interior_grids
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ)
+    (a : ℝ) {α s b : ℝ} (hα : 0<α) (hs : 1<s) (hb' : b ∈ Ioo (-α) α)
+    (x : J(χ,a,α,s) → H(a,hα.le,hs)) (L : J(χ,a,α,s) → StrongDual ℂ H(a,hα.le,hs))
+    (hb : IsSpectralMarkushevichBasis x L) (hj : ∀ i, D(a,hα.le,hs) (L i) = raw(χ,hα.le,hs,i))
+    (η : PontryaginDual C₁)
+    (sites : StripClusters.Site → X(χ,a,α,s,η))
+    (hsite : ∀ i, b(sites i)=b ∧ t(sites i)=StripClusters.ordinate i) :
+    ∃ φ : BruhatCompactSupport C𝔽, (hom(φ,η)) ∧ ∃ (v : H(a,hα.le,hs)) (g : StrongDual ℂ H(a,hα.le,hs)),
+      IsCompactOperator (g.smulRight v) ∧ ¬Summable (fun z : Z(χ,a,α) ↦ ∑ m : Fin (N(χ,a,α,s,z)),
+        L (jet(z,m)) (A(a,hα.le,hs,φ) ((g.smulRight v) (x (jet(z,m)))))) := by
+  by_contra! bad
+  obtain ⟨C,hC,k,hk⟩ := spectralStrip_rankOne_blocks_require_polynomial_angle χ hχ a hα.le hs x L hb hj η
+    fun φ hφ v g ↦ bad φ hφ v g ((isCompactOperator_of_locallyCompactSpace_rng
+      ((ContinuousLinearMap.id ℂ ℂ).smulRight v)).comp_clm g)
+  let hs₀ := (zero_lt_one.trans hs).le
+  let u (i : StripClusters.Site) := StripClusters.interiorWave hα hs₀ hb' (χ η) (StripClusters.ordinate i)
+  let Λ (i : StripClusters.Site) := form(L,sites i)
+  let D := D(a,hα.le,hs)
+  have iso := (spectralSobolevDualEmbedding_isometry_range (F:=F) a (neg_le_self hα.le) hs₀).1
+  have he (i) : D (Λ i) = u i := by
+    rw [show D (Λ i) = _ from hj (jet((sites i).val,z₀(sites i)))]
+    apply Lp.ext
+    have H := (spectralStripJet_memLp χ hα.le hs₀ (jet((sites i).val,z₀(sites i)))).coeFn_toLp
+    change _ =ᵐ[_] spectralZeroJet (χ (sites i).val.val.1) (b(sites i)) (t(sites i)) 0 at H
+    apply H.trans
+    rw [(sites i).property.1,(hsite i).1,(hsite i).2]
+    exact ((StripClusters.interior_mem hα hs₀ hb' (χ η) (StripClusters.ordinate i) 0).coeFn_toLp).symm
+  have hdist i (g : StrongDual ℂ H(a,hα.le,hs)) : ‖Λ i-g‖ = ‖u i-D g‖ := by
+    have hw := iso.dist_eq (Λ i) g
+    change dist (D (Λ i)) (D g) = _ at hw
+    rw [he,dist_eq_norm,dist_eq_norm] at hw
+    exact hw.symm
+  obtain ⟨c,hc,hcL⟩ := spectralStripJet_lowerBound χ hχ (a:=a) hα.le hs
+  have low i : c≤‖Λ i‖ := by
+    have hw := iso.dist_eq (Λ i) 0
+    simp only [map_zero,dist_eq_norm,sub_zero] at hw
+    exact (hcL (jet((sites i).val,z₀(sites i)))).trans_eq ((congrArg norm (hj _).symm).trans hw)
+  have hI : Injective (fun i ↦ (sites i).val) := by
+    intro i j h
+    by_contra hn
+    have h' := congrArg (fun z : Z(χ,a,α) ↦ z.val.2.2) h
+    change t(sites i)=t(sites j) at h'
+    rw [(hsite i).2,(hsite j).2] at h'
+    have sep := StripClusters.polynomial_separation i j hn
+    rw [h',sub_self,abs_zero] at sep
+    exact (by positivity : 0 < 1/(1+|StripClusters.ordinate j|)).not_ge sep
+  apply StripClusters.no_polynomial_distance hα hs₀ hb' (χ η)
+  have hD : 0<C+1 := by linarith
+  refine ⟨c/(C+1),div_pos hc hD,k,fun i ↦ ?_⟩
+  let S := {f | ∃ (w : Z(χ,a,α)) (_ : w≠(sites i).val) (m : Fin (N(χ,a,α,s,w))), f = L (jet(w,m))}
+  let P := Submodule.span ℂ S
+  have hin : StripClusters.competingSpan u i ≤ P.map D := by
+    apply Submodule.span_le.mpr
+    rintro _ ⟨j,hj',rfl⟩
+    exact ⟨Λ j,Submodule.subset_span ⟨(sites j).val,fun e ↦ hj' (hI e),z₀(sites j),rfl⟩,he j⟩
+  apply (Metric.le_infDist (x:=u i) (s:= (StripClusters.competingSpan u i : Set _))
+    ⟨0,(StripClusters.competingSpan u i).zero_mem⟩).mpr
+  intro y hy
+  obtain ⟨g,hg,rfl⟩ := hin hy
+  have H := (low i).trans (hk (sites i) g hg)
+  change c ≤ C*(1+|t(sites i)|)^k*‖Λ i-g‖ at H
+  rw [hdist i,(hsite i).2] at H
+  rw [dist_eq_norm,div_div,div_le_iff₀ (mul_pos hD (by positivity))]
+  calc
+    _ ≤ (C*(1+|StripClusters.ordinate i|)^k)*‖u i-D g‖ := H
+    _ ≤ ((C+1)*(1+|StripClusters.ordinate i|)^k)*‖u i-D g‖ := by gcongr; linarith
+    _ = _ := mul_comm _ _
+#print axioms spectralStrip_exists_divergent_rankOne_of_interior_grids
 end RiemannMasullo
