@@ -4,6 +4,7 @@ public import RiemannMasullo.AppA_AlgebraicNT.Sec2
 public import Mathlib.GroupTheory.GroupAction.Defs
 public import Mathlib.Topology.Compactness.Paracompact
 public import Mathlib.Topology.Separation.GDelta
+import RiemannMasullo.ForMathlib.NumberTheory.NumberField.Completion.FinitePlace
 
 /-! # §8.2. Stack-theoretic periodic orbits and fixed points
 
@@ -378,6 +379,54 @@ theorem adeleOrbitBasepoint_mem_finiteOrbitSection (v : HeightOneSpectrum (𝓞 
     adeleOrbitBasepoint F (some (.inr v)) ∈ adeleFiniteOrbitSection F v τ := by
   sorry
 
+/-- A uniformizer at a finite place, as a unit, with norm the reciprocal of the absolute norm. -/
+private theorem sAdeleFiniteOrbit_transporter_uniformizer (v : HeightOneSpectrum (𝓞 F)) :
+    ∃ π : (v.adicCompletion F)ˣ, ‖(π : v.adicCompletion F)‖ = (v.asIdeal.absNorm : ℝ)⁻¹ := by
+  let val : Valuation (v.adicCompletion F) (WithZero (Multiplicative ℤ)) := Valued.v
+  obtain ⟨π, hπ⟩ := val.exists_isUniformizer_of_isCyclic_of_nontrivial
+  exact ⟨Units.mk0 (π : v.adicCompletion F) hπ.ne_zero, norm_uniformizer_adicCompletion v _ hπ⟩
+
+/-- The norm of a unit at a finite place is an integer power of the absolute norm. -/
+private theorem sAdeleFiniteOrbit_transporter_norm_zpow (v : HeightOneSpectrum (𝓞 F))
+    (y : (v.adicCompletion F)ˣ) :
+    ∃ m : ℤ, ‖(y : v.adicCompletion F)‖ = (v.asIdeal.absNorm : ℝ) ^ m := by
+  obtain ⟨π, hπ⟩ := sAdeleFiniteOrbit_transporter_uniformizer F v
+  obtain ⟨e, he1, he2⟩ := finitePlace_unitDecomposition v π hπ
+  let ι := Units.map (v.adicCompletionIntegers F).subtype.toMonoidHom
+  have hy : y = π ^ (e y).1.toAdd * ι (e y).2 := by
+    apply e.injective
+    rw [map_mul, map_zpow, he1, he2]
+    apply Prod.ext
+    · show (e y).1 = Multiplicative.ofAdd (1 : ℤ) ^ (e y).1.toAdd * 1
+      rw [mul_one, ← ofAdd_zsmul, smul_eq_mul, mul_one, ofAdd_toAdd]
+    · simp
+  obtain ⟨m, u, hmu⟩ : ∃ (m : ℤ) (u : (v.adicCompletionIntegers F)ˣ), y = π ^ m * ι u :=
+    ⟨_, _, hy⟩
+  refine ⟨-m, ?_⟩
+  have hu : ‖((ι u : (v.adicCompletion F)ˣ) : v.adicCompletion F)‖ = 1 := by
+    rw [Valued.toNormedField.norm_eq_one_iff]
+    exact (HeightOneSpectrum.adicCompletionIntegers.isUnit_iff_valued_eq_one
+      (K := F) (v := v)).mp u.isUnit
+  rw [hmu, Units.val_mul, norm_mul, Units.val_zpow_eq_zpow_val, norm_zpow, hπ, hu, mul_one,
+    inv_zpow, zpow_neg]
+
+/-- The idele inserted at a finite place has the norm of the inserted unit. -/
+private theorem sAdeleFiniteOrbit_transporter_ideleNorm (v : HeightOneSpectrum (𝓞 F))
+    (w : (v.adicCompletion F)ˣ) :
+    ((ideleNorm F (IdeleGroup.ofAdicCompletion (𝓞 F) F v w) : ℝ≥0) : ℝ) =
+      ‖(w : v.adicCompletion F)‖ := by
+  classical
+  rw [((ideleNorm_spec F).1 _).2]
+  change (∏ u : InfinitePlace F, ‖(1 : u.Completion)‖ ^ u.mult) *
+    (∏ᶠ u : HeightOneSpectrum (𝓞 F), ‖FiniteAdeleRing.ofAdicCompletion F v w.val u‖) = _
+  simp only [norm_one, one_pow, Finset.prod_const_one, one_mul]
+  rw [finprod_eq_single _ v (fun u hu ↦ by
+    rw [show FiniteAdeleRing.ofAdicCompletion F v w.val u = 1 from
+      (FiniteAdeleRing.ofAdicCompletion_apply_coe F v _ u).trans (Pi.mulSingle_eq_of_ne hu _),
+      norm_one])]
+  rw [show FiniteAdeleRing.ofAdicCompletion F v w.val v = w.val from
+    (FiniteAdeleRing.ofAdicCompletion_apply_coe F v _ v).trans (Pi.mulSingle_eq_same _ _)]
+
 /-- Paper: Proposition 8.2.0.4(1), p. 386. Every point in the full S-local finite-place
 orbit can be moved into the half-open section by a norm-one idele. The transporter
 is unique up to the embedded local units.
@@ -391,6 +440,153 @@ theorem sAdeleFiniteOrbit_transporter (v : S) (τ : ℝ≥0ˣ →* 𝕀ₛ) (hτ
           (Units.map (adeleProjection F S).toMonoidHom) := by
   sorry
 
+/-- A global idele fixes the base point at a finite place exactly when it is inserted
+at that place. -/
+private theorem adeleFiniteOrbit_transporter_smul (v : HeightOneSpectrum (𝓞 F)) (g : 𝔸[F]ˣ) :
+    g • adeleOrbitBasepoint F (some (.inr v)) = adeleOrbitBasepoint F (some (.inr v)) ↔
+      ∃ w : (v.adicCompletion F)ˣ, g = IdeleGroup.ofAdicCompletion (𝓞 F) F v w := by
+  classical
+  constructor
+  · intro h
+    rw [Units.smul_def] at h
+    change g.val * AdeleRing.ofAdicCompletion (𝓞 F) F v 0 =
+      AdeleRing.ofAdicCompletion (𝓞 F) F v 0 at h
+    have h1 : g.val.1 = 1 := by
+      have hc := congrArg Prod.fst h
+      change g.val.1 * 1 = 1 at hc
+      rwa [mul_one] at hc
+    have h2 : ∀ w, w ≠ v → g.val.2 w = 1 := by
+      intro w hw
+      have hb : (AdeleRing.ofAdicCompletion (𝓞 F) F v 0).2 w = 1 :=
+        (FiniteAdeleRing.ofAdicCompletion_apply_coe F v 0 w).trans (Pi.mulSingle_eq_of_ne hw _)
+      have hc : g.val.2 w * (AdeleRing.ofAdicCompletion (𝓞 F) F v 0).2 w =
+          (AdeleRing.ofAdicCompletion (𝓞 F) F v 0).2 w := congrArg (fun a : 𝔸[F] ↦ a.2 w) h
+      rwa [hb, mul_one] at hc
+    let u : (v.adicCompletion F)ˣ := ⟨g.val.2 v, g.inv.2 v,
+      congrArg (fun a : 𝔸[F] ↦ a.2 v) g.val_inv, congrArg (fun a : 𝔸[F] ↦ a.2 v) g.inv_val⟩
+    refine ⟨u, Units.ext (Prod.ext h1 (FiniteAdeleRing.ext F fun w ↦ ?_))⟩
+    refine Eq.trans ?_ (FiniteAdeleRing.ofAdicCompletion_apply_coe F v (g.val.2 v) w).symm
+    obtain rfl | hw := eq_or_ne w v
+    · rw [Pi.mulSingle_eq_same]
+    · rw [Pi.mulSingle_eq_of_ne hw, h2 w hw]
+  · rintro ⟨u, rfl⟩
+    rw [Units.smul_def]
+    change AdeleRing.ofAdicCompletion (𝓞 F) F v u.val * AdeleRing.ofAdicCompletion (𝓞 F) F v 0 =
+      AdeleRing.ofAdicCompletion (𝓞 F) F v 0
+    rw [← map_mul, mul_zero]
+
+/-- Two norm-one transporters into the half-open section differ by an embedded local unit. -/
+private theorem adeleFiniteOrbit_transporter_unique (v : HeightOneSpectrum (𝓞 F))
+    (τ : ℝ≥0ˣ →* 𝔸[F]ˣ) (hsection : RightInverse τ (ideleNorm F)) (x : 𝔸[F]) (g h : N₁)
+    (hg : g⁻¹ • x ∈ adeleFiniteOrbitSection F v τ)
+    (hh : h⁻¹ • x ∈ adeleFiniteOrbitSection F v τ) :
+    g.val⁻¹ * h.val ∈ embeddedFiniteLocalUnits F v := by
+  classical
+  obtain ⟨t, ht, hgt⟩ := hg
+  obtain ⟨t', ht', hht⟩ := hh
+  dsimp only at hgt hht
+  have e1 : (g.val * τ t) • adeleOrbitBasepoint F (some (.inr v)) = x := by
+    rw [mul_smul]
+    change g.val • (τ t • adeleOrbitBasepoint F (some (.inr v))) = x
+    rw [hgt]
+    exact smul_inv_smul g.val x
+  have e2 : (h.val * τ t') • adeleOrbitBasepoint F (some (.inr v)) = x := by
+    rw [mul_smul]
+    change h.val • (τ t' • adeleOrbitBasepoint F (some (.inr v))) = x
+    rw [hht]
+    exact smul_inv_smul h.val x
+  have hfix : ((g.val * τ t)⁻¹ * (h.val * τ t')) • adeleOrbitBasepoint F (some (.inr v)) =
+      adeleOrbitBasepoint F (some (.inr v)) := by
+    rw [mul_smul, e2, ← e1, inv_smul_smul]
+  obtain ⟨w, hw⟩ := (adeleFiniteOrbit_transporter_smul F v _).mp hfix
+  have hgn : ideleNorm F g.val = 1 := g.prop
+  have hhn : ideleNorm F h.val = 1 := h.prop
+  have hN : ideleNorm F (IdeleGroup.ofAdicCompletion (𝓞 F) F v w) = t⁻¹ * t' := by
+    rw [← hw, map_mul, map_inv, map_mul, map_mul, hgn, hhn, hsection t, hsection t', one_mul,
+      one_mul]
+  have hwn : ‖(w : v.adicCompletion F)‖ = ((t' : ℝ≥0) : ℝ) / ((t : ℝ≥0) : ℝ) := by
+    rw [← sAdeleFiniteOrbit_transporter_ideleNorm F v w, hN, Units.val_mul,
+      Units.val_inv_eq_inv_val, NNReal.coe_mul, NNReal.coe_inv, inv_mul_eq_div]
+  have hq : (1 : ℝ) < v.asIdeal.absNorm := by exact_mod_cast HeightOneSpectrum.one_lt_absNorm v
+  have hq0 : (0 : ℝ) < v.asIdeal.absNorm := by linarith
+  have ha1 : (1 : ℝ) ≤ ((t : ℝ≥0) : ℝ) := by exact_mod_cast ht.1
+  have ha2 : ((t : ℝ≥0) : ℝ) < v.asIdeal.absNorm := by exact_mod_cast ht.2
+  have hb1 : (1 : ℝ) ≤ ((t' : ℝ≥0) : ℝ) := by exact_mod_cast ht'.1
+  have hb2 : ((t' : ℝ≥0) : ℝ) < v.asIdeal.absNorm := by exact_mod_cast ht'.2
+  have ha0 : (0 : ℝ) < ((t : ℝ≥0) : ℝ) := by linarith
+  obtain ⟨m, hm⟩ := sAdeleFiniteOrbit_transporter_norm_zpow F v w
+  have hm0 : m = 0 := by
+    rcases lt_trichotomy m 0 with hlt | heq | hgt'
+    · exfalso
+      have h1 : (v.asIdeal.absNorm : ℝ) ^ m ≤ (v.asIdeal.absNorm : ℝ) ^ (-1 : ℤ) :=
+        zpow_le_zpow_right₀ hq.le (by omega)
+      rw [zpow_neg_one] at h1
+      have h2 : (v.asIdeal.absNorm : ℝ)⁻¹ < ((t' : ℝ≥0) : ℝ) / ((t : ℝ≥0) : ℝ) :=
+        calc (v.asIdeal.absNorm : ℝ)⁻¹ = 1 / (v.asIdeal.absNorm : ℝ) := (one_div _).symm
+          _ < 1 / ((t : ℝ≥0) : ℝ) := one_div_lt_one_div_of_lt ha0 ha2
+          _ ≤ ((t' : ℝ≥0) : ℝ) / ((t : ℝ≥0) : ℝ) := div_le_div_of_nonneg_right hb1 ha0.le
+      rw [← hwn, hm] at h2
+      linarith
+    · exact heq
+    · exfalso
+      have h1 : (v.asIdeal.absNorm : ℝ) ^ (1 : ℤ) ≤ (v.asIdeal.absNorm : ℝ) ^ m :=
+        zpow_le_zpow_right₀ hq.le (by omega)
+      rw [zpow_one] at h1
+      have h2 : ((t' : ℝ≥0) : ℝ) / ((t : ℝ≥0) : ℝ) < v.asIdeal.absNorm :=
+        lt_of_le_of_lt (div_le_self (by linarith) ha1) hb2
+      rw [← hwn, hm] at h2
+      linarith
+  have hw1 : ‖(w : v.adicCompletion F)‖ = 1 := by rw [hm, hm0, zpow_zero]
+  have htt : t' = t := by
+    rw [hwn, div_eq_one_iff_eq ha0.ne'] at hw1
+    exact Units.ext (NNReal.eq hw1)
+  subst htt
+  have hgh : g.val⁻¹ * h.val = IdeleGroup.ofAdicCompletion (𝓞 F) F v w := by
+    rw [← hw, mul_inv, mul_mul_mul_comm, inv_mul_cancel, mul_one]
+  rw [hgh, mem_embeddedFiniteLocalUnits_iff]
+  refine ⟨rfl, ?_, fun w' hw' ↦ ?_⟩
+  · rw [show (IdeleGroup.ofAdicCompletion (𝓞 F) F v w).val.2 v = w.val from
+      (FiniteAdeleRing.ofAdicCompletion_apply_coe F v _ v).trans (Pi.mulSingle_eq_same _ _)]
+    exact hw1
+  · exact (FiniteAdeleRing.ofAdicCompletion_apply_coe F v _ w').trans
+      (Pi.mulSingle_eq_of_ne hw' _)
+
+/-- Every point of the full orbit has a norm-one transporter into the half-open section. -/
+private theorem adeleFiniteOrbit_transporter_exists (v : HeightOneSpectrum (𝓞 F))
+    (τ : ℝ≥0ˣ →* 𝔸[F]ˣ) (hsection : RightInverse τ (ideleNorm F)) (x : 𝔸[F])
+    (hx : x ∈ adeleFullOrbit F (some (.inr v))) :
+    ∃ g : N₁, g⁻¹ • x ∈ adeleFiniteOrbitSection F v τ := by
+  obtain ⟨a, rfl⟩ := hx
+  obtain ⟨π, hπ⟩ := sAdeleFiniteOrbit_transporter_uniformizer F v
+  have hq : (1 : ℝ) < v.asIdeal.absNorm := by exact_mod_cast HeightOneSpectrum.one_lt_absNorm v
+  have hq0 : (0 : ℝ) < v.asIdeal.absNorm := by linarith
+  obtain ⟨j, hj⟩ := exists_mem_Ico_zpow (x := ((ideleNorm F a : ℝ≥0) : ℝ))
+    (y := (v.asIdeal.absNorm : ℝ))
+    (NNReal.coe_pos.mpr (pos_iff_ne_zero.mpr (ideleNorm F a).ne_zero)) hq
+  let s := IdeleGroup.ofAdicCompletion (𝓞 F) F v (π ^ j)
+  let t := ideleNorm F (a * s)
+  have hs : s⁻¹ • adeleOrbitBasepoint F (some (.inr v)) = adeleOrbitBasepoint F (some (.inr v)) :=
+    (adeleFiniteOrbit_transporter_smul F v s⁻¹).mpr ⟨(π ^ j)⁻¹, by rw [map_inv]⟩
+  refine ⟨⟨a * s * (τ t)⁻¹, ?_⟩, t, ?_, ?_⟩
+  · rw [MonoidHom.mem_ker, map_mul, map_inv, hsection t]
+    exact mul_inv_cancel _
+  · have htv : ((t : ℝ≥0) : ℝ) =
+        ((ideleNorm F a : ℝ≥0) : ℝ) * (v.asIdeal.absNorm : ℝ) ^ (-j) := by
+      change ((ideleNorm F (a * s) : ℝ≥0) : ℝ) = _
+      rw [map_mul, Units.val_mul, NNReal.coe_mul, sAdeleFiniteOrbit_transporter_ideleNorm,
+        Units.val_zpow_eq_zpow_val, norm_zpow, hπ, inv_zpow, zpow_neg]
+    change (t : ℝ≥0) ∈ Set.Ico 1 (v.asIdeal.absNorm : ℝ≥0)
+    rw [Set.mem_Ico, ← NNReal.coe_le_coe, ← NNReal.coe_lt_coe, htv, NNReal.coe_one,
+      NNReal.coe_natCast, zpow_neg, ← div_eq_mul_inv]
+    constructor
+    · rw [le_div_iff₀ (zpow_pos hq0 j), one_mul]
+      exact hj.1
+    · rw [div_lt_iff₀ (zpow_pos hq0 j), mul_comm, ← zpow_add_one₀ hq0.ne']
+      exact hj.2
+  · change τ t • adeleOrbitBasepoint F (some (.inr v)) =
+      (a * s * (τ t)⁻¹)⁻¹ • a • adeleOrbitBasepoint F (some (.inr v))
+    rw [← mul_smul, show (a * s * (τ t)⁻¹)⁻¹ * a = τ t * s⁻¹ by group, mul_smul, hs]
+
 /-- Paper: Proposition 8.2.0.4(2), p. 386. Every point in the full global finite-place
 orbit can be moved into the half-open section by a norm-one idele. The transporter
 is unique up to the embedded local units.
@@ -401,7 +597,8 @@ theorem adeleFiniteOrbit_transporter (v : HeightOneSpectrum (𝓞 F)) (τ : ℝ�
     ∃ g : N₁, g⁻¹ • x ∈ adeleFiniteOrbitSection F v τ ∧
       ∀ h : N₁, h⁻¹ • x ∈ adeleFiniteOrbitSection F v τ →
         g.val⁻¹ * h.val ∈ embeddedFiniteLocalUnits F v := by
-  sorry
+  obtain ⟨g, hg⟩ := adeleFiniteOrbit_transporter_exists F v τ hsection x hx
+  exact ⟨g, hg, fun h hh ↦ adeleFiniteOrbit_transporter_unique F v τ hsection x g h hg hh⟩
 
 /-- Paper: Proposition 8.2.0.5, p. 386. At an infinite place the full S-local orbit is
 already the norm-one orbit of the distinguished base point. -/
