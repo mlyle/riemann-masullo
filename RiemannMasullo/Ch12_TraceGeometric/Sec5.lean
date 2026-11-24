@@ -2,7 +2,6 @@ module
 
 public import RiemannMasullo.Ch12_TraceGeometric.Sec4
 public import RiemannMasullo.Ch10_TraceSpectral.Sec4b
-public import RiemannMasullo.Research.PositiveStrip.Solution
 import RiemannMasullo.Ch10_TraceSpectral.Sec1
 import RiemannMasullo.AppB_AnalyticNT.Sec4b
 import RiemannMasullo.Ch12_TraceGeometric.Sec1b
@@ -236,12 +235,70 @@ theorem traceFormula (τ : ℝ≥0ˣ →ₜ* C𝔽) (hτ : RightInverse τ (idel
     traceIdentity(τ, φ, α) :=
   traceFormula_of_exteriorZeros τ hτ φ α (traceFormula_exteriorZeros τ hτ φ hφ hα)
 
+/-- A completed Hecke zero has real part strictly less than one, including in the left half-plane. -/
+private theorem exteriorZero_re_lt_one (χ : PontryaginDual C𝔽) {z : ℂ}
+    (hz : 0 < meromorphicOrderAt (continuedCompletedHeckeL χ) z) : z.re < 1 := by
+  rcases le_or_gt z.re 0 with h | h
+  · exact h.trans_lt zero_lt_one
+  · obtain ⟨hL, heq⟩ := continuedCompletedHeckeL_spec χ
+    exact completedHeckeL_continuation_zeros χ _ hL heq h hz
+
+/-- Proposition 3.2.1.3(3)–(4), p. 123, excludes zeros on both edges and in the
+exterior when the strip has half-width at least one half. -/
+private theorem exteriorZeros_isEmpty_of_half_le (τ : ℝ≥0ˣ →ₜ* C𝔽) {α : ℝ} (hα : 1 / 2 ≤ α) :
+    IsEmpty exteriorZeros(τ, α) := by
+  constructor
+  rintro ⟨⟨χ, z⟩, hz, hbound⟩
+  obtain ⟨hL, hLh⟩ := continuedCompletedHeckeL_spec χ.val
+  have hp : 0 < meromorphicOrderAt (continuedCompletedHeckeL χ.val) z := by
+    rw [MeromorphicOn.divisor_apply hL.meromorphicOn (mem_univ _)] at hz
+    cases he : meromorphicOrderAt (continuedCompletedHeckeL χ.val) z with
+    | top => simp
+    | coe k =>
+      rw [he, WithTop.untop₀_coe] at hz
+      exact_mod_cast hz
+  have hu := exteriorZero_re_lt_one χ.val hp
+  obtain ⟨hD, hDh⟩ := continuedCompletedHeckeL_spec χ.val⁻¹
+  obtain ⟨ε, hε, hne, hfe⟩ :=
+    completedHeckeL_continuation_functionalEquation χ.val _ _ hL hLh hD hDh
+  have hcomp : meromorphicOrderAt (fun s ↦ continuedCompletedHeckeL χ.val⁻¹ (1 - s)) z =
+      meromorphicOrderAt (continuedCompletedHeckeL χ.val⁻¹) (1 - z) := by
+    simpa [Function.comp_def] using
+      meromorphicOrderAt_comp_of_deriv_ne_zero (f := continuedCompletedHeckeL χ.val⁻¹)
+        (show AnalyticAt ℂ (fun s : ℂ ↦ 1 - s) z by fun_prop)
+        (show deriv (fun s : ℂ ↦ 1 - s) z ≠ 0 by simp)
+  rw [show (fun s ↦ continuedCompletedHeckeL χ.val⁻¹ (1 - s)) =
+      ε * continuedCompletedHeckeL χ.val from funext hfe,
+    meromorphicOrderAt_mul_of_ne_zero (hε.analyticAt z) (hne z)] at hcomp
+  have hl := exteriorZero_re_lt_one χ.val⁻¹ (hcomp ▸ hp)
+  rw [Complex.sub_re, Complex.one_re] at hl
+  exact (not_le.mpr (abs_lt.mpr ⟨by linarith, by linarith⟩)) (hα.trans hbound)
+
+/-- Paper: Theorem 12.5.1.1, pp. 519–520. The exterior-zero sum vanishes for every
+test when the open strip contains the entire critical strip.
+Deviation: The half-width is at least one half. The exterior is empty, so the test
+may take arbitrary values on the norm-one classes. -/
+theorem traceFormula_exteriorZeros_of_half_le (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (φ : BruhatCompactSupport C𝔽) {α : ℝ} (hα : 1 / 2 ≤ α) :
+    HasSum (fun z : exteriorZeros(τ, α) ↦ zeroTerm(φ, z)) 0 := by
+  letI := exteriorZeros_isEmpty_of_half_le τ hα
+  exact hasSum_empty
+
+/-- Paper: Theorem 12.5.1.1, pp. 519–520. The normalized open-strip trace identity
+for half-widths at least one half is the full idelic explicit formula.
+Deviation: The half-width is at least one half and the test may be arbitrary. The
+global volume and the local coefficients follow Theorem B.4.4.7, p. 623. -/
+theorem traceFormula_of_half_le (τ : ℝ≥0ˣ →ₜ* C𝔽) (hτ : RightInverse τ (ideleClassNorm F))
+    (φ : BruhatCompactSupport C𝔽) {α : ℝ} (hα : 1 / 2 ≤ α) :
+    traceIdentity(τ, φ, α) :=
+  traceFormula_of_exteriorZeros τ hτ φ α (traceFormula_exteriorZeros_of_half_le τ φ hα)
+
 section StripDiagonalProof
 
 open Topology
 open scoped ENNReal Pointwise
 attribute [local instance] instSpectralQuotientPolynormableSec3
-local notation "logNorm" => (fun g : C𝔽 ↦ Real.log ((ideleClassNorm F g).val : ℝ))
+local notation "logNorm" => (logIdeleClassNorm F)
 
 /-- Transfer the weighted smooth diagonal integral back to Haar measure. -/
 private theorem stripDiagonal_withDensity {G : Type*} [CommGroup G] [TopologicalSpace G]
@@ -536,44 +593,6 @@ private theorem stripDiagonal_trace (φ : BruhatCompactSupport C𝔽)
   rw [heq]
   exact hspec.choose_spec.1.neg
 
-local notation "stripMomentsVanish(" χ ", " α ", " s ", " hα ", " hs ", " y ")" =>
-  (∀ j : SpectralStripJetIndex (F := F) χ (1 / 2) α s,
-    spectralSobolevPairing y ((spectralStripJet_memLp χ hα hs j).toLp
-      (spectralZeroJet (χ j.val.1) j.val.2.1 j.val.2.2.1 j.val.2.2.2)) = 0)
-
-/-- Paper: (12.5.1.4), p. 520. Given the projective kernel, the smoothened
-geometric diagonal is Haar-integrable. Its negative integral is the absolutely
-convergent sum of the surviving Hecke zero jets.
-Deviation: The trace counts the closed strip with strict reciprocal-weight
-multiplicities on its two edges. If both edges are zero-free the sum is precisely
-the interior sum printed on p. 520. -/
-theorem hasSum_stripZeros_neg_integral_smoothenedDiagonal
-    (φ : BruhatCompactSupport C𝔽) (hφ : ∀ g : C₁, φ.val g = 0)
-    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ)
-    {α s : ℝ} (hα : 0 < α) (hs : 3 ≤ s) (hK : stripTensorExists(hα.le, hs, φ))
-    (U : ℕ → Set C𝔽) (hU : IsDPrimeSequence μ𝔽 U) (hBorel : ∀ n, MeasurableSet (U n)) :
-    let shift (b t : ℝ) := (b : ℂ) + (t : ℂ) * Complex.I
-    let order (η : PontryaginDual C𝔽) := meromorphicOrderAt (continuedCompletedHeckeL η)
-    let Z := {z : PontryaginDual C₁ × ℝ × ℝ //
-      z.2.1 ∈ Icc (-α) α ∧ 0 < order (χ z.1) (shift (1 / 2 + z.2.1) z.2.2)}
-    let term (z : Z) := ((spectralStripMultiplicity α s z.val.2.1
-      (order (χ z.val.1) (shift (1 / 2 + z.val.2.1) z.val.2.2)).untop₀.toNat : ℕ) : ℂ) *
-      M(φ, twist(χ z.val.1, shift z.val.2.1 z.val.2.2))
-    Integrable geomDiagonal(hα.le, hs, φ, hK, U) μ𝔽 ∧ Summable (fun z ↦ ‖term z‖) ∧
-      HasSum term (-(∫ x, geomDiagonal(hα.le, hs, φ, hK, U) x ∂μ𝔽)) := by
-  intro shift order Z term
-  have hk (y) : y ∈ globalThetaSobolev F (1 / 2) (hStrip(hα.le)) hs₀(hs) ↔
-      stripMomentsVanish(χ, α, s, hα.le, hs₀(hs), y) :=
-    spectralStripJet_commonKernel_direct χ hχ hα.le hs₀(hs) y
-  obtain ⟨hn, hint, heq⟩ := stripDiagonal_trace (F := F) (hone_lt_three := hone_lt_three)
-    φ hφ hα hs hK U hU hBorel
-  let T : nuclearEndomorphisms (spectralSobolevQuotient F (1 / 2) (hStrip(hα.le)) hs₀(hs)) := ⟨_, hn⟩
-  obtain ⟨hsum, ht⟩ := spectralStripConvolution_trace_of_commonKernel
-    (F := F) (1 / 2) χ hχ hα.le hs₁(hs) φ hk T rfl
-  refine ⟨hint, hsum, ?_⟩
-  rw [heq, neg_neg]
-  exact ht
-
 end StripDiagonalProof
 
 section SmoothenedDiagonal
@@ -615,6 +634,53 @@ theorem integral_smoothenedStripGeometricKernel_diagonal (φ : BruhatCompactSupp
     φ _hφ hα hs hK U _hU _hBorel).choose_spec
 
 end SmoothenedDiagonal
+
+section ClosedStripZeroSum
+
+local notation "oneLtThree" => (show (1 : ℝ) < 3 from Nat.one_lt_cast.mpr (Nat.one_lt_succ_succ 1))
+
+local notation "hs₁(" hs ")" => (lt_of_lt_of_le oneLtThree hs)
+local notation "hs₀(" hs ")" => (le_of_lt (zero_lt_one.trans hs₁(hs)))
+local notation "hStrip(" hα ")" => (neg_nonpos.mpr hα |>.trans hα)
+local notation "stripTensorExists(" hα ", " hs ", " φ ")" =>
+  (∃ K, sobolevProjectiveKernelOperator (F := F) hα hs₀(hs) K =
+    (hardySobolevTestAction μ𝔽 m𝔽 _ _ _ (hStrip(hα)) hs₀(hs) φ).comp
+      (spectralProjection (F := F) (1 / 2) hα hs₀(hs)))
+
+local notation "geomDiagonal(" hα ", " hs ", " φ ", " hK ", " U ")" =>
+  (fun x : C𝔽 ↦ dSequenceKernelSmoothening μ𝔽 U
+    (globalStripGeometricKernel (F := F) (1 / 2) hα hs₁(hs) φ hK) (x, x))
+
+/-- Paper: (12.5.1.4), p. 520. Given the projective kernel, the smoothened
+geometric diagonal is Haar-integrable. Its negative integral is the absolutely
+convergent sum of the surviving Hecke zero jets.
+Deviation: The trace counts the closed strip with strict reciprocal-weight
+multiplicities on its two edges. If both edges are zero-free the sum is precisely
+the interior sum printed on p. 520. -/
+theorem hasSum_stripZeros_neg_integral_smoothenedDiagonal
+    (φ : BruhatCompactSupport C𝔽) (hφ : ∀ g : C₁, φ.val g = 0)
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ)
+    {α s : ℝ} (hα : 0 < α) (hs : 3 ≤ s) (hK : stripTensorExists(hα.le, hs, φ))
+    (U : ℕ → Set C𝔽) (hU : IsDPrimeSequence μ𝔽 U) (hBorel : ∀ n, MeasurableSet (U n)) :
+    let shift (b t : ℝ) := (b : ℂ) + (t : ℂ) * Complex.I
+    let order (η : PontryaginDual C𝔽) := meromorphicOrderAt (continuedCompletedHeckeL η)
+    let Z := {z : PontryaginDual C₁ × ℝ × ℝ //
+      z.2.1 ∈ Icc (-α) α ∧ 0 < order (χ z.1) (shift (1 / 2 + z.2.1) z.2.2)}
+    let term (z : Z) := ((spectralStripMultiplicity α s z.val.2.1
+      (order (χ z.val.1) (shift (1 / 2 + z.val.2.1) z.val.2.2)).untop₀.toNat : ℕ) : ℂ) *
+      M(φ, twist(χ z.val.1, shift z.val.2.1 z.val.2.2))
+    Integrable geomDiagonal(hα.le, hs, φ, hK, U) μ𝔽 ∧ Summable (fun z ↦ ‖term z‖) ∧
+      HasSum term (-(∫ x, geomDiagonal(hα.le, hs, φ, hK, U) x ∂μ𝔽)) := by
+  intro shift order Z term
+  obtain ⟨hn, hint, heq⟩ := stripDiagonal_trace (F := F) (hone_lt_three := oneLtThree)
+    φ hφ hα hs hK U hU hBorel
+  let T : nuclearEndomorphisms (spectralSobolevQuotient F (1 / 2) (hStrip(hα.le)) hs₀(hs)) := ⟨_, hn⟩
+  obtain ⟨hsum, ht⟩ := spectralStripConvolution_trace (F := F) (1 / 2) χ hχ hα.le hs₁(hs) φ T rfl
+  refine ⟨hint, hsum, ?_⟩
+  rw [heq, neg_neg]
+  exact ht
+
+end ClosedStripZeroSum
 
 section ExteriorZerosGRH
 
@@ -830,7 +896,7 @@ open Classical in
 /-- Fourier–Mellin transform of a test function of the norm: it vanishes unless the
 unitary character is trivial on the norm-one classes, and is then the volume of those
 classes times a one-variable Mellin transform for `dt/t`. -/
-private theorem normTest_mellin (g : ℝ → ℂ) (_hg : Continuous g) (φ : BruhatCompactSupport C𝔽)
+theorem normTest_mellin (g : ℝ → ℂ) (_hg : Continuous g) (φ : BruhatCompactSupport C𝔽)
     (hφ : ∀ x, φ.val x = g (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ)))
     (χ : PontryaginDual C𝔽) (s : ℂ) :
     modulatedFourierMellin m𝔽 univ hm𝔽 μ𝔽 φ.val (ideleClassNormTwist χ s) =
@@ -921,7 +987,7 @@ private theorem grh_cpow_exp (x : ℝ) (w : ℂ) :
     Complex.log_exp (by simp [Real.pi_pos]) (by simp [Real.pi_pos.le]), mul_comm]
 
 /-- The shifted radial integral against `t ^ w`, in logarithmic coordinates. -/
-private theorem grh_shift_integral (H : ℝ → ℂ) (hH : Continuous H) (c : ℝ≥0ˣ → ℂ)
+theorem grh_shift_integral (H : ℝ → ℂ) (hH : Continuous H) (c : ℝ≥0ˣ → ℂ)
     (hc : ∀ t, c t = 1) (y : ℝ) (w : ℂ) :
     ∫ t, H (Real.log ((t : ℝ≥0) : ℝ) - y) * c t * (((t : ℝ≥0) : ℝ) : ℂ) ^ w
         ∂positiveRealHaar =

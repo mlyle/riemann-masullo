@@ -75,7 +75,7 @@ local notation "kernelWitness(" hα ", " hs ", " φ ")" =>
   exists_numberField_projectiveKernel_comp_spectralProjection (F := F) (le_of_lt hα)
     (lt_of_lt_of_le (Nat.one_lt_ofNat : (1 : ℝ) < 3) hs) φ
 local notation "diagonalFormula(" φ ", " hφ ", " χ ", " hχ ", " hα ", " hs ", " U ", " hU ", " hm ")" =>
-  hasSum_stripZeros_neg_integral_smoothenedDiagonal (F := F) (hone_lt_three := Nat.one_lt_ofNat)
+  hasSum_stripZeros_neg_integral_smoothenedDiagonal (F := F)
     φ hφ χ hχ hα hs (kernelWitness(hα, hs, φ)) U hU hm
 
 /-- Paper: Equation (12.5.1.4), p. 520. For a compact Bruhat test vanishing on

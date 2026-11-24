@@ -195,7 +195,7 @@ private theorem stripAngular_radial_eigen (χ : PontryaginDual C𝔽) {α s : �
 private theorem stripAngular_raw_normOne (χ : PontryaginDual C𝔽) (b t : ℝ) (n : ℕ) (g : C₁) (x : C𝔽) :
     spectralZeroJet χ b t n (g.val*x) = (χ g.val : ℂ) * spectralZeroJet χ b t n x := by
   have hm : ideleClassNorm F (g.val*x) = ideleClassNorm F x := by rw [map_mul,g.property,one_mul]
-  have hl : logNorm (g.val*x) = logNorm x := congrArg (fun z : ℝ≥0ˣ ↦ Real.log (z.val : ℝ)) hm
+  have hl : logIdeleClassNorm F (g.val*x) = logIdeleClassNorm F x := congrArg (fun z : ℝ≥0ˣ ↦ Real.log (z.val : ℝ)) hm
   rw [stripProfile_jet,stripProfile_jet,hl,map_mul,Circle.coe_mul]
   ring
 

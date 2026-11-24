@@ -7,7 +7,20 @@ import RiemannMasullo.Ch11_ShellStructure.Sec2a_PrimePVRefutation
 import all RiemannMasullo.Ch06_LocalGlobal.Sec2
 import all RiemannMasullo.Ch03_IdelicZeta.Sec3
 import Mathlib.Analysis.Calculus.BumpFunction.Normed
+import Mathlib.Analysis.Calculus.BumpFunction.FiniteDimension
+import Mathlib.Analysis.Distribution.SchwartzSpace.Fourier
+import Mathlib.Analysis.Normed.Group.Tannery
+import Mathlib.MeasureTheory.Integral.Bochner.Set
+import RiemannMasullo.AppC_LCTVS.Sec3a
+import RiemannMasullo.AppD_SchwartzBruhat.Sec3a
+import RiemannMasullo.Ch09_HardySobolev.Sec2
+import RiemannMasullo.Ch09_HardySobolev.Sec3
+import RiemannMasullo.Ch10_TraceSpectral.Sec3
+import RiemannMasullo.Ch10_TraceSpectral.Sec4a
+import RiemannMasullo.Ch13_ZerosHecke.Targets
+import RiemannMasullo.External.ZetaLab.HardyFirstZero.FirstZero
 import Mathlib.Analysis.Normed.Operator.Banach
+import RiemannMasullo.External.ZetaLab.HardyFirstZero.FirstZero
 
 /-! # §11.2.1–11.2.2 assertions that are false as printed -/
 
@@ -20,7 +33,6 @@ namespace RiemannMasullo
 
 set_option quotPrecheck false
 set_option maxSynthPendingDepth 8
-set_option Elab.async false
 
 attribute [local instance] instIdeleClassMeasurableSpaceSec1 instIdeleClassBorelSpaceSec1
   instIdeleClassT2Sec1 instIdeleClassLocallyCompactSec1 instIdeleClassSecondCountableSec1
@@ -981,8 +993,464 @@ private theorem rational_cutoffConv_of_projected_translate
     (P (bruhatRegularizedAction μ τ hτ φ u)) htest
   exact ⟨φ, hφ, R, ε, ρ, hρ, hcut⟩
 
+/-- For a commutative action, a vector of an isotype killed by a symmetric idempotent
+`P` whose translate is not killed satisfies the projected conditions. On the isotype,
+`P v` is orthogonal to it only if `⟪P v, v⟫ = ‖P v‖²` vanishes. -/
+private theorem rational_cutoffConv_positive_translate_of_projection
+    {G L E : Type*} [CommMonoid G] [Monoid L] [TopologicalSpace L]
+    [NormedAddCommGroup E] [InnerProductSpace ℂ E]
+    (τ : G →* (E →L[ℂ] E)) (i : L →* G) (ω : PontryaginDual L)
+    (hc : CompleteSpace ↥(actionIsotype (τ.comp i) ω))
+    (P : E →L[ℂ] E) (hsymm : ∀ x y, inner ℂ (P x) y = inner ℂ x (P y))
+    (hidem : ∀ x, P (P x) = P x) (r : G → ℝ)
+    (h : ∃ (u : E) (g : G), u ∈ actionIsotype (τ.comp i) ω ∧ 1 < r g ∧
+      P u = 0 ∧ P (τ g u) ≠ 0) :
+    ∃ (v : actionIsotype (τ.comp i) ω) (g : G), 1 < r g ∧
+      (actionIsotype (τ.comp i) ω).orthogonalProjectionOnto (P v.val) = 0 ∧
+      (actionIsotype (τ.comp i) ω).orthogonalProjectionOnto (P (τ g v.val)) ≠ 0 := by
+  obtain ⟨u, g, hu, hr, hPu, hPg⟩ := h
+  have hg : τ g u ∈ actionIsotype (τ.comp i) ω := by
+    refine (mem_actionIsotype (τ.comp i) ω _).mpr fun k ↦ ?_
+    have hk := (mem_actionIsotype (τ.comp i) ω u).mp hu k
+    change τ (i k) (τ g u) = (ω k : ℂ) • τ g u
+    change τ (i k) u = (ω k : ℂ) • u at hk
+    have e : τ (i k) * τ g = τ g * τ (i k) := by rw [← map_mul, ← map_mul, mul_comm]
+    calc τ (i k) (τ g u) = (τ (i k) * τ g) u := rfl
+      _ = τ g (τ (i k) u) := by rw [e]; rfl
+      _ = (ω k : ℂ) • τ g u := by rw [hk, map_smul]
+  refine ⟨⟨u, hu⟩, g, hr, ?_, fun h ↦ hPg ?_⟩
+  · change (actionIsotype (τ.comp i) ω).orthogonalProjectionOnto (P u) = 0
+    rw [hPu, map_zero]
+  · have h0 : inner ℂ ((actionIsotype (τ.comp i) ω).orthogonalProjectionOnto (P (τ g u)))
+        (⟨τ g u, hg⟩ : actionIsotype (τ.comp i) ω) = 0 := by
+      change inner ℂ ((actionIsotype (τ.comp i) ω).orthogonalProjectionOnto
+        (P (τ g (⟨u, hu⟩ : actionIsotype (τ.comp i) ω).val))) _ = 0
+      rw [h, inner_zero_left]
+    rw [Submodule.inner_orthogonalProjectionOnto_eq_of_mem_right] at h0
+    change inner ℂ (P (τ g u)) (τ g u) = 0 at h0
+    rw [← hidem (τ g u), hsymm] at h0
+    exact inner_self_eq_zero.mp h0
+
+/-- The Riesz vector `exp(-iγx)/(1+x²)` of the log norm `x` is square integrable
+for the weight `1+x²` of the compact-interval Sobolev space on `[-0, 0]` with `s = 2`. -/
+private theorem rational_cutoffConv_rieszVector_memLp
+    {G : Type*} [CommGroup G] [TopologicalSpace G] [IsTopologicalGroup G]
+    [T2Space G] [LocallyCompactSpace G] [SecondCountableTopology G]
+    [MeasurableSpace G] [BorelSpace G]
+    (m : G →ₜ* ℝ≥0ˣ) (hm : IsModulation m) (hsurj : Surjective m)
+    (μ : Measure G) [μ.IsHaarMeasure] (γ : ℝ) :
+    MemLp (fun g : G ↦ Complex.exp (-((γ * Real.log ((m g).val : ℝ) : ℝ) : ℂ) * Complex.I) /
+        ((1 + Real.log ((m g).val : ℝ) ^ 2 : ℝ) : ℂ)) 2
+      (μ.withDensity fun g ↦ ENNReal.ofReal
+        (intervalSobolevDensity (-(0 : ℝ)) 0 2 (Real.log ((m g).val : ℝ)))) := by
+  have hL : Continuous (fun g : G ↦ Real.log ((m g).val : ℝ)) :=
+    (NNReal.continuous_coe.comp (Units.continuous_val.comp m.continuous)).log
+      fun g ↦ (NNReal.coe_pos.mpr (Units.zero_lt _)).ne'
+  have hint := (modulatedSobolev_reciprocal_integrable_iff m μ hm hsurj (s := 2)
+    (by norm_num)).mpr (by norm_num)
+  have hpos (g : G) : 0 < 1 + Real.log ((m g).val : ℝ) ^ 2 := by positivity
+  have hw (g : G) : intervalSobolevDensity (-(0 : ℝ)) 0 2 (Real.log ((m g).val : ℝ)) =
+      1 + Real.log ((m g).val : ℝ) ^ 2 := by
+    simp [intervalSobolevDensity]
+  have hcont : Continuous (fun g : G ↦
+      Complex.exp (-((γ * Real.log ((m g).val : ℝ) : ℝ) : ℂ) * Complex.I) /
+        ((1 + Real.log ((m g).val : ℝ) ^ 2 : ℝ) : ℂ)) := by
+    refine Continuous.div (by fun_prop) (by fun_prop) fun g ↦ ?_
+    exact Complex.ofReal_ne_zero.mpr (hpos g).ne'
+  rw [memLp_two_iff_integrable_sq_norm hcont.aestronglyMeasurable,
+    integrable_withDensity_iff (by
+      simp only [hw]
+      exact ((continuous_const.add (hL.pow 2)).measurable).ennreal_ofReal)
+      (ae_of_all _ fun _ ↦ ENNReal.ofReal_lt_top)]
+  refine hint.congr (ae_of_all _ fun g ↦ ?_)
+  dsimp only
+  rw [hw, ENNReal.toReal_ofReal (hpos g).le, norm_div, Complex.norm_real,
+    Real.norm_of_nonneg (hpos g).le, ← Complex.ofReal_neg, Complex.norm_exp_ofReal_mul_I, sq_abs]
+  rw [show (-2 / 2 : ℝ) = -1 by norm_num, Real.rpow_neg_one]
+  field_simp
+
+/-- A function of the log norm is fixed by the Hardy–Sobolev translation by any
+element of norm one. -/
+private theorem rational_cutoffConv_rieszVector_fixed
+    {G : Type*} [CommGroup G] [TopologicalSpace G] [IsTopologicalGroup G]
+    [T2Space G] [LocallyCompactSpace G] [SecondCountableTopology G]
+    [MeasurableSpace G] [BorelSpace G]
+    (μ : Measure G) [μ.IsHaarMeasure] (m : G →ₜ* ℝ≥0ˣ) (hs : (0 : ℝ) ≤ 2) (f : G → ℂ)
+    (hf : MemLp f 2 (μ.withDensity fun g ↦ ENNReal.ofReal
+        (intervalSobolevDensity (-(0 : ℝ)) 0 2 (Real.log ((m g).val : ℝ)))))
+    (hrad : ∀ k x : G, m k = 1 → f (k⁻¹ * x) = f x) (k : G) (hk : m k = 1) :
+    hardySobolevTranslation μ m (-(0 : ℝ)) 0 2 (neg_nonpos.mpr (le_rfl (a := (0 : ℝ)))) hs k
+      (hf.toLp f) = hf.toLp f := by
+  have hpos (x : G) : 0 < intervalSobolevDensity (-(0 : ℝ)) 0 2 (Real.log ((m x).val : ℝ)) := by
+    simp only [intervalSobolevDensity]
+    positivity
+  have hac : (μ.withDensity fun g ↦ ENNReal.ofReal
+      (intervalSobolevDensity (-(0 : ℝ)) 0 2 (Real.log ((m g).val : ℝ)))) ≪ μ :=
+    withDensity_absolutelyContinuous _ _
+  have hac' : μ ≪ μ.withDensity fun g ↦ ENNReal.ofReal
+      (intervalSobolevDensity (-(0 : ℝ)) 0 2 (Real.log ((m g).val : ℝ))) := by
+    refine withDensity_absolutelyContinuous' ?_ (ae_of_all _ fun x ↦ ?_)
+    · have hL : Continuous (fun g : G ↦ Real.log ((m g).val : ℝ)) :=
+        (NNReal.continuous_coe.comp (Units.continuous_val.comp m.continuous)).log
+          fun g ↦ (NNReal.coe_pos.mpr (Units.zero_lt _)).ne'
+      have hw (g : G) : intervalSobolevDensity (-(0 : ℝ)) 0 2 (Real.log ((m g).val : ℝ)) =
+          1 + Real.log ((m g).val : ℝ) ^ 2 := by
+        simp [intervalSobolevDensity]
+      simp only [hw]
+      exact ((continuous_const.add (hL.pow 2)).measurable).ennreal_ofReal.aemeasurable
+    · exact ENNReal.ofReal_ne_zero_iff.mpr (hpos x)
+  have h1 := hardySobolevTranslation_apply μ m (-(0 : ℝ)) 0 2
+    (neg_nonpos.mpr (le_rfl (a := (0 : ℝ)))) hs k (hf.toLp f)
+  have h2 : ((hf.toLp f : _) : G → ℂ) =ᵐ[μ] f := hac'.ae_le (MemLp.coeFn_toLp hf)
+  have h3 := (measurePreserving_mul_left μ k⁻¹).quasiMeasurePreserving.ae_eq_comp h2
+  apply Lp.ext
+  refine hac.ae_le ?_
+  filter_upwards [h1, h3, h2] with x e1 e3 e2
+  rw [e1]
+  change ((hf.toLp f : _) : G → ℂ) (k⁻¹ * x) = _
+  rw [show ((hf.toLp f : _) : G → ℂ) (k⁻¹ * x) = f (k⁻¹ * x) from e3, hrad k x hk, e2]
+
+/-- A function of the log norm lies in the trivial isotype of any subgroup of norm-one
+elements. -/
+private theorem rational_cutoffConv_rieszVector_mem
+    {G L : Type*} [CommGroup G] [TopologicalSpace G] [IsTopologicalGroup G]
+    [T2Space G] [LocallyCompactSpace G] [SecondCountableTopology G]
+    [MeasurableSpace G] [BorelSpace G] [Monoid L] [TopologicalSpace L]
+    (μ : Measure G) [μ.IsHaarMeasure] (m : G →ₜ* ℝ≥0ˣ) (hs : (0 : ℝ) ≤ 2) (f : G → ℂ)
+    (hf : MemLp f 2 (μ.withDensity fun g ↦ ENNReal.ofReal
+        (intervalSobolevDensity (-(0 : ℝ)) 0 2 (Real.log ((m g).val : ℝ)))))
+    (hrad : ∀ k x : G, m k = 1 → f (k⁻¹ * x) = f x) (i : L →* G) (hi : ∀ k, m (i k) = 1)
+    (ω : PontryaginDual L) (hω : ∀ k, (ω k : ℂ) = 1) :
+    hf.toLp f ∈ actionIsotype ((hardySobolevTranslation μ m (-(0 : ℝ)) 0 2
+      (neg_nonpos.mpr (le_rfl (a := (0 : ℝ)))) hs).comp i) ω := by
+  refine (mem_actionIsotype _ _ _).mpr fun k ↦ ?_
+  rw [hω k, one_smul]
+  exact rational_cutoffConv_rieszVector_fixed μ m hs f hf hrad (i k) (hi k)
+
+/-- A rational zeta zero on the critical line has positive finite Hecke order. -/
+private theorem rational_cutoffConv_rieszVector_order (γ : ℝ)
+    (hγ : riemannZeta (1 / 2 + γ * Complex.I) = 0) :
+    0 < (meromorphicOrderAt (continuedCompletedHeckeL (1 : PontryaginDual C𝔽(ℚ)))
+      (1 / 2 + γ * Complex.I)).untop₀.toNat := by
+  let z : ℂ := 1 / 2 + γ * Complex.I
+  have hre : z.re = 1 / 2 := by simp [z]
+  have hm : MeromorphicOn riemannZeta univ := by
+    simpa only [DirichletCharacter.LFunction_modOne_eq] using
+      meromorphic_dirichletLFunction (1 : DirichletCharacter ℂ 1)
+  change 0 < (meromorphicOrderAt _ z).untop₀.toNat
+  rw [← meromorphicOrderAt_finiteHeckeL_continuation _ hm (fun s ↦
+    (dedekindZeta_rat_eq_riemannZeta s.property).symm.trans
+      (finiteHeckeL_one_eq_dedekindZeta (K := ℚ) s).symm) (by rw [hre]; norm_num)]
+  have hn : meromorphicOrderAt riemannZeta z ≠ ⊤ := by
+    refine hm.meromorphicOrderAt_ne_top_of_isPreconnected isPreconnected_univ (mem_univ (2 : ℂ))
+      (mem_univ z) ?_
+    exact (meromorphicOrderAt_ne_top_iff_eventually_ne_zero (hm 2 (mem_univ _))).2
+      (((differentiableAt_riemannZeta (by norm_num : (2 : ℂ) ≠ 1)).continuousAt.eventually_ne
+        (riemannZeta_ne_zero_of_one_lt_re (by norm_num))).filter_mono nhdsWithin_le_nhds)
+  have hp : 0 < meromorphicOrderAt riemannZeta z := by
+    apply (tendsto_zero_iff_meromorphicOrderAt_pos (hm z (mem_univ z))).mp
+    change riemannZeta z = 0 at hγ
+    rw [← hγ]
+    exact (differentiableAt_riemannZeta (fun h ↦ by norm_num [h] at hre)).continuousAt.continuousWithinAt
+  rw [← Int.pos_iff_toNat_pos]
+  exact WithTop.coe_lt_coe.mp (by simpa only [WithTop.coe_untop₀_of_ne_top hn, WithTop.coe_zero] using hp)
+
+/-- The degree-two density on the zero-width strip is positive and measurable. -/
+private theorem rational_cutoffConv_weight_two :
+    let w (x : C𝔽(ℚ)) := intervalSobolevDensity (-0) 0 2 (logIdeleClassNorm ℚ x)
+    Measurable w ∧ ∀ x, 0 < w x := by
+  intro w
+  have hl : Continuous (logIdeleClassNorm ℚ) :=
+    (NNReal.continuous_coe.comp (Units.continuous_val.comp (m𝔽(ℚ)).continuous)).log
+      fun x ↦ (NNReal.coe_pos.mpr (Units.zero_lt _)).ne'
+  have hw (x) : w x = 1 + logIdeleClassNorm ℚ x ^ 2 := by simp [w, intervalSobolevDensity]
+  rw [funext hw]
+  exact ⟨(continuous_const.add (hl.pow 2)).measurable, fun x ↦ by positivity⟩
+
+/-- Base-measure almost-everywhere representatives can be recovered from a strictly positive density. -/
+private theorem rational_cutoffConv_haar_ac {X : Type*} [MeasurableSpace X] (μ : Measure X)
+    {w : X → ℝ} (hm : Measurable w) (hw : ∀ x, 0 < w x) :
+    μ ≪ μ.withDensity (fun x ↦ ENNReal.ofReal (w x)) :=
+  withDensity_absolutelyContinuous' hm.ennreal_ofReal.aemeasurable
+    (.of_forall fun x ↦ ENNReal.ofReal_ne_zero_iff.mpr (hw x))
+
+/-- The weighted inner product, written with respect to the base measure. -/
+private theorem rational_cutoffConv_inner {X : Type*} [MeasurableSpace X] (μ : Measure X)
+    (w : X → ℝ) (hm : Measurable w) (hw : ∀ x, 0 ≤ w x)
+    (u v : Lp ℂ 2 (μ.withDensity (fun x ↦ ENNReal.ofReal (w x)))) :
+    Integrable (fun x ↦ (w x : ℂ) * (v x * star (u x))) μ ∧
+      inner ℂ u v = ∫ x, (w x : ℂ) * (v x * star (u x)) ∂μ := by
+  have hfin := ae_of_all μ (fun x ↦ ENNReal.ofReal_lt_top (r := w x))
+  have he (x) : (ENNReal.ofReal (w x)).toReal • inner ℂ (u x) (v x) =
+      (w x : ℂ) * (v x * star (u x)) := by
+    simp only [ENNReal.toReal_ofReal (hw x), RCLike.inner_apply, starRingEnd_apply, Complex.real_smul]
+  refine ⟨((integrable_withDensity_iff_integrable_smul' hm.ennreal_ofReal hfin).mp
+    (L2.integrable_inner u v)).congr (.of_forall he), ?_⟩
+  rw [L2.inner_def, integral_withDensity_eq_integral_toReal_smul hm.ennreal_ofReal hfin]
+  exact integral_congr_ae (.of_forall he)
+
+/-- Paper: Theorem 11.2.1.2(2) and (11.2.1.4), p. 488 (step of the refutation).
+At an ordinate γ of a critical-line zeta zero, the Riesz vector `exp(-iγx)/(1+x²)` of the
+log norm `x` is orthogonal to the half-weighted theta closure: its inner product with
+`|g|^(1/2) θ_f(g)` is the conjugate of the Mellin transform of `θ_f` at `1/2 + iγ`, which
+is a multiple of the completed zeta function there. -/
+private theorem rational_cutoffConv_rieszVector_theta_orthogonal (hs : (0 : ℝ) ≤ 2) (γ : ℝ)
+    (hγ : riemannZeta (1 / 2 + γ * Complex.I) = 0) :
+    geometricProjection (F := ℚ) (1 / 2) (le_rfl (a := (0 : ℝ))) hs
+      ((rational_cutoffConv_rieszVector_memLp (m𝔽(ℚ))
+        ⟨isProperMap_ideleClassNorm ℚ, ideleClassNorm_ne_one (F := ℚ)⟩
+        ratIdeleNormSection_class_rightInverse.surjective (ideleClassTamagawaMeasure ℚ)
+        γ).toLp _) = 0 := by
+  let μ := ideleClassTamagawaMeasure ℚ
+  let l := logIdeleClassNorm ℚ
+  let w (x : C𝔽(ℚ)) := intervalSobolevDensity (-0) 0 2 (l x)
+  have hw (x) : w x = 1 + l x ^ 2 := by simp [w, intervalSobolevDensity]
+  obtain ⟨hm, hp⟩ : Measurable w ∧ ∀ x, 0 < w x := rational_cutoffConv_weight_two
+  let χ : PontryaginDual C₁(ℚ) → PontryaginDual C𝔽(ℚ) := fun _ ↦ 1
+  let j : SpectralStripJetIndex χ (1/2) 0 2 := ⟨(1, 0, γ, 0), by
+    rw [spectralStripMultiplicity_boundary le_rfl (Or.inr rfl), lt_spectralBoundaryMultiplicity]
+    refine ⟨?_, by norm_num⟩
+    simpa only [χ, add_zero, Complex.ofReal_div, Complex.ofReal_one, Complex.ofReal_ofNat] using
+      rational_cutoffConv_rieszVector_order γ hγ⟩
+  have hj := spectralStripJet_memLp χ (le_rfl (a := (0 : ℝ))) hs j
+  have hf := rational_cutoffConv_rieszVector_memLp (m𝔽(ℚ))
+    ⟨isProperMap_ideleClassNorm ℚ, ideleClassNorm_ne_one (F := ℚ)⟩
+    ratIdeleNormSection_class_rightInverse.surjective μ γ
+  apply (Submodule.starProjection_apply_eq_zero_iff _).mpr
+  apply (Submodule.mem_orthogonal' _ _).mpr
+  intro y hy
+  have hz := spectralStripJet_commonKernel_forward χ le_rfl hs y hy j
+  rw [(rational_cutoffConv_inner μ w hm (fun x ↦ (hp x).le) _ y).2]
+  refine Eq.trans ?_ hz
+  apply integral_congr_ae
+  have he := (rational_cutoffConv_haar_ac μ hm hp).ae_eq hf.coeFn_toLp
+  have he' := (rational_cutoffConv_haar_ac μ hm.inv (fun x ↦ inv_pos.mpr (hp x))).ae_eq hj.coeFn_toLp
+  filter_upwards [he, he'] with x hx hx'
+  change (w x : ℂ) * (y x * star ((hf.toLp _) x)) = y x * (hj.toLp _) x
+  rw [hx, hx']
+  change (w x : ℂ) * (y x * star (Complex.exp (-((γ * l x : ℝ) : ℂ) * Complex.I) /
+    ((1 + l x ^ 2 : ℝ) : ℂ))) = y x * spectralZeroJet 1 0 γ 0 x
+  rw [hw]
+  simp only [spectralZeroJet, pow_zero, mul_one, Complex.ofReal_zero, zero_add]
+  change _ = y x * (1 * (((ideleClassNorm ℚ x).val : ℝ) : ℂ) ^ ((γ : ℂ) * Complex.I))
+  rw [one_mul, Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr
+    (NNReal.coe_pos.mpr (Units.zero_lt _)).ne'), ← Complex.ofReal_log (NNReal.coe_nonneg _)]
+  simp only [Complex.star_def, map_div₀, Complex.conj_ofReal, ← Complex.exp_conj, map_mul,
+    map_neg, Complex.conj_I, neg_mul_neg]
+  change ((1 + l x ^ 2 : ℝ) : ℂ) * (y x * (Complex.exp _ / _)) = y x * Complex.exp ((l x : ℂ) * _)
+  rw [Complex.ofReal_mul, mul_assoc, mul_left_comm (γ : ℂ)]
+  have hn : ((1 + l x ^ 2 : ℝ) : ℂ) ≠ 0 := Complex.ofReal_ne_zero.mpr (by positivity)
+  field_simp [hn]
+
+/-- Left invariance transfers a simultaneous translation in the two arguments of the
+weighted inner product to a shift of its density. -/
+private theorem rational_cutoffConv_shifted_inner {G : Type*} [Group G] [MeasurableSpace G]
+    [MeasurableMul G] (μ : Measure G) [μ.IsMulLeftInvariant] (w : G → ℝ)
+    (hw : Measurable w) (hp : ∀ x, 0 ≤ w x) (g : G)
+    (u v : Lp ℂ 2 (μ.withDensity (fun x ↦ ENNReal.ofReal (w x)))) (U V : G → ℂ)
+    (hu : (u : G → ℂ) =ᵐ[μ] fun x ↦ U (g⁻¹ * x))
+    (hv : (v : G → ℂ) =ᵐ[μ] fun x ↦ V (g⁻¹ * x)) :
+    Integrable (fun x ↦ (w (g * x) : ℂ) * (V x * star (U x))) μ ∧
+      inner ℂ u v = ∫ x, (w (g * x) : ℂ) * (V x * star (U x)) ∂μ := by
+  let f (x : G) := (w x : ℂ) * (v x * star (u x))
+  obtain ⟨hi, he⟩ := rational_cutoffConv_inner μ w hw hp u v
+  have ha := measurePreserving_mul_left μ g
+  have h : (fun x ↦ f (g * x)) =ᵐ[μ] fun x ↦ (w (g * x) : ℂ) * (V x * star (U x)) := by
+    filter_upwards [ha.quasiMeasurePreserving.ae_eq_comp hu, ha.quasiMeasurePreserving.ae_eq_comp hv]
+      with x hx hy
+    change u (g * x) = U (g⁻¹ * (g * x)) at hx
+    change v (g * x) = V (g⁻¹ * (g * x)) at hy
+    simp only [f, hx, hy, inv_mul_cancel_left]
+  exact ⟨((ha.integrable_comp_emb (measurableEmbedding_mulLeft g)).mpr hi).congr h,
+    he.trans ((integral_mul_left_eq_self f g).symm.trans (integral_congr_ae h))⟩
+
+/-- Three equally spaced shifts of the quadratic density recover the unweighted integral. -/
+private theorem rational_cutoffConv_second_difference {X : Type*} [MeasurableSpace X]
+    (μ : Measure X) (l : X → ℝ) (f : X → ℂ)
+    (h : ∀ t : ℝ, 0 ≤ t →
+      Integrable (fun x ↦ ((1 + (t + l x) ^ 2 : ℝ) : ℂ) * f x) μ ∧
+      (∫ x, ((1 + (t + l x) ^ 2 : ℝ) : ℂ) * f x ∂μ) = 0) :
+    ∫ x, f x ∂μ = 0 := by
+  let p (t : ℝ) (x : X) := ((1 + (t + l x) ^ 2 : ℝ) : ℂ) * f x
+  have hp (t : ℝ) (ht : 0 ≤ t) : Integrable (p t) μ ∧ ∫ x, p t x ∂μ = 0 := h t ht
+  obtain ⟨h₀, e₀⟩ := hp 0 (by norm_num)
+  obtain ⟨h₁, e₁⟩ := hp 1 (by norm_num)
+  obtain ⟨h₂, e₂⟩ := hp 2 (by norm_num)
+  have e (x : X) : 2 * f x = p 2 x - p 1 x - p 1 x + p 0 x := by
+    simp only [p]; push_cast; ring
+  have hzero : 2 * (∫ x, f x ∂μ) = 0 := by
+    have ha := integral_add ((h₂.sub h₁).sub h₁) h₀
+    have hb := integral_sub (h₂.sub h₁) h₁
+    simp only [Pi.sub_apply] at ha hb
+    rw [← integral_const_mul, integral_congr_ae (.of_forall e), ha, hb, integral_sub h₂ h₁,
+      e₀, e₁, e₂]
+    ring
+  exact (mul_eq_zero.mp hzero).resolve_left (by norm_num)
+
+/-- In the width-zero strip at Sobolev order zero, the strict cutoff discards every
+jet. Thus the polar-free theta tests are dense for the unweighted norm. -/
+private theorem rational_cutoffConv_unweighted_mem
+    (u : CompactIntervalSobolev (ideleClassTamagawaMeasure ℚ) (logIdeleClassNorm ℚ) (-0) 0 0) :
+    u ∈ globalThetaSobolev ℚ (1/2) (neg_nonpos.mpr (le_rfl (a := (0 : ℝ)))) (le_rfl (a := (0 : ℝ))) := by
+  obtain ⟨χ, hχ⟩ := exists_spectralBasepointChoice ℚ
+  apply (spectralStripJet_commonKernel χ hχ (le_rfl (a := (0 : ℝ))) le_rfl u).mpr
+  intro j
+  have hb := (SpectralStripJetIndex.mem_strip_order_pos le_rfl j).1
+  have hz : j.val.2.1 = 0 := le_antisymm hb.2 (by simpa only [neg_zero] using hb.1)
+  have hj := j.property
+  simp only [hz, spectralStripMultiplicity_boundary le_rfl (Or.inr rfl),
+    lt_spectralBoundaryMultiplicity] at hj
+  have hn := Nat.cast_nonneg (α := ℝ) j.val.2.2.2
+  linarith [hj.2]
+
+/-- Paper: Theorem 11.2.1.2(2) and (11.2.1.4), p. 488 (step of the refutation).
+At an ordinate γ of a critical-line zeta zero, some translate of the Riesz vector
+`exp(-iγx)/(1+x²)` by an idele class of norm greater than one is not orthogonal to the
+half-weighted theta closure. Simultaneously translating a theta test shifts the quadratic
+weight in the pairing. At log norms 0, 1 and 2 its second difference recovers twice the
+unweighted pairing, and polar-free theta tests are dense in unweighted L². -/
+private theorem rational_cutoffConv_rieszVector_translate (hs : (0 : ℝ) ≤ 2) (γ : ℝ)
+    (hγ : riemannZeta (1 / 2 + γ * Complex.I) = 0) :
+    ∃ g : C𝔽(ℚ), 1 < ((m𝔽(ℚ) g).val : ℝ) ∧
+      geometricProjection (F := ℚ) (1 / 2) (le_rfl (a := (0 : ℝ))) hs
+        (hardySobolevTranslation (ideleClassTamagawaMeasure ℚ) (m𝔽(ℚ))
+          (-(0 : ℝ)) 0 2 (neg_nonpos.mpr (le_rfl (a := (0 : ℝ)))) hs g
+          ((rational_cutoffConv_rieszVector_memLp (m𝔽(ℚ))
+            ⟨isProperMap_ideleClassNorm ℚ, ideleClassNorm_ne_one (F := ℚ)⟩
+            ratIdeleNormSection_class_rightInverse.surjective (ideleClassTamagawaMeasure ℚ)
+            γ).toLp _)) ≠ 0 := by
+  let μ := ideleClassTamagawaMeasure ℚ
+  let l := logIdeleClassNorm ℚ
+  let w (s : ℝ) (x : C𝔽(ℚ)) := intervalSobolevDensity (-0) 0 s (l x)
+  let W (s : ℝ) := Lp ℂ 2 (μ.withDensity (fun x ↦ ENNReal.ofReal (w s x)))
+  let hl₀ := neg_nonpos.mpr (le_rfl (a := (0 : ℝ)))
+  let Θ := globalThetaSobolev ℚ (1/2) hl₀ hs
+  let τ := hardySobolevTranslation μ (m𝔽(ℚ)) (-0) 0 2 hl₀ hs
+  let U (x : C𝔽(ℚ)) := Complex.exp (-((γ * l x : ℝ) : ℂ) * Complex.I) /
+    ((1 + l x ^ 2 : ℝ) : ℂ)
+  have hU : MemLp U 2 (μ.withDensity (fun x ↦ ENNReal.ofReal (w 2 x))) :=
+    rational_cutoffConv_rieszVector_memLp (m𝔽(ℚ))
+      ⟨isProperMap_ideleClassNorm ℚ, ideleClassNorm_ne_one (F := ℚ)⟩
+      ratIdeleNormSection_class_rightInverse.surjective μ γ
+  have hw (x) : w 2 x = 1 + l x ^ 2 := by simp [w, intervalSobolevDensity]
+  have hw₀ (x) : w 0 x = 1 := by simp [w, intervalSobolevDensity]
+  obtain ⟨hm, hp⟩ : Measurable (w 2) ∧ ∀ x, 0 < w 2 x := rational_cutoffConv_weight_two
+  have hm₀ : Measurable (w 0) := by rw [funext hw₀]; exact measurable_const
+  have hp₀ (x) : 0 < w 0 x := (hw₀ x).symm ▸ zero_lt_one
+  have hU₀ : MemLp U 2 (μ.withDensity (fun x ↦ ENNReal.ofReal (w 0 x))) :=
+    hU.mono_measure (withDensity_mono (.of_forall fun x ↦ ENNReal.ofReal_le_ofReal
+      (by rw [hw₀, hw]; linarith [sq_nonneg (l x)])))
+  let u := hU.toLp U
+  let u₀ := hU₀.toLp U
+  have hu : (u : C𝔽(ℚ) → ℂ) =ᵐ[μ] U := (rational_cutoffConv_haar_ac μ hm hp).ae_eq hU.coeFn_toLp
+  have hu₀ : (u₀ : C𝔽(ℚ) → ℂ) =ᵐ[μ] U := (rational_cutoffConv_haar_ac μ hm₀ hp₀).ae_eq hU₀.coeFn_toLp
+  by_contra! h
+  have hproj (g : C𝔽(ℚ)) (hg : 1 < ((m𝔽(ℚ) g).val : ℝ)) :
+      τ g u ∈ Θ.orthogonal := (Θ.starProjection_apply_eq_zero_iff).mp (h g hg)
+  let E (s : ℝ) (hs' : 0 ≤ s) :=
+    (existsUnique_globalThetaSobolevEmbedding (F := ℚ) (1/2) (-0) 0 s hl₀ hs').exists.choose
+  let L := innerSL ℂ u₀
+  -- Compare the two Sobolev embeddings on the same polar-free theta test.
+  have hR : (E 0 le_rfl).toLinearMap.range ≤ L.ker := by
+    rintro _ ⟨q, rfl⟩
+    obtain ⟨f, rfl⟩ := Submodule.Quotient.mk_surjective _ q
+    let V := modulationWeight (m𝔽(ℚ)) (1/2) (adelicTheta f.val)
+    let v := E 2 hs (Submodule.Quotient.mk f)
+    let v₀ := E 0 le_rfl (Submodule.Quotient.mk f)
+    have hv : (v : C𝔽(ℚ) → ℂ) =ᵐ[μ] V :=
+      (existsUnique_globalThetaSobolevEmbedding (F := ℚ) (1/2) (-0) 0 2 hl₀ hs).exists.choose_spec.2 f
+    have hv₀ : (v₀ : C𝔽(ℚ) → ℂ) =ᵐ[μ] V :=
+      (existsUnique_globalThetaSobolevEmbedding (F := ℚ) (1/2) (-0) 0 0 hl₀ le_rfl).exists.choose_spec.2 f
+    have hvΘ : v ∈ Θ := Submodule.le_topologicalClosure _ (LinearMap.mem_range_self _ _)
+    change inner ℂ u₀ v₀ = 0
+    rw [(rational_cutoffConv_inner μ (w 0) hm₀ (fun x ↦ (hp₀ x).le) u₀ v₀).2]
+    refine (integral_congr_ae (g := fun x ↦ V x * star (U x)) ?_).trans ?_
+    · filter_upwards [hu₀, hv₀] with x hx hy
+      simp only [hw₀, Complex.ofReal_one, one_mul, hx, hy]
+    apply rational_cutoffConv_second_difference μ l
+    intro t ht
+    obtain ⟨g, hlg, hor⟩ : ∃ g : C𝔽(ℚ), l g = t ∧ τ g u ∈ Θ.orthogonal := by
+      rcases ht.eq_or_lt with rfl | ht
+      · refine ⟨1, by simp [l, logIdeleClassNorm], ?_⟩
+        rw [map_one, one_apply_eq_self]
+        exact Θ.starProjection_apply_eq_zero_iff.mp (rational_cutoffConv_rieszVector_theta_orthogonal hs γ hγ)
+      · obtain ⟨g, hg⟩ := ratIdeleNormSection_class_rightInverse.surjective
+          (positiveRealLogEquiv.symm (Multiplicative.ofAdd t))
+        have hlg : l g = t := by
+          change Real.log ((ideleClassNorm ℚ g).val : ℝ) = t
+          rw [← positiveRealLogEquiv_apply, hg, positiveRealLogEquiv.apply_symm_apply]
+          rfl
+        exact ⟨g, hlg, hproj g ((Real.log_pos_iff (NNReal.coe_nonneg _)).mp (hlg.trans_gt ht))⟩
+    have hgw (x) : w 2 (g * x) = 1 + (t + l x) ^ 2 := by
+      rw [hw, ← hlg]
+      have hmul : l (g * x) = l g + l x := by
+        dsimp only [l, logIdeleClassNorm]
+        rw [map_mul, Units.val_mul, NNReal.coe_mul, Real.log_mul
+          (NNReal.coe_pos.mpr (Units.zero_lt _)).ne' (NNReal.coe_pos.mpr (Units.zero_lt _)).ne']
+      rw [hmul]
+    have hcomp (z : W 2) (Z : C𝔽(ℚ) → ℂ) (hz : (z : C𝔽(ℚ) → ℂ) =ᵐ[μ] Z) :
+        (τ g z : C𝔽(ℚ) → ℂ) =ᵐ[μ] fun x ↦ Z (g⁻¹ * x) :=
+      (hardySobolevTranslation_apply μ (m𝔽(ℚ)) (-0) 0 2 hl₀ hs g z).trans
+        ((measurePreserving_mul_left μ g⁻¹).quasiMeasurePreserving.ae_eq_comp hz)
+    obtain ⟨hi, he⟩ := rational_cutoffConv_shifted_inner μ (w 2) hm (fun x ↦ (hp x).le)
+      g (τ g u) (τ g v) U V (hcomp u U hu) (hcomp v V hv)
+    simp only [hgw] at hi he
+    have htv : τ g v ∈ Θ := by
+      obtain ⟨ρ, hρ, _⟩ := exists_globalThetaSobolevAction (F := ℚ) (1/2) hl₀ hs
+      exact hρ g ⟨v, hvΘ⟩ ▸ (ρ g ⟨v, hvΘ⟩).property
+    exact ⟨hi, he.symm.trans ((Submodule.mem_orthogonal' _ _).mp hor _ htv)⟩
+  have hself := (E 0 le_rfl).toLinearMap.range.topologicalClosure_minimal hR L.isClosed_ker
+    (rational_cutoffConv_unweighted_mem u₀)
+  have hz : u₀ = 0 := inner_self_eq_zero.mp (show inner ℂ u₀ u₀ = 0 from hself)
+  have hae : U =ᵐ[μ] 0 := hu₀.symm.trans (by
+    rw [hz]
+    exact (rational_cutoffConv_haar_ac μ hm₀ hp₀).ae_eq (Lp.coeFn_zero ..))
+  obtain ⟨x, hx⟩ := hae.exists
+  exact div_ne_zero (Complex.exp_ne_zero _) (Complex.ofReal_ne_zero.mpr (by positivity)) hx
+
+/-- Assemble the witness from a vector of the isotype, its orthogonality and a translate. -/
+private theorem rational_cutoffConv_theta_orthogonal_translate_of {E G : Type*} [Zero E]
+    (P : E → E) (τ : G → E → E) (K : Set E) (r : G → ℝ) (u : E) (hu : u ∈ K) (h0 : P u = 0)
+    (h : ∃ g, 1 < r g ∧ P (τ g u) ≠ 0) :
+    ∃ (v : E) (g : G), v ∈ K ∧ 1 < r g ∧ P v = 0 ∧ P (τ g v) ≠ 0 :=
+  h.elim fun g hg ↦ ⟨u, g, hu, hg.1, h0, hg.2⟩
+
+/-- Some vector of the rational trivial isotype is orthogonal to the half-weighted
+theta closure, while one of its translates by an idele class of norm greater
+than one is not: the Riesz vector at the first critical-line zeta zero. -/
+private theorem rational_cutoffConv_theta_orthogonal_translate (hs : (0 : ℝ) ≤ 2)
+    (ω : PontryaginDual C₁(ℚ))
+    (_hω : ω = (1 : PontryaginDual C𝔽(ℚ)).comp
+      (⟨(ideleClassNorm ℚ).ker.subtype, continuous_subtype_val⟩ : C₁(ℚ) →ₜ* C𝔽(ℚ))) :
+    ∃ (u : CompactIntervalSobolev (ideleClassTamagawaMeasure ℚ)
+        (fun g : C𝔽(ℚ) ↦ Real.log (((m𝔽(ℚ)) g).val : ℝ)) (-(0 : ℝ)) 0 2) (g : C𝔽(ℚ)),
+      u ∈ GeoIsotype(ℚ, hs, ω) ∧ 1 < ((m𝔽(ℚ) g).val : ℝ) ∧
+      geometricProjection (F := ℚ) (1 / 2) (le_rfl (a := (0 : ℝ))) hs u = 0 ∧
+      geometricProjection (F := ℚ) (1 / 2) (le_rfl (a := (0 : ℝ))) hs
+        (hardySobolevTranslation (ideleClassTamagawaMeasure ℚ) (m𝔽(ℚ))
+          (-(0 : ℝ)) 0 2 (neg_nonpos.mpr (le_rfl (a := (0 : ℝ)))) hs g u) ≠ 0 := by
+  subst _hω
+  obtain ⟨γ, -, hγ⟩ := HardyFirstZero.first_zero_on_line
+  have hf := rational_cutoffConv_rieszVector_memLp (m𝔽(ℚ))
+    ⟨isProperMap_ideleClassNorm ℚ, ideleClassNorm_ne_one (F := ℚ)⟩
+    ratIdeleNormSection_class_rightInverse.surjective (ideleClassTamagawaMeasure ℚ) γ
+  have hmem := rational_cutoffConv_rieszVector_mem (ideleClassTamagawaMeasure ℚ) (m𝔽(ℚ)) hs _ hf
+    (fun k x hk ↦ by simp only [map_mul, map_inv, hk, inv_one, one_mul])
+    (ideleClassNorm ℚ).ker.subtype (fun k ↦ k.property)
+    ((1 : PontryaginDual C𝔽(ℚ)).comp
+      (⟨(ideleClassNorm ℚ).ker.subtype, continuous_subtype_val⟩ : C₁(ℚ) →ₜ* C𝔽(ℚ)))
+    (fun _ ↦ rfl)
+  exact rational_cutoffConv_theta_orthogonal_translate_of
+    (geometricProjection (F := ℚ) (1 / 2) (le_rfl (a := (0 : ℝ))) hs)
+    (fun g ↦ hardySobolevTranslation (ideleClassTamagawaMeasure ℚ) (m𝔽(ℚ))
+          (-(0 : ℝ)) 0 2 (neg_nonpos.mpr (le_rfl (a := (0 : ℝ)))) hs g)
+    _ (fun g ↦ ((m𝔽(ℚ) g).val : ℝ)) (hf.toLp _) hmem
+    (rational_cutoffConv_rieszVector_theta_orthogonal hs γ hγ)
+    (rational_cutoffConv_rieszVector_translate hs γ hγ)
+
 /-- A theta-orthogonal vector in the rational trivial isotype has a translate with
-nonzero geometric projection at some norm greater than one. At an ordinate γ of a
+nonzero geometric projection at some norm greater than one."""
+ At an ordinate γ of a
 critical-line zero, use the Riesz vector `exp(-iγx)/(1+x²)` in log norm. Mellin
 factorization gives its orthogonality. The pairing with a nonzero radial theta
 profile is a Cauchy convolution with a nowhere-zero Fourier multiplier. Its
@@ -1001,7 +1469,21 @@ private theorem rational_cutoffConv_positive_translate (hs : (0 : ℝ) ≤ 2)
     let P := geometricProjection (F := ℚ) (1 / 2) (le_rfl (a := (0 : ℝ))) hs
     ∃ (u : K) (g : C𝔽(ℚ)), 1 < ((m𝔽(ℚ) g).val : ℝ) ∧
       K.orthogonalProjectionOnto (P u.val) = 0 ∧
-      K.orthogonalProjectionOnto (P (τ g u.val)) ≠ 0 := by sorry
+      K.orthogonalProjectionOnto (P (τ g u.val)) ≠ 0 :=
+  rational_cutoffConv_positive_translate_of_projection
+    (hardySobolevTranslation (ideleClassTamagawaMeasure ℚ) (m𝔽(ℚ))
+      (-(0 : ℝ)) 0 2 (neg_nonpos.mpr (le_rfl (a := (0 : ℝ)))) hs)
+    (ideleClassNorm ℚ).ker.subtype ω
+    (instClosedSpectralIsotypeSec2 (F := ℚ) (neg_nonpos.mpr (le_rfl (a := (0 : ℝ))))
+      hs ω).completeSpace_coe
+    (geometricProjection (F := ℚ) (1 / 2) (le_rfl (a := (0 : ℝ))) hs)
+    (globalThetaSobolev ℚ (1 / 2) (neg_nonpos.mpr (le_rfl (a := (0 : ℝ))) |>.trans le_rfl)
+      hs).inner_starProjection_left_eq_right
+    (fun x ↦ congrArg (fun T ↦ T x)
+      (globalThetaSobolev ℚ (1 / 2) (neg_nonpos.mpr (le_rfl (a := (0 : ℝ))) |>.trans le_rfl)
+        hs).isIdempotentElem_starProjection.eq)
+    (fun g ↦ ((m𝔽(ℚ) g).val : ℝ))
+    (rational_cutoffConv_theta_orthogonal_translate hs ω _hω)
 
 /-- A fixed-cutoff geometric convolution is nonzero on a vector orthogonal to theta
 in the trivial rational isotype. Use a critical-line ordinate γ and the log-norm
@@ -1162,19 +1644,1861 @@ def Printed.absolutePWCondensation_trace_tendsto : Prop :=
               (productTraceClass(T, absolutePWProjection (F := F) (S := S) hs a ω Λ)))
               atTop (𝓝 (hilbertTrace T))
 
+section
+
+open scoped FourierTransform ContDiff
+
+
+section
+
+local notation "logNorm(" F ")" =>
+  (fun g : C𝔽(F) ↦ Real.log ((ideleClassNorm F g).val : ℝ))
+local notation "μ(" F ")" => ideleClassTamagawaMeasure F
+local notation "weight2(" F ")" =>
+  (fun g : C𝔽(F) ↦ intervalSobolevDensity 0 0 2 (logNorm(F) g))
+local notation "ν(" F ")" =>
+  ((μ(F)).withDensity (fun g ↦ ENNReal.ofReal (weight2(F) g)))
+local notation "W₂(" F ")" => Lp ℂ 2 (ν(F))
+local notation "hs₂" => (show (0 : ℝ) ≤ 2 from zero_le_two)
+local notation "τ₂(" F ")" =>
+  hardySobolevTranslation (μ(F)) (m𝔽(F)) 0 0 2 (le_rfl (a := (0 : ℝ))) hs₂
+
+private theorem absolutePW_window_density (F : Type) [Field F] [NumberField F]
+    (g : C𝔽(F)) : weight2(F) g = 1 + (logNorm(F) g) ^ 2 := by
+  norm_num [intervalSobolevDensity]
+
+private theorem absolutePW_window_log_continuous (F : Type) [Field F] [NumberField F] :
+    Continuous logNorm(F) :=
+  Real.continuousOn_log.comp_continuous
+    (NNReal.continuous_coe.comp (Units.continuous_val.comp (isProperMap_ideleClassNorm F).continuous))
+    (fun _ ↦ (NNReal.coe_pos.mpr (Units.zero_lt _)).ne')
+
+private theorem absolutePW_window_log_mul (F : Type) [Field F] [NumberField F]
+    (g x : C𝔽(F)) : logNorm(F) (g * x) = logNorm(F) g + logNorm(F) x := by
+  change Real.log (((ideleClassNorm F (g * x)).val : ℝ≥0) : ℝ) = _
+  rw [map_mul, Units.val_mul, NNReal.coe_mul, Real.log_mul
+    (NNReal.coe_pos.mpr (Units.zero_lt _)).ne' (NNReal.coe_pos.mpr (Units.zero_lt _)).ne']
+
+/-- The squared weighted norm is an integral against the density, as in
+`weightedL2_norm_eq` in Ch09 §2. -/
+private theorem absolutePW_weighted_norm_sq {X : Type*} [MeasurableSpace X]
+    (μ : Measure X) (w : X → ℝ) (hm : Measurable w) (hw : ∀ x, 0 ≤ w x)
+    (u : Lp ℂ 2 (μ.withDensity fun x ↦ ENNReal.ofReal (w x))) :
+    Integrable (fun x ↦ ‖u x‖ ^ 2 * w x) μ ∧
+      ‖u‖ ^ 2 = ∫ x, ‖u x‖ ^ 2 * w x ∂μ := by
+  let ν := μ.withDensity fun x ↦ ENNReal.ofReal (w x)
+  have hfinite : ∀ᵐ x ∂μ, ENNReal.ofReal (w x) < ⊤ :=
+    .of_forall fun _ ↦ ENNReal.ofReal_lt_top
+  have hint : Integrable (fun x ↦ ‖u x‖ ^ 2) ν :=
+    (memLp_two_iff_integrable_sq_norm (Lp.aestronglyMeasurable u)).1 (Lp.memLp u)
+  refine ⟨((integrable_withDensity_iff hm.ennreal_ofReal hfinite).1 hint).congr
+    (ae_of_all μ fun x ↦ by simp only [ENNReal.toReal_ofReal (hw x)]), ?_⟩
+  have hnorm : ‖u‖ ^ 2 = (inner ℂ u u).re := by
+    rw [inner_self_eq_norm_sq_to_K]
+    norm_num [pow_two, Complex.mul_re]
+  rw [hnorm, L2.inner_def (f := u) (g := u)]
+  change RCLike.re (∫ x, inner ℂ (u x) (u x) ∂ν) = _
+  rw [← integral_re (L2.integrable_inner u u)]
+  simp_rw [inner_self_eq_norm_sq]
+  rw [integral_withDensity_eq_integral_toReal_smul hm.ennreal_ofReal hfinite]
+  refine integral_congr_ae (ae_of_all μ fun x ↦ ?_)
+  simp only [smul_eq_mul, ENNReal.toReal_ofReal (hw x), mul_comm]
+
+private theorem absolutePW_window_norm_sq {F : Type} [Field F] [NumberField F] (u : W₂(F)) :
+    Integrable (fun x ↦ ‖u x‖ ^ 2 * weight2(F) x) (μ(F)) ∧
+      ‖u‖ ^ 2 = ∫ x, ‖u x‖ ^ 2 * weight2(F) x ∂μ(F) :=
+  absolutePW_weighted_norm_sq (μ(F)) (weight2(F)) (by
+    rw [funext (absolutePW_window_density F)]
+    exact (continuous_const.add ((absolutePW_window_log_continuous F).pow 2)).measurable) (fun x ↦ by
+      norm_num [intervalSobolevDensity]; positivity) u
+
+/-- Multiplication by a bounded log-window after a distant translation is small
+in operator norm on the degree-two weighted space. -/
+private theorem absolutePW_window_translate_norm {F : Type} [Field F] [NumberField F]
+    (b : C𝔽(F) → ℝ) (hb : Measurable b) (hb₁ : ∀ x, |b x| ≤ 1)
+    (R : ℝ) (_hR : 0 ≤ R) (hwin : ∀ x, b x ≠ 0 → |logNorm(F) x| ≤ R)
+    (g : C𝔽(F)) (hg : R ≤ logNorm(F) g) :
+    ‖(lpCutoffMultiplier (ν(F)) b hb hb₁).comp (τ₂(F) g)‖ ≤
+      Real.sqrt ((1 + R ^ 2) / (1 + (logNorm(F) g - R) ^ 2)) := by
+  let L := logNorm(F) g
+  let c : ℝ := (1 + R ^ 2) / (1 + (L - R) ^ 2)
+  have hc : 0 ≤ c := by dsimp [c]; positivity
+  have hgR : R ≤ L := hg
+  let A := (lpCutoffMultiplier (ν(F)) b hb hb₁).comp (τ₂(F) g)
+  change ‖A‖ ≤ Real.sqrt c
+  apply ContinuousLinearMap.opNorm_le_bound A (Real.sqrt_nonneg c)
+  intro u
+  have hm : Measurable (weight2(F)) := by
+    rw [funext (absolutePW_window_density F)]
+    exact (continuous_const.add ((absolutePW_window_log_continuous F).pow 2)).measurable
+  have hac : μ(F) ≪ ν(F) := withDensity_absolutelyContinuous' hm.ennreal_ofReal.aemeasurable
+    (.of_forall fun x ↦ ENNReal.ofReal_ne_zero_iff.mpr (by rw [absolutePW_window_density]; positivity))
+  have hrep : (A u : C𝔽(F) → ℂ) =ᵐ[μ(F)] fun x ↦ (b x : ℂ) * u (g⁻¹ * x) := by
+    have h1 := hac.ae_eq (lpCutoffMultiplier_apply (ν(F)) b hb hb₁ (τ₂(F) g u))
+    have h2 := hardySobolevTranslation_apply (μ(F)) m𝔽(F) 0 0 2 le_rfl hs₂ g u
+    filter_upwards [h1, h2] with x hx hy
+    change A u x = _
+    change A u x = (b x : ℂ) * τ₂(F) g u x at hx
+    rw [hx, hy]
+  have hcomp : (fun x ↦ A u (g * x)) =ᵐ[μ(F)] fun x ↦ (b (g * x) : ℂ) * u x := by
+    have h := (measurePreserving_mul_left (μ(F)) g).quasiMeasurePreserving.ae_eq_comp hrep
+    filter_upwards [h] with x hx
+    change A u (g * x) = (b (g * x) : ℂ) * u (g⁻¹ * (g * x)) at hx
+    rwa [inv_mul_cancel_left] at hx
+  have hbot (x : C𝔽(F)) :
+      |b (g * x)| ^ 2 * weight2(F) (g * x) ≤ c * weight2(F) x := by
+    by_cases hx : b (g * x) = 0
+    · rw [hx, abs_zero, zero_pow (by decide : 2 ≠ 0), zero_mul]
+      exact mul_nonneg hc (by rw [absolutePW_window_density]; positivity)
+    have h1 := hwin (g * x) hx
+    have hlog := absolutePW_window_log_mul F g x
+    have h2 : (L - R) ≤ -(logNorm(F) x) := by
+      have h3 := (abs_le.mp h1).2
+      rw [hlog] at h3
+      change L + logNorm(F) x ≤ R at h3
+      linarith
+    have h3 : (L - R) ^ 2 ≤ (logNorm(F) x) ^ 2 := by
+      rw [← neg_sq (logNorm(F) x)]
+      exact pow_le_pow_left₀ (sub_nonneg.mpr hgR) h2 2
+    have h4 : (1 + (L - R) ^ 2) ≤ weight2(F) x := by
+      rw [absolutePW_window_density]
+      linarith
+    have h5 : weight2(F) (g * x) ≤ 1 + R ^ 2 := by
+      rw [absolutePW_window_density, ← sq_abs]
+      exact add_le_add_right (pow_le_pow_left₀ (abs_nonneg _) h1 2) 1
+    calc
+      _ ≤ 1 * weight2(F) (g * x) :=
+        mul_le_mul_of_nonneg_right
+          (by simpa only [one_pow] using pow_le_pow_left₀ (abs_nonneg _) (hb₁ (g * x)) 2)
+          (by rw [absolutePW_window_density]; positivity)
+      _ ≤ 1 + R ^ 2 := by simpa only [one_mul] using h5
+      _ = c * (1 + (L - R) ^ 2) := by dsimp only [c]; field_simp
+      _ ≤ _ := mul_le_mul_of_nonneg_left h4 hc
+  have hnorm : ‖A u‖ ^ 2 ≤ c * ‖u‖ ^ 2 := by
+    obtain ⟨hAi, hAeq⟩ := absolutePW_window_norm_sq (A u)
+    obtain ⟨hui, hueq⟩ := absolutePW_window_norm_sq u
+    rw [hAeq, hueq, ← integral_const_mul]
+    let f (x : C𝔽(F)) := ‖A u x‖ ^ 2 * weight2(F) x
+    rw [← integral_mul_left_eq_self f g]
+    refine integral_mono_ae
+      (((measurePreserving_mul_left (μ(F)) g).integrable_comp_emb (measurableEmbedding_mulLeft g)).mpr hAi)
+      (hui.const_mul c) ?_
+    filter_upwards [hcomp] with x hx
+    change ‖A u (g * x)‖ ^ 2 * weight2(F) (g * x) ≤ c * (‖u x‖ ^ 2 * weight2(F) x)
+    rw [hx, norm_mul, Complex.norm_real, Real.norm_eq_abs, mul_pow]
+    calc
+      _ = ‖u x‖ ^ 2 * (|b (g * x)| ^ 2 * weight2(F) (g * x)) := by ring
+      _ ≤ ‖u x‖ ^ 2 * (c * weight2(F) x) := mul_le_mul_of_nonneg_left (hbot x) (sq_nonneg _)
+      _ = _ := by ring
+  have hsq : (Real.sqrt c * ‖u‖) ^ 2 = c * ‖u‖ ^ 2 := by rw [mul_pow, Real.sq_sqrt hc]
+  exact (sq_le_sq₀ (norm_nonneg _) (mul_nonneg (Real.sqrt_nonneg _) (norm_nonneg _))).mp
+    (hnorm.trans_eq hsq.symm)
+
+local notation "A₂(" F ", " φ ")" =>
+  hardySobolevTestAction (μ(F)) m𝔽(F) 0 0 2 (le_rfl (a := (0 : ℝ))) hs₂ φ
+
+private theorem absolutePW_window_ae {F : Type} [Field F] [NumberField F] :
+    μ(F) ≪ ν(F) := by
+  have hm : Measurable (weight2(F)) := by
+    rw [funext (absolutePW_window_density F)]
+    exact (continuous_const.add ((absolutePW_window_log_continuous F).pow 2)).measurable
+  exact withDensity_absolutelyContinuous' hm.ennreal_ofReal.aemeasurable
+    (.of_forall fun x ↦ ENNReal.ofReal_ne_zero_iff.mpr (by rw [absolutePW_window_density]; positivity))
+
+section
+variable {G : Type*} [CommGroup G] [TopologicalSpace G] [IsTopologicalGroup G]
+  [T2Space G] [LocallyCompactSpace G] [SecondCountableTopology G] [MeasurableSpace G]
+  [BorelSpace G] (μ : Measure G) [μ.IsHaarMeasure] (m : G →ₜ* ℝ≥0ˣ)
+
+local notation "νc" => μ.withDensity (fun g : G ↦ ENNReal.ofReal
+  (intervalSobolevDensity 0 0 2 (Real.log ((m g).val : ℝ))))
+local notation "τc" => hardySobolevTranslation μ m 0 0 2 le_rfl hs₂
+local notation "Ac(" φ ")" => hardySobolevTestAction μ m 0 0 2 le_rfl hs₂ φ
+
+/-- Translating a convolution test is equivalent to translating its input. -/
+private theorem absolutePW_translate_action
+    (φ ψ : BruhatCompactSupport G) (g : G)
+    (hψ : ∀ y, ψ.val y = φ.val (g⁻¹ * y)) :
+    Ac(ψ) = (Ac(φ)).comp (τc g) := by
+  apply ContinuousLinearMap.ext
+  intro u
+  apply Lp.ext
+  apply (withDensity_absolutelyContinuous μ _).ae_eq
+  filter_upwards [hardySobolevTestAction_apply μ m 0 0 2 le_rfl hs₂ ψ u,
+    hardySobolevTestAction_apply μ m 0 0 2 le_rfl hs₂ φ (τc g u)] with x hL hR
+  change (Ac(ψ) u) x = (Ac(φ) (τc g u)) x
+  rw [hL, hR]
+  have hτ := hardySobolevTranslation_apply μ m 0 0 2 le_rfl hs₂ g u
+  have hpr : MeasurePreserving (fun y : G ↦ y⁻¹ * x) μ μ :=
+    (measurePreserving_mul_right μ x).comp (Measure.measurePreserving_inv μ)
+  change (∫ y, ψ.val y * u (y⁻¹ * x) ∂μ) =
+    ∫ y, φ.val y * (τc g u) (y⁻¹ * x) ∂μ
+  rw [← integral_mul_left_eq_self (fun y ↦ ψ.val y * u (y⁻¹ * x)) g]
+  apply integral_congr_ae
+  filter_upwards [hpr.quasiMeasurePreserving.ae_eq_comp hτ] with y hy
+  change ψ.val (g * y) * u ((g * y)⁻¹ * x) =
+    φ.val y * (τc g u) (y⁻¹ * x)
+  change (τc g u) (y⁻¹ * x) = u (g⁻¹ * (y⁻¹ * x)) at hy
+  rw [hy, hψ, inv_mul_cancel_left]
+  congr 2
+  simp only [mul_inv_rev, ← mul_assoc, mul_comm y⁻¹ g⁻¹]
+
+/-- When a cutoff acts after convolution, the input can be restricted to a
+fixed window containing all differences of points in the output window and
+in the test support. -/
+private theorem absolutePW_window_localization (hμ : μ ≪ νc)
+    (φ : BruhatCompactSupport G)
+    (b c : G → ℝ) (hb : Measurable b) (hb₁ : ∀ x, |b x| ≤ 1)
+    (hc : Measurable c) (hc₁ : ∀ x, |c x| ≤ 1)
+    (hcover : ∀ x y, b x ≠ 0 → φ.val y ≠ 0 → c (y⁻¹ * x) = 1) :
+    let M := lpCutoffMultiplier νc b hb hb₁
+    let B := lpCutoffMultiplier νc c hc hc₁
+    (M.comp (Ac(φ))).comp B = M.comp (Ac(φ)) := by
+  intro M B
+  apply ContinuousLinearMap.ext
+  intro u
+  apply Lp.ext
+  apply (withDensity_absolutelyContinuous μ _).ae_eq
+  have h1 := hμ.ae_eq
+    (lpCutoffMultiplier_apply νc b hb hb₁ (Ac(φ) (B u)))
+  have h2 := hμ.ae_eq
+    (lpCutoffMultiplier_apply νc b hb hb₁ (Ac(φ) u))
+  have h3 := hardySobolevTestAction_apply μ m 0 0 2 le_rfl hs₂ φ (B u)
+  have h4 := hardySobolevTestAction_apply μ m 0 0 2 le_rfl hs₂ φ u
+  filter_upwards [h1, h2, h3, h4] with x h1x h2x h3x h4x
+  change (M (Ac(φ) (B u))) x = (M (Ac(φ) u)) x
+  rw [h1x, h2x, h3x, h4x]
+  by_cases hx : b x = 0
+  · simp [hx]
+  congr 1
+  have hB := hμ.ae_eq
+    (lpCutoffMultiplier_apply νc c hc hc₁ u)
+  have hpr : MeasurePreserving (fun y : G ↦ y⁻¹ * x) μ μ :=
+    (measurePreserving_mul_right μ x).comp (Measure.measurePreserving_inv μ)
+  apply integral_congr_ae
+  filter_upwards [hpr.quasiMeasurePreserving.ae_eq_comp hB] with y hy
+  change (B u) (y⁻¹ * x) = (c (y⁻¹ * x) : ℂ) * u (y⁻¹ * x) at hy
+  change φ.val y * (B u) (y⁻¹ * x) = φ.val y * u (y⁻¹ * x)
+  rw [hy]
+  by_cases hz : φ.val y = 0
+  · simp [hz]
+  · simp [hcover x y hx hz]
+
+
+end
+
+/-- Right composition by a family with a decaying norm sends a fixed nuclear
+operator to zero in trace norm. -/
+private theorem absolutePW_trace_decay_of_factorization {H : Type*} [NormedAddCommGroup H]
+    [InnerProductSpace ℂ H] [CompleteSpace H] (T : nuclearEndomorphisms H)
+    (D C : ℝ → H →L[ℂ] H) (heq : ∀ t, D t = T.val * C t)
+    (R : ℝ) (hC : ∀ t, R ≤ t → ‖C t‖ ≤ Real.sqrt ((1 + R^2) / (1 + (t-R)^2))) :
+    ∃ hn : ∀ t, IsNuclearOperator (D t),
+      Tendsto (fun t ↦ traceNorm (⟨D t, hn t⟩ : nuclearEndomorphisms H)) atTop (𝓝 0) := by
+  have hn (t : ℝ) : IsNuclearOperator (D t) := by
+    rw [heq]
+    exact mul_mem_nuclearEndomorphisms_right _ T
+  refine ⟨hn, ?_⟩
+  have hshift : Tendsto (fun t : ℝ ↦ t - R) atTop atTop := tendsto_atTop_add_const_right _ _ tendsto_id
+  have hsquare := (tendsto_pow_atTop (Nat.succ_ne_zero 1)).comp hshift
+  have hden : Tendsto (fun t : ℝ ↦ 1 + (t - R)^2) atTop atTop :=
+    tendsto_atTop_add_const_left _ _ hsquare
+  have hquot : Tendsto (fun t : ℝ ↦ (1 + R^2) / (1 + (t - R)^2)) atTop (𝓝 0) := by
+    simpa only [div_eq_mul_inv, mul_zero, Function.comp_def] using (tendsto_inv_atTop_zero.comp hden).const_mul (1 + R^2)
+  have hzero : Tendsto (fun t : ℝ ↦ Real.sqrt ((1 + R^2) / (1 + (t - R)^2)) * traceNorm T)
+      atTop (𝓝 0) := by
+    simpa only [Real.sqrt_zero, zero_mul, Function.comp_def] using (Real.continuous_sqrt.tendsto 0 |>.comp hquot).mul_const (traceNorm T)
+  apply squeeze_zero' (Eventually.of_forall fun _ ↦ (norm_nonneg _).trans (norm_hilbertTrace_le _)) _ hzero
+  filter_upwards [eventually_ge_atTop R] with t ht
+  have heq' : (⟨D t, hn t⟩ : nuclearEndomorphisms H) =
+      ⟨T.val * (C t), mul_mem_nuclearEndomorphisms_right _ T⟩ := Subtype.ext (heq t)
+  rw [heq']
+  apply (traceNorm_mul_right_le _ T).trans
+  apply mul_le_mul_of_nonneg_right _ ((norm_nonneg _).trans (norm_hilbertTrace_le T))
+  exact hC t ht
+
+/-- A bounded log window covers all differences between an output point
+and a point in the compact support of the convolution test. -/
+private theorem absolutePW_exists_difference_window {G : Type*} [CommGroup G]
+    [TopologicalSpace G] [MeasurableSpace G] [BorelSpace G]
+    (L : G → ℝ) (hL : Continuous L) (hsub : ∀ x y, L (y⁻¹ * x) = L x - L y)
+    (b : G → ℝ) (hbC : HasCompactSupport b)
+    (φ : G → ℂ) (hφ : HasCompactSupport φ) :
+    ∃ (R : ℝ) (c : G → ℝ), 0 ≤ R ∧ Measurable c ∧ (∀ x, |c x| ≤ 1) ∧
+      (∀ x, c x ≠ 0 → |L x| ≤ R) ∧ (∀ x y, b x ≠ 0 → φ y ≠ 0 → c (y⁻¹ * x) = 1) := by
+  obtain ⟨B₁, hB₁⟩ := hbC.exists_bound_of_continuousOn hL.continuousOn
+  obtain ⟨B₂, hB₂⟩ := hφ.exists_bound_of_continuousOn
+    hL.continuousOn
+  let R := |B₁| + |B₂|
+  have hR : 0 ≤ R := by positivity
+  let c (x : G) : ℝ := if |L x| ≤ R then 1 else 0
+  have hc : Measurable c := Measurable.ite
+    (measurableSet_le (continuous_abs.comp hL).measurable measurable_const)
+    measurable_const measurable_const
+  have hc₁ (x : G) : |c x| ≤ 1 := by
+    by_cases h : |L x| ≤ R <;> simp [c, h]
+  have hwin (x : G) : c x ≠ 0 → |L x| ≤ R := by
+    contrapose!
+    intro h
+    simp [c, h.not_ge]
+  have hcov (x y : G) (hx : b x ≠ 0) (hy : φ y ≠ 0) : c (y⁻¹ * x) = 1 := by
+    have hx' := hB₁ x (subset_tsupport _ hx)
+    have hy' := hB₂ y (subset_tsupport _ hy)
+    rw [Real.norm_eq_abs] at hx' hy'
+    have hle := (abs_sub (L x) (L y)).trans (show _ ≤ R by
+      dsimp only [R]
+      linarith [le_abs_self B₁, le_abs_self B₂])
+    change (if |L (y⁻¹ * x)| ≤ R then 1 else 0) = 1
+    rw [hsub, ite_eq_left hle]
+  exact ⟨R, c, hR, hc, hc₁, hwin, hcov⟩
+
+/-- Restrict the middle variable to the input window in a translated product. -/
+private theorem absolutePW_localized_factor {H : Type*} [NormedAddCommGroup H]
+    [NormedSpace ℂ H] (M A D B U : H →L[ℂ] H)
+    (heq : D = A.comp U) (hloc : (M.comp A).comp B = M.comp A) :
+    M.comp D = (M.comp A) * (B.comp U) := by
+  rw [heq]
+  exact congrArg (fun X : H →L[ℂ] H ↦ X.comp U) hloc.symm
+
+section
+variable {G : Type*} [CommGroup G] [TopologicalSpace G] [IsTopologicalGroup G]
+  [T2Space G] [LocallyCompactSpace G] [SecondCountableTopology G] [MeasurableSpace G]
+  [BorelSpace G] (μ : Measure G) [μ.IsHaarMeasure] (m : G →ₜ* ℝ≥0ˣ)
+
+local notation "νc" => μ.withDensity (fun g : G ↦ ENNReal.ofReal
+  (intervalSobolevDensity 0 0 2 (Real.log ((m g).val : ℝ))))
+local notation "Lc" => (fun g : G ↦ Real.log ((m g).val : ℝ))
+local notation "τc" => hardySobolevTranslation μ m 0 0 2 le_rfl hs₂
+local notation "Ac(" φ ")" => hardySobolevTestAction μ m 0 0 2 le_rfl hs₂ φ
+
+/-- A fixed cutoff after a shifted test tends to zero in trace norm. -/
+private theorem absolutePW_window_trace_decay
+    (hμ : μ ≪ νc) (hLc : Continuous Lc) (hsub : ∀ (x y : G), Lc (y⁻¹ * x) = Lc x - Lc y)
+    (φ : BruhatCompactSupport G) (ψ : ℝ → BruhatCompactSupport G)
+    (g : ℝ → G)
+    (hψ : ∀ t x, (ψ t).val x = φ.val ((g t)⁻¹ * x))
+    (b : G → ℝ) (hb : Measurable b) (hb₁ : ∀ x, |b x| ≤ 1)
+    (hbC : HasCompactSupport b)
+    (htrans : ∀ (c : G → ℝ) (hc : Measurable c) (hc₁ : ∀ x, |c x| ≤ 1) (R : ℝ), 0 ≤ R →
+      (∀ x, c x ≠ 0 → |Lc x| ≤ R) → ∀ t, R ≤ t →
+        ‖(lpCutoffMultiplier νc c hc hc₁).comp (τc (g t))‖ ≤ Real.sqrt ((1 + R^2) / (1 + (t-R)^2))) :
+    let M := lpCutoffMultiplier νc b hb hb₁
+    IsNuclearOperator (M.comp Ac(φ)) →
+      ∃ hA : ∀ t, IsNuclearOperator (M.comp Ac(ψ t)),
+        Tendsto (fun t ↦ traceNorm (⟨M.comp Ac(ψ t), hA t⟩ :
+          nuclearEndomorphisms (Lp ℂ 2 νc))) atTop (𝓝 0) := by
+  intro M hM
+  obtain ⟨R, c, hR, hc, hc₁, hwin, hcov⟩ := absolutePW_exists_difference_window
+    _ hLc hsub b hbC φ.val φ.property.2
+  let B := lpCutoffMultiplier νc c hc hc₁
+  let U (t : ℝ) : (Lp ℂ 2 νc) →L[ℂ] (Lp ℂ 2 νc) := τc (g t)
+  let T : nuclearEndomorphisms (Lp ℂ 2 νc) := ⟨M.comp Ac(φ), hM⟩
+  have hw : (M.comp Ac(φ)).comp B = M.comp Ac(φ) :=
+    absolutePW_window_localization μ m hμ φ b c hb hb₁ hc hc₁ hcov
+  have heq (t : ℝ) : M.comp Ac(ψ t) = T.val * (B.comp (U t)) :=
+    absolutePW_localized_factor M _ _ B (U t)
+      (absolutePW_translate_action μ m φ (ψ t) (g t) (hψ t)) hw
+  apply absolutePW_trace_decay_of_factorization T _ (fun t ↦ B.comp (U t)) heq R
+  intro t ht
+  exact htrans c hc hc₁ R hR hwin t ht
+
+end
+
+/-- A fixed cutoff after a shifted test tends to zero in trace norm. -/
+private theorem absolutePW_cutoff_shift_trace_decay {F : Type} [Field F] [NumberField F]
+    (φ : BruhatCompactSupport C𝔽(F)) (ψ : ℝ → BruhatCompactSupport C𝔽(F))
+    (g : ℝ → C𝔽(F)) (hg : ∀ t, logNorm(F) (g t) = t)
+    (hψ : ∀ t x, (ψ t).val x = φ.val ((g t)⁻¹ * x))
+    (b : C𝔽(F) → ℝ) (hb : Measurable b) (hb₁ : ∀ x, |b x| ≤ 1)
+    (hbC : HasCompactSupport b) :
+    let M := lpCutoffMultiplier (ν(F)) b hb hb₁
+    IsNuclearOperator (M.comp A₂(F, φ)) →
+      ∃ hA : ∀ t, IsNuclearOperator (M.comp A₂(F, ψ t)),
+        Tendsto (fun t ↦ traceNorm (⟨M.comp A₂(F, ψ t), hA t⟩ :
+          nuclearEndomorphisms W₂(F))) atTop (𝓝 0) := by
+  intro M hM
+  have hsub (x y : C𝔽(F)) : logNorm(F) (y⁻¹ * x) = logNorm(F) x - logNorm(F) y := by
+    rw [absolutePW_window_log_mul]
+    have hy : logNorm(F) y⁻¹ + logNorm(F) y = 0 := by
+      rw [← absolutePW_window_log_mul, inv_mul_cancel]
+      change Real.log ((ideleClassNorm F (1 : C𝔽(F))).val : ℝ) = 0
+      simp
+    linarith
+  exact absolutePW_window_trace_decay (μ(F)) m𝔽(F) (absolutePW_window_ae (F := F))
+    (absolutePW_window_log_continuous F) hsub φ ψ g hψ b hb hb₁ hbC (fun c hc hc₁ R hR hwin t ht ↦ by
+      change ‖(lpCutoffMultiplier (ν(F)) c hc hc₁).comp (τ₂(F) (g t))‖ ≤ _
+      exact (absolutePW_window_translate_norm c hc hc₁ R hR hwin (g t) (by simpa only [hg] using ht)).trans_eq
+        (congrArg (fun L : ℝ ↦ Real.sqrt ((1 + R^2) / (1 + (L-R)^2))) (hg t))) hM
+
+
+end
+
+section
+
+section
+variable {H K : Type*} [NormedAddCommGroup H] [InnerProductSpace ℂ H] [CompleteSpace H]
+  [NormedAddCommGroup K] [InnerProductSpace ℂ K] [CompleteSpace K]
+
+/-- Any norm-summable rank-one expansion evaluates the Hilbert trace by its
+diagonal. The closed-unit-ball normalization is from
+`isNuclearOperator_iff_isBanachNuclear` in Appendix C §3. -/
+private theorem absolutePW_nuclearTrace_series (A : H →L[ℂ] H) (c : ℕ → ℂ)
+    (f : ℕ → StrongDual ℂ H) (v : ℕ → H) (hc : Summable fun n ↦ ‖c n‖)
+    (hf : ∃ C, ∀ n, ‖f n‖ ≤ C) {R : ℝ} (hR : 0 < R) (hv : ∀ n, ‖v n‖ ≤ R)
+    (hA : ∀ x, HasSum (fun n ↦ (c n * f n x) • v n) (A x)) :
+    ∃ hn : IsNuclearOperator A, HasSum (fun n ↦ c n * f n (v n))
+      (hilbertTrace (⟨A, hn⟩ : nuclearEndomorphisms H)) := by
+  let r : ℂ := R
+  have hr : r ≠ 0 := Complex.ofReal_ne_zero.mpr hR.ne'
+  have hr_norm : ‖r‖ = R := by dsimp [r]; rw [Complex.norm_real, Real.norm_of_nonneg hR.le]
+  let D := Metric.closedBall (0 : H) 1
+  have hvD (n : ℕ) : r⁻¹ • v n ∈ D := by
+    change dist (r⁻¹ • v n) 0 ≤ 1
+    rw [dist_zero_right, norm_smul, norm_inv, hr_norm, inv_mul_le_iff₀ hR, mul_one]
+    exact hv n
+  let p : NuclearPresentation A :=
+    { coeff := fun n ↦ c n * r
+      functional := f
+      disc := D
+      isBanachDisc := isBanachDisc_closedUnitBall
+      vector := fun n ↦ ⟨r⁻¹ • v n, Submodule.subset_span (hvD n)⟩
+      vector_mem := hvD
+      summable_coeff := by simpa only [norm_mul] using hc.mul_right ‖r‖
+      equicontinuous := ((NormedSpace.equicontinuous_tfae f).out 6 1).mp hf
+      hasSum := fun x ↦ (hA x).congr_fun fun n ↦ by
+        change (c n * r * f n x) • (r⁻¹ • v n) = (c n * f n x) • v n
+        rw [smul_smul, mul_right_comm (c n) r, mul_inv_cancel_right₀ hr] }
+  have hn := (isNuclearOperator_iff_nonempty_presentation A).mpr ⟨p⟩
+  refine ⟨hn, ?_⟩
+  rw [hilbertTrace_eq_nuclearTrace]
+  have ht := ((exists_nuclearTrace_hasSum hilbert_approximationProperty A hn).exists.choose_spec p).2
+  refine ht.congr_fun fun n ↦ ?_
+  change c n * f n (v n) = c n * r * f n (r⁻¹ • v n)
+  rw [map_smul, smul_eq_mul, ← mul_assoc, mul_inv_cancel_right₀ hr]
+
+/-- The same nuclear expansion computes the traces of both compositions. -/
+private theorem absolutePW_cross_trace (A : H →L[ℂ] K) (hA : IsNuclearOperator A)
+    (B : K →L[ℂ] H) :
+    ∃ (hBA : IsNuclearOperator (B.comp A)) (hAB : IsNuclearOperator (A.comp B)),
+      hilbertTrace (⟨B.comp A, hBA⟩ : nuclearEndomorphisms H) =
+        hilbertTrace (⟨A.comp B, hAB⟩ : nuclearEndomorphisms K) := by
+  obtain ⟨p⟩ := (isNuclearOperator_iff_nonempty_presentation A).mp hA
+  obtain ⟨C, hC, hf⟩ := ((NormedSpace.equicontinuous_tfae p.functional).out 1 7).mp p.equicontinuous
+  obtain ⟨D, hD⟩ := ((NormedSpace.isVonNBounded_iff ℂ).mp p.isBanachDisc.bounded).exists_norm_le
+  have hD₀ : 0 ≤ D := (norm_nonneg _).trans (hD (p.vector 0) (p.vector_mem 0))
+  let v (n : ℕ) : K := p.vector n
+  have hv (n : ℕ) : ‖v n‖ ≤ D := hD _ (p.vector_mem n)
+  obtain ⟨hBA, hBAtr⟩ := absolutePW_nuclearTrace_series (B.comp A) p.coeff p.functional
+    (B ∘ v) p.summable_coeff ⟨C, hf⟩ (R := ‖B‖ * D + 1) (by positivity)
+    (fun n ↦ ((B.le_opNorm (v n)).trans
+      (mul_le_mul_of_nonneg_left (hv n) (norm_nonneg _))).trans (by linarith))
+    (fun x ↦ by simpa only [Function.comp_apply, ContinuousLinearMap.comp_apply, v, map_smul] using B.hasSum (p.hasSum x))
+  let f (n : ℕ) : StrongDual ℂ K := (p.functional n).comp B
+  obtain ⟨hAB, hABtr⟩ := absolutePW_nuclearTrace_series (A.comp B) p.coeff f v
+    p.summable_coeff ⟨C * ‖B‖, fun n ↦ (ContinuousLinearMap.opNorm_comp_le _ _).trans
+      (mul_le_mul_of_nonneg_right (hf n) (norm_nonneg _))⟩ (R := D + 1) (by linarith)
+    (fun n ↦ (hv n).trans (by linarith)) (fun x ↦ p.hasSum (B x))
+  exact ⟨hBA, hAB, hBAtr.unique hABtr⟩
+
+end
+private theorem scalarConvolution_tendsto_zero (k : SchwartzMap ℝ ℂ) (G : ℝ → ℂ)
+    (hG : Continuous G) {C : ℝ} (hC : 0 ≤ C) (hb : ∀ r, ‖G r‖ ≤ C * (1 + |r|))
+    (hlim : Tendsto G atTop (𝓝 0)) :
+    Tendsto (fun t : ℝ ↦ ∫ r, k r * G (t - r)) atTop (𝓝 0) := by
+  obtain ⟨a, ha⟩ := eventually_atTop.1
+    ((tendsto_zero_iff_norm_tendsto_zero.mp hlim).eventually (gt_mem_nhds one_pos))
+  let b := max a 0
+  have hb₀ : 0 ≤ b := le_max_right _ _
+  let B := 1 + C * (1 + b)
+  have hB : 1 ≤ B := by dsimp only [B]; linarith [mul_nonneg hC (by linarith : 0 ≤ 1+b)]
+  have hdom (t : ℝ) (ht : b ≤ t) (r : ℝ) : ‖G (t-r)‖ ≤ B + C * |r| := by
+    by_cases h : a ≤ t - r
+    · exact (ha _ h).le.trans (by linarith [mul_nonneg hC (abs_nonneg r)])
+    · have hr : |t-r| ≤ b + |r| := by
+        refine abs_le.mpr ⟨?_, ?_⟩
+        · linarith [le_abs_self r]
+        · linarith [abs_nonneg r, le_max_left a 0]
+      calc
+        _ ≤ C * (1 + |t-r|) := hb _
+        _ ≤ C * (1 + (b + |r|)) := by gcongr
+        _ ≤ _ := by dsimp [B]; linarith
+  have hi : Integrable (fun r ↦ ‖k r‖ * B + C * (|r| * ‖k r‖)) := by
+    apply Integrable.add ((k.integrable (μ := volume)).norm.mul_const _)
+    simpa only [Real.norm_eq_abs, pow_one] using (k.integrable_pow_mul volume 1).const_mul C
+  suffices Tendsto (fun t : ℝ ↦ ∫ r, k r * G (t-r)) atTop (𝓝 (∫ _ : ℝ, (0 : ℂ))) by simpa using this
+  refine tendsto_integral_filter_of_dominated_convergence
+    (F := fun (t r : ℝ) ↦ k r * G (t - r)) (f := fun _ ↦ (0 : ℂ))
+    (fun r ↦ ‖k r‖ * B + C * (|r| * ‖k r‖))
+    (Eventually.of_forall (fun t ↦ (k.continuous.mul
+      (hG.comp (continuous_const.sub continuous_id))).aestronglyMeasurable)) ?_ hi ?_
+  · filter_upwards [eventually_ge_atTop b] with t ht
+    apply ae_of_all
+    intro r
+    rw [norm_mul]
+    calc
+      _ ≤ ‖k r‖ * (B + C * |r|) := by gcongr; exact hdom t ht r
+      _ = _ := by ring
+  · apply ae_of_all
+    intro r
+    simpa [sub_eq_add_neg] using (tendsto_const_nhds (x := k r)).mul (hlim.comp (tendsto_atTop_add_const_right _ (-r) tendsto_id))
+
+/-- Smooth spectral localization separates one isolated ordinate, in cycles per unit time. -/
+private theorem exists_isolatingSchwartzKernel {ι : Type*} (ξ : ι → ℝ) (i : ι) {r : ℝ}
+    (hr : 0 < r) (hsep : ∀ j ≠ i, r ≤ dist (ξ j) (ξ i)) :
+    ∃ k : SchwartzMap ℝ ℂ, (𝓕 k : SchwartzMap ℝ ℂ) (ξ i) = 1 ∧
+      ∀ j ≠ i, (𝓕 k : SchwartzMap ℝ ℂ) (ξ j) = 0 := by
+  let b : ContDiffBump (ξ i) := ⟨r/2, r, by positivity, by linarith⟩
+  have hc : HasCompactSupport (fun t : ℝ ↦ (b t : ℂ)) :=
+    b.hasCompactSupport.comp_left Complex.ofReal_zero
+  have hd : ContDiff ℝ (⊤ : ℕ∞) (fun t : ℝ ↦ (b t : ℂ)) := Complex.ofRealCLM.contDiff.comp b.contDiff
+  let ψ := hc.toSchwartzMap hd
+  refine ⟨𝓕⁻ ψ, ?_, ?_⟩ <;> rw [FourierTransform.fourier_fourierInv_eq]
+  · change ((b (ξ i) : ℝ) : ℂ) = 1
+    rw [b.one_of_mem_closedBall (Metric.mem_closedBall_self b.rIn_pos.le), Complex.ofReal_one]
+  · intro j hj
+    change ((b (ξ j) : ℝ) : ℂ) = 0
+    rw [b.zero_of_le_dist (hsep j hj), Complex.ofReal_zero]
+
+private theorem integrate_isolatedEigenfrequency
+    {H ι : Type*} [NormedAddCommGroup H] [NormedSpace ℂ H] [CompleteSpace H]
+    (v : ι → H) (Λ : ι → StrongDual ℂ H) (hBasis : IsSpectralMarkushevichBasis v Λ)
+    (D : ℝ → H →L[ℂ] H) (ξ : ι → ℝ) (d : ι → ℂ)
+    (hD : ∀ t j x, Λ j (D t x) = (Real.fourierChar (t * ξ j) : ℂ) * d j * Λ j x)
+    (i : ι) (k : SchwartzMap ℝ ℂ) (hki : (𝓕 k : SchwartzMap ℝ ℂ) (ξ i) = 1)
+    (hk : ∀ j ≠ i, (𝓕 k : SchwartzMap ℝ ℂ) (ξ j) = 0 ∨ d j = 0) (t : ℝ)
+    (hi : Integrable (fun r ↦ k r • D (t-r))) :
+    (∫ r, k r • D (t-r)) = ((Real.fourierChar (t*ξ i) : ℂ) * d i) • (Λ i).smulRight (v i) := by
+  ext x
+  apply (SeparatingDual.eq_iff_forall_dual_eq (R := ℂ)).mpr
+  intro ℓ
+  suffices e : ContinuousLinearMap.apply ℂ ℂ ((∫ r, k r • D (t-r)) x) =
+      ContinuousLinearMap.apply ℂ ℂ ((((Real.fourierChar (t*ξ i) : ℂ) * d i) • (Λ i).smulRight (v i)) x) from
+    DFunLike.congr_fun e ℓ
+  apply ContinuousLinearMap.ext_on hBasis.2.2.2
+  rintro _ ⟨j, rfl⟩
+  let L : StrongDual ℂ (H →L[ℂ] H) := (Λ j).comp (ContinuousLinearMap.apply ℂ H x)
+  change L (∫ r, k r • D (t-r)) = Λ j _
+  rw [← L.integral_comp_comm hi]
+  have heq (r : ℝ) : L (k r • D (t-r)) =
+      (((Real.fourierChar (-(r*ξ j)) : ℂ) * k r) *
+      ((Real.fourierChar (t*ξ j) : ℂ) * d j * Λ j x)) := by
+    change Λ j (k r • D (t-r) x) = _
+    rw [map_smul, smul_eq_mul, hD, sub_mul, sub_eq_add_neg, AddChar.map_add_eq_mul, Circle.coe_mul]
+    ring
+  simp_rw [heq]
+  rw [integral_mul_const]
+  have hF : (∫ r, (Real.fourierChar (-(r*ξ j)) : ℂ) * k r) = (𝓕 k : SchwartzMap ℝ ℂ) (ξ j) := by
+    rw [SchwartzMap.fourier_coe, Real.fourier_real_eq]
+    rfl
+  rw [hF]
+  change _ = Λ j ((((Real.fourierChar (t*ξ i) : ℂ) * d i) • (Λ i x • v i)))
+  simp only [map_smul, smul_eq_mul]
+  by_cases e : j = i
+  · subst j; rw [hki, hBasis.1 i]; ring
+  · rw [hBasis.2.1 i j (Ne.symm e)]
+    rcases hk j e with hj | hj <;> rw [hj] <;> ring
+
+private theorem continuous_comp_nuclear_of_stronglyContinuous_bounded
+    {X H : Type*} [TopologicalSpace X] [NormedAddCommGroup H] [NormedSpace ℂ H] [CompleteSpace H]
+    (U : X → H →L[ℂ] H) (hU : ∀ x, Continuous (fun t ↦ U t x))
+    {K : ℝ} (hK : 0 ≤ K) (hb : ∀ t, ‖U t‖ ≤ K) (N : H →L[ℂ] H) (hN : IsNuclearOperator N) :
+    Continuous (fun t ↦ (U t).comp N) := by
+  obtain ⟨c, φ, y, hc, hφ, hy, hseries⟩ := (isNuclearOperator_iff_isBanachNuclear N).mp hN
+  obtain ⟨P, hP, hφP⟩ := (Metric.isBounded_range_of_tendsto φ hφ).exists_pos_norm_le
+  obtain ⟨Y, hY, hyY⟩ := (Metric.isBounded_range_of_tendsto y hy).exists_pos_norm_le
+  let a (n : ℕ) (t : X) := c n • (φ n).smulRight (U t (y n))
+  have ha (n : ℕ) : Continuous (a n) :=
+    (((ContinuousLinearMap.smulRightL ℂ H H (φ n)).continuous).comp (hU (y n))).const_smul (c n)
+  have hbnd (n : ℕ) (t : X) : ‖a n t‖ ≤ ‖c n‖ * (P * (K * Y)) := by
+    simp only [a, norm_smul, ContinuousLinearMap.norm_smulRight_apply]
+    gcongr
+    · exact hφP _ (mem_range_self n)
+    · exact ((U t).le_opNorm _).trans (mul_le_mul (hb t) (hyY _ (mem_range_self n)) (norm_nonneg _) hK)
+  have hcont := continuous_tsum ha (hc.mul_right (P * (K * Y))) hbnd
+  convert hcont using 1
+  funext t
+  ext x
+  have hs := ((hc.mul_right (P * (K * Y))).of_norm_bounded (fun n ↦ hbnd n t)).hasSum
+  have h := (ContinuousLinearMap.apply ℂ H x).hasSum hs
+  have h' := (U t).hasSum (hseries x)
+  exact HasSum.unique (f := fun n ↦ (c n * φ n x) • U t (y n))
+    (by simpa only [map_smul, ContinuousLinearMap.comp_apply] using h') (by
+      simpa only [a, ContinuousLinearMap.apply_apply, smul_apply,
+        ContinuousLinearMap.smulRight_apply, smul_smul] using h)
+
+private theorem continuous_comp_nuclear_of_stronglyContinuous
+    {H : Type*} [NormedAddCommGroup H] [NormedSpace ℂ H] [CompleteSpace H]
+    (U : ℝ → H →L[ℂ] H) (hU : ∀ x, Continuous (fun t ↦ U t x))
+    {C : ℝ} (hC : 0 ≤ C) (hb : ∀ t, ‖U t‖ ≤ C * (1 + |t|))
+    (N : H →L[ℂ] H) (hN : IsNuclearOperator N) :
+    Continuous (fun t ↦ (U t).comp N) := by
+  rw [continuous_iff_continuousAt]
+  intro t
+  let S := Metric.ball t 1
+  have h : Continuous (fun u : S ↦ (U u.val).comp N) :=
+    continuous_comp_nuclear_of_stronglyContinuous_bounded _ (fun x ↦ (hU x).comp continuous_subtype_val)
+      (K := C * (2 + |t|)) (by positivity) (fun u ↦ (hb _).trans ?_) N hN
+  · exact (continuousOn_iff_continuous_domRestrict.mpr h t (Metric.mem_ball_self one_pos)).continuousAt
+      (Metric.ball_mem_nhds t one_pos)
+  · apply mul_le_mul_of_nonneg_left _ hC
+    have hdist : |(u : ℝ) - t| < 1 := Metric.mem_ball.mp u.property
+    have hu := abs_add_le ((u : ℝ)-t) t
+    rw [sub_add_cancel] at hu
+    linarith
+
+
+/-- The integral of a nuclear orbit has the integrated diagonal trace. -/
+private theorem absolutePW_integrate_nuclear_orbit
+    {H : Type*} [NormedAddCommGroup H] [InnerProductSpace ℂ H] [CompleteSpace H]
+    (U : ℝ → H →L[ℂ] H) (hU : ∀ x, Continuous (fun t ↦ U t x))
+    {C : ℝ} (hC : 0 ≤ C) (hUb : ∀ t, ‖U t‖ ≤ C * (1 + |t|))
+    (N : nuclearEndomorphisms H) (M : H →L[ℂ] H)
+    (k : SchwartzMap ℝ ℂ) (t : ℝ)
+    (hI : Integrable (fun u ↦ k u • (U (t-u)).comp N.val)) :
+    ∃ hn : IsNuclearOperator (M.comp (∫ u, k u • (U (t-u)).comp N.val)),
+      hilbertTrace (⟨M.comp (∫ u, k u • (U (t-u)).comp N.val), hn⟩ : nuclearEndomorphisms H) =
+        ∫ u, k u * hilbertTrace
+          (⟨M * U (t-u) * N.val, mul_mem_nuclearEndomorphisms_left _ N⟩ :
+            nuclearEndomorphisms H) := by
+  obtain ⟨p⟩ := (isNuclearOperator_iff_nonempty_presentation N.val).mp N.property
+  obtain ⟨P, hP, hf⟩ := ((NormedSpace.equicontinuous_tfae p.functional).out 1 7).mp p.equicontinuous
+  obtain ⟨Y, hy⟩ := ((NormedSpace.isVonNBounded_iff ℂ).mp p.isBanachDisc.bounded).exists_norm_le
+  let y (n : ℕ) : H := p.vector n
+  have hY : 0 ≤ Y := (norm_nonneg _).trans (hy _ (p.vector_mem 0))
+  have hyY (n : ℕ) : ‖y n‖ ≤ Y := hy _ (p.vector_mem n)
+  let B (u : ℝ) := ‖k u‖ * (‖M‖ * (C * (1 + |t| + |u|)) * Y)
+  have hB (u : ℝ) : 0 ≤ B u := by dsimp only [B]; positivity
+  have hBi : Integrable B := by
+    have h := (k.integrable (μ := volume)).norm
+    have h' := k.integrable_pow_mul volume 1
+    convert (h.const_mul (‖M‖ * C * (1 + |t|) * Y)).add
+      (h'.const_mul (‖M‖ * C * Y)) using 1
+    funext u
+    simp only [B, Pi.add_apply, pow_one, Real.norm_eq_abs]
+    ring
+  let F (n : ℕ) (u : ℝ) := k u • M (U (t-u) (y n))
+  have hFc (n : ℕ) : Continuous (F n) :=
+    k.continuous.smul (M.continuous.comp ((hU _).comp (continuous_const.sub continuous_id)))
+  have hFb (n : ℕ) (u : ℝ) : ‖F n u‖ ≤ B u := by
+    have hu : ‖U (t-u) (y n)‖ ≤ (C * (1 + |t| + |u|)) * Y :=
+      ((U (t-u)).le_opNorm _).trans (mul_le_mul
+        ((hUb _).trans (mul_le_mul_of_nonneg_left (by linarith [abs_sub t u]) hC))
+        (hyY n) (norm_nonneg _) (by positivity))
+    rw [norm_smul]
+    dsimp only [B]
+    apply mul_le_mul_of_nonneg_left _ (norm_nonneg _)
+    exact (M.le_opNorm _).trans (by rw [mul_assoc]; exact mul_le_mul_of_nonneg_left hu (norm_nonneg _))
+  have hFi (n : ℕ) : Integrable (F n) :=
+    hBi.mono' (hFc n).aestronglyMeasurable (.of_forall (hFb n))
+  let z (n : ℕ) := ∫ u, F n u
+  have hz (n : ℕ) : ‖z n‖ ≤ ∫ u, B u :=
+    (norm_integral_le_integral_norm _).trans
+      (integral_mono_ae (hFi n).norm hBi (.of_forall (hFb n)))
+  have hZ : 0 ≤ ∫ u, B u := integral_nonneg hB
+  have hall (u : ℝ) (x : H) : HasSum
+      (fun n ↦ (p.coeff n * p.functional n x) • F n u)
+      (k u • M (U (t-u) (N.val x))) := by
+    have ht := (M.comp (U (t-u))).hasSum (p.hasSum x)
+    simpa only [F, ContinuousLinearMap.comp_apply, map_smul, smul_smul, mul_comm (k u)] using
+      ht.const_smul (k u)
+  have hIseries (x : H) : HasSum
+      (fun n ↦ (p.coeff n * p.functional n x) • z n)
+      ((M.comp (∫ u, k u • (U (t-u)).comp N.val)) x) := by
+    let L := M.comp (ContinuousLinearMap.apply ℂ H x)
+    change HasSum _ (L (∫ u, k u • (U (t-u)).comp N.val))
+    rw [← L.integral_comp_comm hI]
+    have hFi' (n : ℕ) : Integrable (fun u ↦ (p.coeff n * p.functional n x) • F n u) :=
+      (hFi n).smul _
+    have hsum : Summable (fun n ↦ ∫ u, ‖(p.coeff n * p.functional n x) • F n u‖) := by
+      apply (p.summable_coeff.mul_right (P * ‖x‖ * ∫ u, B u)).of_nonneg_of_le
+      · intro n; exact integral_nonneg fun _ ↦ norm_nonneg _
+      · intro n
+        rw [show (fun u ↦ ‖(p.coeff n * p.functional n x) • F n u‖) =
+            fun u ↦ ‖p.coeff n * p.functional n x‖ * ‖F n u‖ from funext fun _ ↦ norm_smul _ _,
+          integral_const_mul, norm_mul]
+        have hn := integral_mono_ae (hFi n).norm hBi (.of_forall (hFb n))
+        have hpn := ((p.functional n).le_opNorm x).trans
+          (mul_le_mul_of_nonneg_right (hf n) (norm_nonneg _))
+        rw [← mul_assoc]
+        exact mul_le_mul (mul_le_mul_of_nonneg_left hpn (norm_nonneg _)) hn
+          (integral_nonneg fun _ ↦ norm_nonneg _) (by positivity)
+    have hi := hasSum_integral_of_summable_integral_norm hFi' hsum
+    convert hi using 1
+    · funext n; exact (integral_smul _ _).symm
+    · apply integral_congr_ae
+      exact .of_forall fun u ↦ by
+        simpa only [L, ContinuousLinearMap.comp_apply, ContinuousLinearMap.apply_apply,
+          smul_apply, map_smul] using (hall u x).tsum_eq.symm
+  obtain ⟨hn, htr⟩ := absolutePW_nuclearTrace_series _ p.coeff p.functional z
+    p.summable_coeff ⟨P, hf⟩ (R := (∫ u, B u) + 1) (by positivity)
+    (fun n ↦ (hz n).trans (by linarith)) hIseries
+  refine ⟨hn, ?_⟩
+  rw [← htr.tsum_eq]
+  let a (n : ℕ) (u : ℝ) := p.coeff n * p.functional n (F n u)
+  have hai (n : ℕ) : Integrable (a n) :=
+    ((p.functional n).integrable_comp (hFi n)).const_mul _
+  have haB (n : ℕ) (u : ℝ) : ‖a n u‖ ≤ (‖p.coeff n‖ * P) * B u := by
+    dsimp only [a]
+    rw [norm_mul]
+    exact (mul_le_mul_of_nonneg_left
+      (((p.functional n).le_opNorm _).trans (mul_le_mul (hf n) (hFb n u) (norm_nonneg _) hP))
+      (norm_nonneg _)).trans_eq (by ring)
+  have hsa : Summable (fun n ↦ ∫ u, ‖a n u‖) := by
+    apply (p.summable_coeff.mul_right (P * ∫ u, B u)).of_nonneg_of_le
+    · intro n; exact integral_nonneg fun _ ↦ norm_nonneg _
+    · intro n
+      have h := integral_mono_ae (hai n).norm (hBi.const_mul (‖p.coeff n‖ * P)) (.of_forall (haB n))
+      simpa only [integral_const_mul, mul_assoc] using h
+  have hza (n : ℕ) : p.coeff n * p.functional n (z n) = ∫ u, a n u := by
+    dsimp only [z]
+    rw [← (p.functional n).integral_comp_comm (hFi n), ← integral_const_mul]
+  simp_rw [hza]
+  rw [integral_tsum_of_summable_integral_norm hai hsa]
+  apply integral_congr_ae
+  refine .of_forall fun u ↦ ?_
+  have hnorm (n : ℕ) : ‖M (U (t-u) (y n))‖ ≤ ‖M‖ * (‖U (t-u)‖ * Y) :=
+    (M.le_opNorm _).trans (mul_le_mul_of_nonneg_left
+      (((U (t-u)).le_opNorm _).trans (mul_le_mul_of_nonneg_left (hyY n) (norm_nonneg _))) (norm_nonneg _))
+  obtain ⟨_, htrace⟩ := absolutePW_nuclearTrace_series (M * U (t-u) * N.val) p.coeff p.functional
+    (fun n ↦ M (U (t-u) (y n))) p.summable_coeff ⟨P, hf⟩
+    (R := ‖M‖ * (‖U (t-u)‖ * Y) + 1) (by positivity)
+    (fun n ↦ (hnorm n).trans (by linarith))
+    (fun x ↦ by simpa only [y, mul_apply_eq_comp, ContinuousLinearMap.comp_apply, map_smul] using
+      (M.comp (U (t-u))).hasSum (p.hasSum x))
+  refine ((htrace.mul_left (k u)).congr_fun fun n ↦ ?_).tsum_eq
+  dsimp only [a, F]
+  rw [map_smul, smul_eq_mul]
+  ring
+
+
+/-- Testing a nuclear translation orbit against a fixed operator detects every
+isolated eigenfrequency whose weighted rank-one trace is nonzero. -/
+private theorem absolutePW_orbit_trace_not_tendsto_zero
+    {H ι : Type*} [NormedAddCommGroup H] [InnerProductSpace ℂ H] [CompleteSpace H]
+    (v : ι → H) (Λ : ι → StrongDual ℂ H) (hBasis : IsSpectralMarkushevichBasis v Λ)
+    (U : ℝ → H →L[ℂ] H) (hU : ∀ x, Continuous (fun t ↦ U t x))
+    {C : ℝ} (hC : 0 ≤ C) (hUb : ∀ t, ‖U t‖ ≤ C * (1 + |t|))
+    (N : nuclearEndomorphisms H) (M : H →L[ℂ] H)
+    (ξ : ι → ℝ) (d : ι → ℂ)
+    (hD : ∀ t j x, Λ j (U t (N.val x)) = (Real.fourierChar (t * ξ j) : ℂ) * d j * Λ j x)
+    (i : ι) (hi : d i ≠ 0) {r : ℝ} (hr : 0 < r)
+    (hsep : ∀ j ≠ i, r ≤ dist (ξ j) (ξ i) ∨ d j = 0)
+    (hM : Λ i (M (v i)) ≠ 0) :
+    ¬ Tendsto (fun t ↦ hilbertTrace
+        (⟨M * U t * N.val, mul_mem_nuclearEndomorphisms_left _ N⟩ : nuclearEndomorphisms H))
+      atTop (𝓝 0) := by
+  classical
+  let G (t : ℝ) := hilbertTrace
+    (⟨M * U t * N.val, mul_mem_nuclearEndomorphisms_left _ N⟩ : nuclearEndomorphisms H)
+  change ¬ Tendsto G atTop (𝓝 0)
+  intro hlim
+  let J := {j : ι // d j ≠ 0}
+  let i' : J := ⟨i, hi⟩
+  obtain ⟨k, hki, hkj⟩ := exists_isolatingSchwartzKernel (fun j : J ↦ ξ j.val) i' hr
+    (fun j hj ↦ (hsep j.val (fun e ↦ hj (Subtype.ext e))).resolve_right j.property)
+  have hk (j : ι) (hj : j ≠ i) : (𝓕 k : SchwartzMap ℝ ℂ) (ξ j) = 0 ∨ d j = 0 := by
+    by_cases e : d j = 0
+    · exact Or.inr e
+    · exact Or.inl (hkj ⟨j,e⟩ (fun e ↦ hj (congrArg Subtype.val e)))
+  let D (t : ℝ) := (U t).comp N.val
+  have hDc : Continuous D := continuous_comp_nuclear_of_stronglyContinuous U hU hC hUb N.val N.property
+  have hI (t : ℝ) : Integrable (fun u ↦ k u • D (t-u)) := by
+    let K := C * ‖N.val‖
+    have hb (s : ℝ) : ‖D s‖ ≤ K * (1 + |s|) := by
+      calc
+        _ ≤ ‖U s‖ * ‖N.val‖ := ContinuousLinearMap.opNorm_comp_le _ _
+        _ ≤ (C * (1 + |s|)) * ‖N.val‖ := mul_le_mul_of_nonneg_right (hUb s) (norm_nonneg _)
+        _ = _ := by dsimp [K]; ring
+    have hI' : Integrable (fun u ↦ ‖k u‖ * (K * (1 + |t|)) + K * (|u| * ‖k u‖)) := by
+      apply Integrable.add ((k.integrable (μ := volume)).norm.mul_const _)
+      simpa only [Real.norm_eq_abs, pow_one] using (k.integrable_pow_mul volume 1).const_mul K
+    refine hI'.mono' (k.continuous.smul (hDc.comp (continuous_const.sub continuous_id))).aestronglyMeasurable ?_
+    apply ae_of_all; intro u
+    rw [norm_smul]
+    calc
+      _ ≤ ‖k u‖ * (K * (1 + |t| + |u|)) := by
+        apply mul_le_mul_of_nonneg_left _ (norm_nonneg _)
+        exact (hb _).trans (mul_le_mul_of_nonneg_left (by linarith [abs_sub t u]) (by positivity))
+      _ = _ := by ring
+  have hnorm (t : ℝ) : ‖G t‖ ≤ (‖M‖ * C * traceNorm N) * (1 + |t|) := by
+    have hN : 0 ≤ traceNorm N := (norm_nonneg _).trans (norm_hilbertTrace_le N)
+    calc
+      _ ≤ ‖M * U t‖ * traceNorm N :=
+        (norm_hilbertTrace_le _).trans (traceNorm_mul_left_le _ N)
+      _ ≤ (‖M‖ * (C * (1 + |t|))) * traceNorm N :=
+        mul_le_mul_of_nonneg_right
+          ((ContinuousLinearMap.opNorm_comp_le _ _).trans
+            (mul_le_mul_of_nonneg_left (hUb t) (norm_nonneg _))) hN
+      _ = _ := by ring
+  have hGc : Continuous G := by
+    obtain ⟨p⟩ := (isNuclearOperator_iff_nonempty_presentation N.val).mp N.property
+    obtain ⟨P, hP, hf⟩ := ((NormedSpace.equicontinuous_tfae p.functional).out 1 7).mp p.equicontinuous
+    obtain ⟨Y, hy⟩ := ((NormedSpace.isVonNBounded_iff ℂ).mp p.isBanachDisc.bounded).exists_norm_le
+    have hY : 0 ≤ Y := (norm_nonneg _).trans (hy _ (p.vector_mem 0))
+    let a (n : ℕ) (t : ℝ) := p.coeff n * p.functional n (M (U t (p.vector n)))
+    have htrace (t : ℝ) : G t = ∑' n, a n t := by
+      obtain ⟨_, htr⟩ := absolutePW_nuclearTrace_series (M * U t * N.val) p.coeff p.functional
+        (fun n ↦ M (U t (p.vector n))) p.summable_coeff ⟨P, hf⟩
+        (R := ‖M‖ * (‖U t‖ * Y) + 1) (by positivity)
+        (fun n ↦ ((M.le_opNorm _).trans (mul_le_mul_of_nonneg_left
+          (((U t).le_opNorm _).trans (mul_le_mul_of_nonneg_left
+            (hy _ (p.vector_mem n)) (norm_nonneg _))) (norm_nonneg _))).trans (by linarith))
+        (fun x ↦ by simpa only [mul_apply_eq_comp, ContinuousLinearMap.comp_apply, map_smul] using
+          (M.comp (U t)).hasSum (p.hasSum x))
+      exact htr.tsum_eq.symm
+    rw [funext htrace, continuous_iff_continuousAt]
+    intro t
+    let S := Metric.ball t 1
+    let b := P * (‖M‖ * ((C * (2 + |t|)) * Y))
+    have hcont : Continuous (fun s : S ↦ ∑' n, a n s.val) := by
+      refine continuous_tsum (fun n ↦ ?_) (p.summable_coeff.mul_right b) (fun n s ↦ ?_)
+      · exact (((p.functional n).continuous.comp (M.continuous.comp
+          ((hU _).comp continuous_subtype_val))).const_mul (p.coeff n))
+      · have hUs : ‖U (s : ℝ)‖ ≤ C * (2 + |t|) := by
+          apply (hUb _).trans
+          apply mul_le_mul_of_nonneg_left _ hC
+          have hd : |(s : ℝ) - t| < 1 := Metric.mem_ball.mp s.property
+          linarith [abs_sub_abs_le_abs_sub (s : ℝ) t]
+        dsimp only [a, b]
+        rw [norm_mul]
+        apply mul_le_mul_of_nonneg_left _ (norm_nonneg _)
+        apply ((p.functional n).le_opNorm _).trans
+        exact mul_le_mul (hf n)
+          ((M.le_opNorm _).trans (mul_le_mul_of_nonneg_left
+            (((U (s : ℝ)).le_opNorm _).trans (mul_le_mul hUs
+              (hy _ (p.vector_mem n)) (norm_nonneg _) (by positivity))) (norm_nonneg _)))
+          (norm_nonneg _) hP
+    exact (continuousOn_iff_continuous_domRestrict.mpr hcont t (Metric.mem_ball_self one_pos)).continuousAt
+      (Metric.ball_mem_nhds t one_pos)
+  have hlim' := scalarConvolution_tendsto_zero k G hGc (by
+    exact mul_nonneg (mul_nonneg (norm_nonneg _) hC) ((norm_nonneg _).trans (norm_hilbertTrace_le N))) hnorm hlim
+  have heq (t : ℝ) : (∫ u, k u * G (t-u)) =
+      (Real.fourierChar (t * ξ i) : ℂ) * d i * Λ i (M (v i)) := by
+    obtain ⟨hn, htrace⟩ := absolutePW_integrate_nuclear_orbit U hU hC hUb N M k t (hI t)
+    have eq := integrate_isolatedEigenfrequency v Λ hBasis D ξ d hD i k hki hk t (hI t)
+    let c := (Real.fourierChar (t * ξ i) : ℂ) * d i
+    have hmap : M.comp (∫ u, k u • (U (t-u)).comp N.val) =
+        (Λ i).smulRight (c • M (v i)) := by
+      change M.comp (∫ u, k u • D (t-u)) = _
+      rw [eq]
+      ext x
+      simp only [ContinuousLinearMap.comp_apply, smul_apply,
+        ContinuousLinearMap.smulRight_apply, map_smul]
+      exact smul_comm c (Λ i x) (M (v i))
+    trans hilbertTrace (⟨_, hn⟩ : nuclearEndomorphisms H)
+    · exact htrace.symm
+    trans hilbertTrace (⟨(Λ i).smulRight (c • M (v i)), isNuclearOperator_smulRight _ _⟩ :
+      nuclearEndomorphisms H)
+    · exact congrArg hilbertTrace (Subtype.ext hmap)
+    · rw [hilbertTrace_smulRight, map_smul, smul_eq_mul]
+  have hn := hlim'.norm
+  simp only [heq, norm_zero, norm_mul, Circle.norm_coe, one_mul] at hn
+  exact (mul_ne_zero (norm_ne_zero_iff.mpr hi) (norm_ne_zero_iff.mpr hM))
+    (tendsto_nhds_unique tendsto_const_nhds hn)
+
+end
+
+section
+
+local notation "μ(" F ")" => ideleClassTamagawaMeasure F
+local notation "h₀" => le_rfl (a := (0 : ℝ))
+local notation "hs" => (show (1 : ℝ) < 2 from one_lt_two)
+local notation "hs₂" => (show (0 : ℝ) ≤ 2 from zero_le_two)
+local notation "Θ₂(" F ")" => globalThetaSobolev F (1/2) h₀ hs₂
+local notation "Q₂(" F ")" => spectralSobolevQuotient F (1/2) h₀ hs₂
+local notation "W₂(" F ")" => CompactIntervalSobolev (μ(F))
+  (fun g ↦ Real.log ((ideleClassNorm F g).val : ℝ)) 0 0 2
+local notation "τ₂(" F ")" => hardySobolevTranslation (μ(F)) (m𝔽(F)) 0 0 2 h₀ hs₂
+local notation "A₂(" F ", " φ ")" =>
+  hardySobolevTestAction (μ(F)) m𝔽(F) 0 0 2 h₀ hs₂ φ
+local notation "U₂(" F ", " φ ")" => spectralConvolution (F := F) (1/2) h₀ hs₂ φ
+local notation "zetaPoint(" t ")" => ((1 : ℂ) / 2 + (t : ℂ) * Complex.I)
+local notation "η(" χ ", " j ")" => ideleClassNormTwist (χ (Subtype.val j).1) (((Subtype.val j).2.1 : ℂ) * Complex.I)
+
+/-- The strict Sobolev cutoff at weight two admits only order-zero evaluations. -/
+private theorem absolutePW_jet_order_zero {F : Type} [Field F] [NumberField F]
+    {χ : PontryaginDual C₁(F) → PontryaginDual C𝔽(F)}
+    (j : SpectralLineJetIndex χ (1/2) 2) : j.val.2.2 = 0 := by
+  have h := ((lt_spectralBoundaryMultiplicity _ _ _).mp j.property).2
+  by_contra hz
+  have hb : 1 ≤ j.val.2.2 := Nat.one_le_iff_ne_zero.mpr hz
+  have hb' : (1 : ℝ) ≤ (j.val.2.2 : ℝ) := by exact_mod_cast hb
+  linarith
+
+/-- Integrating a test against the exponent gives the eigenvalue on a
+zero-order quotient coordinate. The translation calculation follows
+`spectralLine_wrongWeight_convolution` from Ch10 §3. -/
+private theorem absolutePW_jet_eigen {F : Type} [Field F] [NumberField F]
+    {χ : PontryaginDual C₁(F) → PontryaginDual C𝔽(F)}
+    (j : SpectralLineJetIndex χ (1/2) 2) (Λ : StrongDual ℂ Q₂(F))
+    (hΛ : spectralSobolevDualEmbedding F (1/2) h₀ hs₂ Λ =
+      (spectralLineJet_memLp χ hs j).toLp
+        (spectralZeroJet (χ j.val.1) 0 j.val.2.1 j.val.2.2)) :
+    (∀ k : C𝔽(F), ∀ f : W₂(F),
+      Λ ((Θ₂(F)).mkQL (τ₂(F) k f)) = η(χ, j) k * Λ ((Θ₂(F)).mkQL f)) ∧
+    ∀ (φ : BruhatCompactSupport C𝔽(F)) (x : Q₂(F)),
+      Λ (U₂(F, φ) x) = (∫ g, φ.val g * η(χ, j) g ∂μ(F)) * Λ x := by
+  let θ := η(χ, j)
+  let L : StrongDual ℂ W₂(F) := Λ.comp (Θ₂(F)).mkQL
+  have hΛeval (f : W₂(F)) : L f = ∫ g, f g * θ g ∂μ(F) := by
+    have h := (spectralSobolevPairing_dual h₀ hs₂ L f).2
+    change L f = spectralSobolevPairing f (spectralSobolevDualEmbedding F (1/2) h₀ hs₂ Λ) at h
+    rw [h, hΛ, spectralSobolevPairing]
+    have hwd (g : C𝔽(F)) : intervalSobolevDensity 0 0 2
+        (Real.log ((ideleClassNorm F g).val : ℝ)) =
+        1 + (Real.log ((ideleClassNorm F g).val : ℝ))^2 := by
+      norm_num [intervalSobolevDensity]
+    have hlog : Continuous (fun g : C𝔽(F) ↦ Real.log ((ideleClassNorm F g).val : ℝ)) :=
+      Real.continuousOn_log.comp_continuous
+        (NNReal.continuous_coe.comp (Units.continuous_val.comp (isProperMap_ideleClassNorm F).continuous))
+        (fun _ ↦ (NNReal.coe_pos.mpr (Units.zero_lt _)).ne')
+    have hac : μ(F) ≪ (μ(F)).withDensity (fun g ↦ ENNReal.ofReal
+        ((intervalSobolevDensity 0 0 2 (Real.log ((ideleClassNorm F g).val : ℝ)))⁻¹)) := by
+      simp_rw [hwd]
+      exact withDensity_absolutelyContinuous'
+        ((continuous_const.add (hlog.pow 2)).measurable.inv.ennreal_ofReal.aemeasurable)
+        (.of_forall fun _ ↦ ENNReal.ofReal_ne_zero_iff.mpr (by positivity))
+    apply integral_congr_ae
+    filter_upwards [hac.ae_le (MemLp.coeFn_toLp (spectralLineJet_memLp χ hs j))] with g hg
+    rw [hg]
+    simp only [θ, spectralZeroJet, absolutePW_jet_order_zero j, pow_zero, mul_one,
+      Complex.ofReal_zero, zero_add]
+  have eig (k : C𝔽(F)) (f : W₂(F)) : L (τ₂(F) k f) = θ k * L f := by
+    have htr := hardySobolevTranslation_apply (μ(F)) m𝔽(F) 0 0 2 h₀ hs₂ k f
+    rw [hΛeval, hΛeval, integral_congr_ae (htr.mono fun g hg ↦ congrArg (· * θ g) hg)]
+    calc
+      _ = ∫ g, f g * θ (k * g) ∂μ(F) := by
+        rw [← integral_mul_left_eq_self (fun g ↦ f (k⁻¹ * g) * θ g) k]
+        simp only [inv_mul_cancel_left]
+      _ = θ k * ∫ g, f g * θ g ∂μ(F) := by
+        rw [← integral_const_mul]
+        congr with g
+        rw [map_mul]
+        ring
+  refine ⟨eig, fun φ x ↦ ?_⟩
+  obtain ⟨f, rfl⟩ := (Submodule.mkQ_surjective (Θ₂(F))) x
+  rw [spectralConvolution_mkQ]
+  let τ := τ₂(F)
+  have hp := bruhatRegularizedAction_apply (μ(F)) τ
+    (exists_hardySobolevTranslation (μ(F)) m𝔽(F) 0 0 2 h₀ hs₂).choose_spec.2 φ f
+  have he := congrArg (fun z : PettisWeakCompletion W₂(F) ↦
+    (show Module.Dual ℂ (StrongDual ℂ W₂(F)) from z) L) hp.2
+  change L (A₂(F, φ) f) = ∫ g, L (φ.val g • τ g f) ∂μ(F) at he
+  change L (A₂(F, φ) f) = (∫ g, φ.val g * θ g ∂μ(F)) * L f
+  rw [he, ← integral_mul_const]
+  apply integral_congr_ae
+  exact .of_forall fun g ↦ by
+    change L (φ.val g • τ₂(F) g f) = φ.val g * θ g * L f
+    rw [map_smul, eig]
+    simp only [smul_eq_mul, mul_assoc]
+
+/-- Thomas Lince’s certified critical-line bracket gives a positive finite order
+for the completed Hecke function of the trivial rational character. -/
+private theorem absolutePW_critical_line_point :
+    ∃ γ : ℝ, 0 < (meromorphicOrderAt
+      (continuedCompletedHeckeL (1 : PontryaginDual C𝔽(ℚ))) zetaPoint(γ)).untop₀.toNat := by
+  obtain ⟨γ, -, hγ⟩ := HardyFirstZero.first_zero_on_line
+  let z : ℂ := zetaPoint(γ)
+  have hre : z.re = 1 / 2 := by simp [z]
+  have hne : z ≠ 1 := fun h ↦ by norm_num [h] at hre
+  have hm : MeromorphicOn riemannZeta univ := by
+    simpa only [DirichletCharacter.LFunction_modOne_eq] using
+      meromorphic_dirichletLFunction (1 : DirichletCharacter ℂ 1)
+  refine ⟨γ, ?_⟩
+  change 0 < (meromorphicOrderAt (continuedCompletedHeckeL (1 : PontryaginDual C𝔽(ℚ))) z).untop₀.toNat
+  rw [← meromorphicOrderAt_finiteHeckeL_continuation _ hm (fun s ↦
+    (dedekindZeta_rat_eq_riemannZeta s.property).symm.trans
+      (finiteHeckeL_one_eq_dedekindZeta (K := ℚ) s).symm) (by rw [hre]; norm_num)]
+  have hnot (u : ℂ) : meromorphicOrderAt riemannZeta u ≠ ⊤ := by
+    refine hm.meromorphicOrderAt_ne_top_of_isPreconnected isPreconnected_univ (mem_univ (2 : ℂ))
+      (mem_univ u) ?_
+    exact (meromorphicOrderAt_ne_top_iff_eventually_ne_zero (hm 2 (mem_univ _))).2
+      (((differentiableAt_riemannZeta (by norm_num : (2 : ℂ) ≠ 1)).continuousAt.eventually_ne
+        (riemannZeta_ne_zero_of_one_lt_re (by norm_num))).filter_mono nhdsWithin_le_nhds)
+  have hpos : 0 < meromorphicOrderAt riemannZeta z := by
+    apply (tendsto_zero_iff_meromorphicOrderAt_pos (hm z (mem_univ z))).mp
+    change riemannZeta z = 0 at hγ
+    rw [← hγ]
+    exact (differentiableAt_riemannZeta hne).continuousAt.continuousWithinAt
+  rw [← Int.pos_iff_toNat_pos]
+  exact (WithTop.coe_lt_coe.mp (by simpa only [WithTop.coe_untop₀_of_ne_top (hnot z), WithTop.coe_zero] using hpos))
+
+
+/-- Quotient maps and orthogonal representatives identify the spectral projector. -/
+local notation "q₂(" F ")" => (Θ₂(F)).mkQL
+local notation "J₂(" F ")" => (Θ₂(F)).orthogonal.subtypeL.comp
+  (Θ₂(F)).quotientEquivOrthogonal.toContinuousLinearEquiv.toContinuousLinearMap
+
+private theorem absolutePW_quotient_section {V : Type*} [NormedAddCommGroup V]
+    [InnerProductSpace ℂ V] [CompleteSpace V] (K : Submodule ℂ V) [IsClosed (K : Set V)] :
+    let q := K.mkQL
+    let J := K.orthogonal.subtypeL.comp K.quotientEquivOrthogonal.toContinuousLinearEquiv.toContinuousLinearMap
+    q.comp J = 1 ∧ J.comp q = K.orthogonal.starProjection ∧
+      K.starProjection + K.orthogonal.starProjection = 1 := by
+  intro q J
+  let E := K.orthogonal.starProjection
+  have hq (x : V) : q (E x) = q x := by
+    apply ((Submodule.Quotient.eq K).2 ?_).symm
+    rw [show x - E x = K.starProjection x from
+      sub_eq_of_eq_add (K.starProjection_add_starProjection_orthogonal x).symm]
+    exact K.starProjection_apply_mem x
+  have hJ : J.comp q = E := by
+    apply ContinuousLinearMap.ext
+    intro x
+    have h := K.quotientEquivOrthogonal_mk (E x) (K.orthogonal.starProjection_apply_mem x)
+    change K.quotientEquivOrthogonal (q (E x)) = _ at h
+    rw [hq x] at h
+    exact congrArg Subtype.val h
+  refine ⟨?_, hJ, ContinuousLinearMap.ext K.starProjection_add_starProjection_orthogonal⟩
+  apply ContinuousLinearMap.ext
+  intro x
+  obtain ⟨u, rfl⟩ := K.mkQ_surjective x
+  exact (congrArg q (DFunLike.congr_fun hJ u)).trans (hq u)
+
+private theorem absolutePW_quotient_translation {F : Type} [Field F] [NumberField F]
+    (g : ℝ → C𝔽(F)) (hgc : Continuous g)
+    (hg : ∀ t, Real.log ((ideleClassNorm F (g t)).val : ℝ) = t) :
+    let U (t : ℝ) := (q₂(F)).comp ((τ₂(F) (g t)).comp (J₂(F)))
+    (∀ x, Continuous (fun t ↦ U t x)) ∧
+    (∀ t, ‖U t‖ ≤ (‖q₂(F)‖ * ‖J₂(F)‖) * (1 + |t|)) := by
+  intro U
+  have hcont := (exists_hardySobolevTranslation (μ(F)) m𝔽(F) 0 0 2 h₀ hs₂).choose_spec.2
+  refine ⟨fun x ↦ (q₂(F)).continuous.comp (hcont.comp (hgc.prodMk continuous_const)), fun t ↦ ?_⟩
+  have hbt := norm_hardySobolevTranslation_le (μ(F)) m𝔽(F) 0 0 2 h₀ hs₂ (g t)
+  change ‖τ₂(F) (g t)‖ ≤ max (Real.exp (0 * Real.log ((ideleClassNorm F (g t)).val : ℝ)))
+    (Real.exp (0 * Real.log ((ideleClassNorm F (g t)).val : ℝ))) *
+    (1 + |Real.log ((ideleClassNorm F (g t)).val : ℝ)|) ^ ((2 : ℝ) / 2) at hbt
+  norm_num [hg] at hbt
+  calc
+    ‖U t‖ ≤ ‖q₂(F)‖ * (‖τ₂(F) (g t)‖ * ‖J₂(F)‖) :=
+      (ContinuousLinearMap.opNorm_comp_le _ _).trans
+        (mul_le_mul_of_nonneg_left (ContinuousLinearMap.opNorm_comp_le _ _) (norm_nonneg _))
+    _ ≤ ‖q₂(F)‖ * ((1 + |t|) * ‖J₂(F)‖) := by gcongr
+    _ = _ := by ring
+
+/-- No other zero of the trivial character approaches this ordinate, with
+the scale used by the Fourier transform. -/
+private theorem absolutePW_zero_isolated (γ : ℝ)
+    (hγ : 0 < (meromorphicOrderAt (continuedCompletedHeckeL (1 : PontryaginDual C𝔽(ℚ)))
+      zetaPoint(γ)).untop₀.toNat) :
+    ∃ r : ℝ, 0 < r ∧ ∀ t : ℝ, t ≠ γ →
+      0 < (meromorphicOrderAt (continuedCompletedHeckeL (1 : PontryaginDual C𝔽(ℚ)))
+        zetaPoint(t)).untop₀.toNat → r ≤ dist (t / (2 * Real.pi)) (γ / (2 * Real.pi)) := by
+  let Z := {z : ℂ | 0 < (meromorphicOrderAt (continuedCompletedHeckeL
+    (1 : PontryaginDual C𝔽(ℚ))) z).untop₀.toNat}
+  have hm := (continuedCompletedHeckeL_spec (1 : PontryaginDual C𝔽(ℚ))).1.meromorphicOn
+  have hcod : Zᶜ ∈ Filter.codiscrete ℂ := by
+    filter_upwards [hm.codiscreteWithin_setOfPred_meromorphicOrderAt_eq_zero_or_top] with z hz
+    rcases hz.2 with h | h <;> simp [Z, h]
+  have hz := (isDiscrete_iff_nhdsWithin.mp (compl_mem_codiscrete_iff.mp hcod).2) _ hγ
+  have he : ∀ᶠ z in 𝓝[Z] zetaPoint(γ), z = zetaPoint(γ) := by rw [hz]; exact eventually_pure.mpr rfl
+  rcases Metric.mem_nhdsWithin_iff.mp he with ⟨δ, hδ, hball⟩
+  refine ⟨δ / (2 * Real.pi), by positivity, fun t hne ht ↦ ?_⟩
+  have hd : dist zetaPoint(t) zetaPoint(γ) = |t - γ| := by
+    rw [dist_eq_norm]
+    have e : zetaPoint(t) - zetaPoint(γ) = ((t - γ : ℝ) : ℂ) * Complex.I := by push_cast; ring
+    rw [e, norm_mul, Complex.norm_I, mul_one, Complex.norm_real, Real.norm_eq_abs]
+  have hdt : δ ≤ |t - γ| := by
+    by_contra! hl
+    have hz' := hball ⟨Metric.mem_ball.mpr (hd.trans_lt hl), ht⟩
+    apply hne
+    simpa using congrArg Complex.im hz'
+  rw [Real.dist_eq, ← sub_div, abs_div, abs_of_pos (by positivity : 0 < 2 * Real.pi)]
+  gcongr
+
+end
+
+section
+
+local notation "CQ" => IdeleClassGroup (𝓞 ℚ) ℚ
+local notation "CQ₁" => (ideleClassNorm ℚ).ker
+local notation "ℓ" => (fun x : CQ ↦ Real.log ((ideleClassNorm ℚ x).val : ℝ))
+local notation "μQ" => ideleClassTamagawaMeasure ℚ
+
+/-- Translate a compact smooth radial test along a norm section.  The initial
+profile is modulated to be nonzero at the prescribed Mellin frequency. -/
+private theorem absolutePW_radial_translates (γ : ℝ) :
+    ∃ (σ : Multiplicative ℝ →ₜ* CQ) (ψ : ℝ → BruhatCompactSupport CQ),
+      (∀ t, ℓ (σ (Multiplicative.ofAdd t)) = t) ∧
+      (∀ t x, (ψ t).val x = (ψ 0).val ((σ (Multiplicative.ofAdd t))⁻¹ * x)) ∧
+      (∀ t (k : CQ₁) x, (ψ t).val (k.val⁻¹ * x) = (ψ t).val x) ∧
+      (∀ t, 0 ≤ t → tsupport (ψ t).val ⊆ {g | 1 ≤ ((ideleClassNorm ℚ g).val : ℝ)}) ∧
+      (∫ g, (ψ 0).val g * ideleClassNormTwist (1 : PontryaginDual CQ)
+        ((γ : ℂ) * Complex.I) g ∂μQ) ≠ 0 := by
+  let q : IdeleGroup (𝓞 ℚ) ℚ →ₜ* CQ := ⟨QuotientGroup.mk' _, continuous_quotient_mk'⟩
+  let τ : ℝ≥0ˣ →ₜ* CQ := q.comp ⟨canonicalIdeleNormSection ℚ, canonicalIdeleNormSection_continuous ℚ⟩
+  let σ := τ.comp (positiveRealLogEquiv.symm : Multiplicative ℝ →ₜ* ℝ≥0ˣ)
+  have hτ : RightInverse τ (ideleClassNorm ℚ) := canonicalIdeleNormSection_rightInverse ℚ
+  have hσ (t : ℝ) : ℓ (σ (Multiplicative.ofAdd t)) = t := by
+    dsimp only
+    rw [← positiveRealLogEquiv_apply, show ideleClassNorm ℚ (σ (Multiplicative.ofAdd t)) =
+      positiveRealLogEquiv.symm (Multiplicative.ofAdd t) from hτ _, positiveRealLogEquiv.apply_symm_apply]
+    rfl
+  let w := (γ : ℂ) * Complex.I
+  let β : ContDiffBump (1 / 2 : ℝ) := ⟨1/8, 1/4, by norm_num, by norm_num⟩
+  let H (x : ℝ) : ℂ := (β x : ℂ) * Complex.exp (-(w * x))
+  have hH : ContDiff ℝ (∞ : ℕ∞ω) H :=
+    (Complex.ofRealCLM.contDiff.comp β.contDiff).mul
+      (Complex.contDiff_exp.comp (contDiff_const.mul Complex.ofRealCLM.contDiff).neg)
+  have hC : HasCompactSupport H := (β.hasCompactSupport.comp_left Complex.ofReal_zero).mul_right
+  have hneg (x : ℝ) (hx : x ≤ 0) : H x = 0 := by
+    have hb : β x = 0 := β.zero_of_le_dist (by
+      rw [Real.dist_eq, abs_of_neg (by linarith)]; change (1/4 : ℝ) ≤ _; linarith)
+    simp [H, hb]
+  let m : CQ →ₜ* ℝ≥0ˣ := ⟨ideleClassNorm ℚ, (isProperMap_ideleClassNorm ℚ).continuous⟩
+  have hproper : IsProperMap ℓ := by
+    have he : (positiveRealLogEquiv ∘ m) = ℓ := funext fun g ↦ positiveRealLogEquiv_apply _
+    exact he ▸ positiveRealLogEquiv.toHomeomorph.isProperMap.comp (isProperMap_ideleClassNorm ℚ)
+  have hcompact {H' : ℝ → ℂ} (h : HasCompactSupport H') : HasCompactSupport (H' ∘ ℓ) :=
+    HasCompactSupport.intro (hproper.isCompact_preimage h) (fun _ hx ↦ image_eq_zero_of_notMem_tsupport (f := H') hx)
+  let ψ (t : ℝ) : BruhatCompactSupport CQ :=
+    (⟨fun x ↦ H (ℓ x - t), (mem_bruhatSmoothSubmodule_iff _).mpr
+      (isBruhatSmooth_logProfile m (hH.comp (contDiff_id.sub contDiff_const))),
+      hcompact (hC.comp_homeomorph (Homeomorph.subRight t))⟩ : bruhatCompactSupportSubmodule CQ)
+  have hψ (t : ℝ) (x : CQ) : (ψ t).val x = H (ℓ x - t) := rfl
+  have hlog (a x : CQ) : ℓ (a⁻¹ * x) = ℓ x - ℓ a := by
+    simp only [map_mul, map_inv, Units.val_mul, NNReal.coe_mul, Units.val_inv_eq_inv_val,
+      NNReal.coe_inv, Real.log_mul (inv_ne_zero (NNReal.coe_pos.mpr (Units.zero_lt _)).ne')
+        (NNReal.coe_pos.mpr (Units.zero_lt _)).ne', Real.log_inv]
+    ring
+  refine ⟨σ, ψ, hσ, fun t x ↦ ?_, fun t k x ↦ ?_, fun t ht ↦ ?_, ?_⟩
+  · simp only [hψ, sub_zero, hlog, hσ]
+  · simp only [hψ, hlog, show ideleClassNorm ℚ k.val = 1 from k.property,
+      Units.val_one, NNReal.coe_one, Real.log_one, sub_zero]
+  · apply closure_minimal _ (isClosed_le continuous_const (NNReal.continuous_coe.comp
+      (Units.continuous_val.comp (isProperMap_ideleClassNorm ℚ).continuous)))
+    intro x hx
+    by_contra hn
+    apply hx
+    rw [hψ]
+    apply hneg
+    have hx' : (((ideleClassNorm ℚ x).val : ℝ)) < 1 := lt_of_not_ge hn
+    have h := Real.log_neg (NNReal.coe_pos.mpr (Units.zero_lt _)) hx'
+    linarith
+  · have hM (x : CQ) : (ψ 0).val x * ideleClassNormTwist (1 : PontryaginDual CQ) w x =
+        (β (ℓ x) : ℂ) := by
+      rw [hψ, sub_zero]
+      have hx : 0 < ((ideleClassNorm ℚ x).val : ℝ) := NNReal.coe_pos.mpr (Units.zero_lt _)
+      change ((β (ℓ x) : ℂ) * Complex.exp (-(w * (ℓ x : ℂ)))) *
+        (1 * ((((ideleClassNorm ℚ x).val : ℝ) : ℂ) ^ w)) = _
+      rw [one_mul, Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr hx.ne'),
+        ← Complex.ofReal_log hx.le, mul_comm _ w, mul_assoc, ← Complex.exp_add, neg_add_cancel,
+        Complex.exp_zero, mul_one]
+    simp_rw [show (γ : ℂ) * Complex.I = w from rfl, hM]
+    rw [integral_complex_ofReal]
+    apply Complex.ofReal_ne_zero.mpr
+    have hβ : HasCompactSupport (fun x : CQ ↦ β (ℓ x)) :=
+      HasCompactSupport.intro (hproper.isCompact_preimage β.hasCompactSupport)
+        (fun _ hx ↦ image_eq_zero_of_notMem_tsupport hx)
+    exact (Continuous.integral_pos_of_hasCompactSupport_nonneg_ne_zero (μ := μQ)
+      (β.continuous.comp hproper.continuous) hβ (fun _ ↦ β.nonneg) (x := σ (Multiplicative.ofAdd (1/2))) (by
+        have hb : β (1/2) = 1 := β.one_of_mem_closedBall (Metric.mem_closedBall_self β.rIn_pos.le)
+        exact ((congrArg β (hσ (1/2))).trans hb).trans_ne one_ne_zero)).ne'
+
+/-- Translation multiplies a compact test's Mellin transform by the value of
+the quasi-character at the translating class. -/
+private theorem absolutePW_translated_mellin {φ ψ : BruhatCompactSupport CQ} {a : CQ}
+    (h : ∀ g, ψ.val g = φ.val (a⁻¹ * g)) (c : QuasiCharacter CQ) :
+    ∫ g, ψ.val g * c g ∂μQ = c a * ∫ g, φ.val g * c g ∂μQ := by
+  rw [← integral_mul_left_eq_self (fun g ↦ ψ.val g * c g) a, ← integral_const_mul]
+  exact integral_congr_ae (.of_forall fun g ↦ by
+    change ψ.val (a * g) * c (a * g) = c a * (φ.val g * c g)
+    rw [h, inv_mul_cancel_left, map_mul]; ring)
+
+/-- A radial test has zero Mellin transform in every nontrivial norm-one type. -/
+private theorem absolutePW_radial_mellin_vanish (φ : BruhatCompactSupport CQ)
+    (hφ : ∀ (k : CQ₁) x, φ.val (k.val⁻¹ * x) = φ.val x)
+    (χ : PontryaginDual CQ) (s : ℂ) (hχ : ¬ ∀ k : CQ₁, χ k.val = 1) :
+    (∫ g, φ.val g * ideleClassNormTwist χ s g ∂μQ) = 0 := by
+  obtain ⟨k, hk⟩ := not_forall.mp hχ
+  let c := ideleClassNormTwist χ s
+  have hc : c k.val ≠ 1 := by
+    change (χ k.val : ℂ) * (((ideleClassNorm ℚ k.val).val : ℝ) : ℂ) ^ s ≠ 1
+    rw [show ideleClassNorm ℚ k.val = 1 from k.property]
+    simpa using fun (h : (χ k.val : ℂ) = 1) ↦ hk (Circle.ext h)
+  have h := absolutePW_translated_mellin (φ := φ) (ψ := φ) (a := k.val)
+    (fun g ↦ (hφ k g).symm) c
+  let z := ∫ g, φ.val g * c g ∂μQ
+  change z = c k.val * z at h
+  change z = 0
+  exact (mul_eq_zero.mp (show (c k.val - 1) * z = 0 by rw [sub_mul, one_mul, ← h, sub_self])).resolve_left
+    (sub_ne_zero.mpr hc)
+
+/-- Convolution by a norm-one invariant test sends every input to the trivial
+isotype, before passage to any theta quotient. -/
+private theorem absolutePW_radial_convolution_mem (φ : BruhatCompactSupport CQ)
+    (hφ : ∀ (k : CQ₁) x, φ.val (k.val⁻¹ * x) = φ.val x) :
+    let m : CQ →ₜ* ℝ≥0ˣ := ⟨ideleClassNorm ℚ, (isProperMap_ideleClassNorm ℚ).continuous⟩
+    ∀ u, hardySobolevTestAction μQ m 0 0 2 le_rfl zero_le_two φ u ∈
+      actionIsotype ((hardySobolevTranslation μQ m 0 0 2 le_rfl zero_le_two).comp
+        (ideleClassNorm ℚ).ker.subtype) (1 : PontryaginDual CQ₁) := by
+  intro m u
+  rw [mem_actionIsotype]
+  intro k
+  let τ := hardySobolevTranslation μQ m 0 0 2 le_rfl zero_le_two
+  let v := hardySobolevTestAction μQ m 0 0 2 le_rfl zero_le_two φ u
+  have hv := hardySobolevTestAction_apply μQ m 0 0 2 le_rfl zero_le_two φ u
+  change (v : CQ → ℂ) =ᵐ[μQ] _ at hv
+  have hv' := (measurePreserving_mul_left μQ k.val⁻¹).quasiMeasurePreserving.ae_eq_comp hv
+  have hcv (x : CQ) : lcaConvolution μQ φ.val u (k.val⁻¹ * x) = lcaConvolution μQ φ.val u x := by
+    unfold lcaConvolution
+    rw [← integral_mul_left_eq_self (fun g ↦ φ.val g * u (g⁻¹ * (k.val⁻¹ * x))) k.val⁻¹]
+    exact integral_congr_ae (.of_forall fun g ↦ by
+      dsimp only
+      rw [hφ k, show (k.val⁻¹ * g)⁻¹ * (k.val⁻¹ * x) = g⁻¹ * x by group])
+  simp only [MonoidHom.comp_apply, Subgroup.subtype_apply, PontryaginDual.one_apply,
+    Circle.coe_one, one_smul]
+  apply Lp.ext
+  apply (withDensity_absolutelyContinuous _ _).ae_eq
+  refine (hardySobolevTranslation_apply μQ m 0 0 2 le_rfl zero_le_two k.val v).trans ?_
+  filter_upwards [hv', hv] with x hk hx
+  exact hk.trans ((hcv x).trans hx.symm)
+
+end
+
+section
+
+local notation "CQ" => IdeleClassGroup (𝓞 ℚ) ℚ
+local notation "nQ" => (⟨ideleClassNorm ℚ, (isProperMap_ideleClassNorm ℚ).continuous⟩ : CQ →ₜ* ℝ≥0ˣ)
+
+/-- Expanding sharp radial cutoffs converge strongly on every weighted L² space. -/
+private theorem absolutePW_strong_cutoffs (ν : Measure CQ) :
+    ∃ P : ℝ → Lp ℂ 2 ν →L[ℂ] Lp ℂ 2 ν,
+      (∀ R, ‖P R‖ ≤ 1) ∧ (∀ u, Tendsto (fun R ↦ P R u) atTop (𝓝 u)) ∧
+      ∀ᶠ R in atTop, ∃ (ε : ℝ) (ρ : CQ → ℝ) (hρ : IsModulatedCutoff nQ R ε ρ),
+        0 < R⁻¹ + ε ∧ R⁻¹ + ε < R - ε ∧ P R = modulatedCutoffOperator nQ ν hρ := by
+  let ε : ℝ → ℝ := fun R ↦ 1 / (2 * R ^ 2)
+  let ρ : ℝ → CQ → ℝ := fun R g ↦ if ((nQ g).val : ℝ) ∈ Icc R⁻¹ R then 1 else 0
+  have hε : Tendsto (fun R ↦ ε R * R) atTop (𝓝 0) := by
+    have hEq : (fun R : ℝ ↦ ε R * R) =ᶠ[atTop] fun R ↦ (1/2 : ℝ) * R⁻¹ := by
+      filter_upwards [eventually_gt_atTop (0 : ℝ)] with R hR
+      dsimp [ε]
+      field_simp [hR.ne']
+    apply Tendsto.congr' hEq.symm
+    simpa using tendsto_inv_atTop_zero.const_mul (1/2 : ℝ)
+  have hρ : ∀ᶠ R in atTop,
+      IsModulatedCutoff nQ R (ε R) (ρ R) ∧ 0 < R⁻¹ + ε R ∧ R⁻¹ + ε R < R - ε R :=
+    (eventually_ge_atTop (2 : ℝ)).mono fun R hR ↦ isModulatedCutoff_closedBand nQ R hR
+  obtain ⟨P, hPb, hPl, hPe⟩ :=
+    exists_stronglyConvergent_modulatedCutoffOperators CQ nQ ν ε ρ hε hρ
+  exact ⟨P, hPb, hPl, hρ.mono fun R hR ↦ ⟨ε R, ρ R, hR.1, hR.2.1, hR.2.2, hPe R hR.1⟩⟩
+
+/-- A norm cutoff preserves the trivial norm-one isotype. -/
+private theorem absolutePW_cutoff_mem_trivial (R ε : ℝ) (ρ : CQ → ℝ)
+    (hρ : IsModulatedCutoff nQ R ε ρ) :
+    let μ := ideleClassTamagawaMeasure ℚ
+    let ν := μ.withDensity (fun g : CQ ↦ ENNReal.ofReal
+      (intervalSobolevDensity 0 0 2 (Real.log ((nQ g).val : ℝ))))
+    let I := actionIsotype ((hardySobolevTranslation μ nQ 0 0 2 le_rfl zero_le_two).comp
+      (ideleClassNorm ℚ).ker.subtype) (1 : PontryaginDual (ideleClassNorm ℚ).ker)
+    ∀ u ∈ I, modulatedCutoffOperator nQ ν hρ u ∈ I := by
+  intro μ ν I u hu
+  let τ := hardySobolevTranslation μ nQ 0 0 2 le_rfl zero_le_two
+  let M := modulatedCutoffOperator nQ ν hρ
+  have hac : μ ≪ ν := by
+    apply withDensity_absolutelyContinuous'
+    · change AEMeasurable (fun g : CQ ↦ ENNReal.ofReal (intervalSobolevDensity 0 0 2
+          (Real.log ((ideleClassNorm ℚ g).val : ℝ)))) μ
+      have hw (x : ℝ) : intervalSobolevDensity 0 0 2 x = 1 + x ^ 2 := by
+        norm_num [intervalSobolevDensity]
+      simp_rw [hw]
+      exact (measurable_const.add (((NNReal.continuous_coe.comp (Units.continuous_val.comp
+        (isProperMap_ideleClassNorm ℚ).continuous)).measurable.log).pow_const 2)).ennreal_ofReal.aemeasurable
+    · exact .of_forall fun x ↦ (ENNReal.ofReal_pos.mpr (by dsimp [intervalSobolevDensity]; positivity)).ne'
+  have hca : ν ≪ μ := withDensity_absolutelyContinuous _ _
+  obtain ⟨q, -, hq, -⟩ := hρ.profile
+  apply (mem_actionIsotype _ _ _).mpr
+  intro k
+  have hfix := (mem_actionIsotype _ _ _).mp hu k
+  simpa only [τ, MonoidHom.comp_apply, Subgroup.subtype_apply, PontryaginDual.one_apply, Circle.coe_one, one_smul] using
+    (show τ k.val (M u) = M u from by
+      have hfix' : τ k.val u = u := by simpa only [τ, MonoidHom.comp_apply, Subgroup.subtype_apply, PontryaginDual.one_apply, Circle.coe_one, one_smul] using hfix
+      have htr := hardySobolevTranslation_apply μ nQ 0 0 2 le_rfl zero_le_two k.val u
+      change (τ k.val u : CQ → ℂ) =ᵐ[μ] _ at htr
+      rw [hfix'] at htr
+      have hm := hac.ae_eq (modulatedCutoffOperator_apply nQ ν hρ u)
+      have hmk := (measurePreserving_mul_left μ k.val⁻¹).quasiMeasurePreserving.ae_eq_comp hm
+      apply Lp.ext
+      apply hca.ae_eq
+      refine (hardySobolevTranslation_apply μ nQ 0 0 2 le_rfl zero_le_two k.val (M u)).trans ?_
+      filter_upwards [hmk, htr, hm] with g hk hgu hmg
+      change (M u) (k.val⁻¹ * g) = _ at hk
+      change (M u) (k.val⁻¹ * g) = M u g
+      change (M u) g = _ at hmg
+      rw [hk, hmg]
+      change (ρ (k.val⁻¹*g) : ℂ) * u (k.val⁻¹*g) = (ρ g : ℂ) * u g
+      rw [← hgu, hq, hq]
+      change (q (((ideleClassNorm ℚ (k.val⁻¹*g)).val : ℝ)) : ℂ) * u g = _
+      rw [map_mul, map_inv, show ideleClassNorm ℚ k.val = 1 from k.property, inv_one, one_mul]
+      rfl)
+
+end
+
+section
+
+private theorem absolutePW_nuclear_postcomp {H W I : Type*}
+    [NormedAddCommGroup H] [InnerProductSpace ℂ H] [CompleteSpace H]
+    [NormedAddCommGroup W] [InnerProductSpace ℂ W] [CompleteSpace W]
+    [NormedAddCommGroup I] [InnerProductSpace ℂ I] [CompleteSpace I]
+    (N : H →L[ℂ] W) (hN : IsNuclearOperator N) (B : W →L[ℂ] I) :
+    IsNuclearOperator (B.comp N) := by
+  obtain ⟨c, f, y, hc, hf, hy, hs⟩ := (isNuclearOperator_iff_isBanachNuclear N).mp hN
+  apply (isNuclearOperator_iff_isBanachNuclear _).mpr
+  exact ⟨c, f, B ∘ y, hc, hf, (B.continuous.tendsto' 0 0 (map_zero B)).comp hy,
+    fun x ↦ by simpa only [map_smul, Function.comp_apply, ContinuousLinearMap.comp_apply] using B.hasSum (hs x)⟩
+
+/-- A trace equality for the geometrically projected inputs identifies the
+trace of the remaining input component with the compressed quotient trace. -/
+private theorem absolutePW_trace_compatibility_split {W H : Type*}
+    [NormedAddCommGroup W] [InnerProductSpace ℂ W] [CompleteSpace W]
+    [NormedAddCommGroup H] [InnerProductSpace ℂ H] [CompleteSpace H]
+    (I : Submodule ℂ W) [CompleteSpace I]
+    (q : W →L[ℂ] H) (J : H →L[ℂ] W) (Q M A : W →L[ℂ] W)
+    (N : nuclearEndomorphisms H) (T : nuclearEndomorphisms I)
+    (hqJ : ∀ x, q (J x) = x) (hJq : ∀ x, J (q x) = x - Q x)
+    (hqA : ∀ x, q (A x) = N.val (q x))
+    (hQ : ∀ x ∈ I, Q x ∈ I) (hA : ∀ x, A x ∈ I) (hM : ∀ x ∈ I, M x ∈ I)
+    (hT : ∀ x : I, T.val x = I.orthogonalProjectionOnto (M (Q (A x)))) :
+    let P := I.orthogonalProjectionOnto.comp (Q.comp I.subtypeL)
+    hilbertTrace (⟨T.val * P, mul_mem_nuclearEndomorphisms_right P T⟩ : nuclearEndomorphisms I) =
+      hilbertTrace T →
+    let B := I.orthogonalProjectionOnto.comp (M.comp (A.comp
+      (((ContinuousLinearMap.id ℂ W) - Q).comp I.subtypeL)))
+    ∃ hB : IsNuclearOperator B,
+      hilbertTrace (⟨(q.comp (M.comp J)) * N.val, mul_mem_nuclearEndomorphisms_left _ N⟩ :
+        nuclearEndomorphisms H) = hilbertTrace (⟨B, hB⟩ : nuclearEndomorphisms I) := by
+  intro P htr B
+  let p := I.orthogonalProjectionOnto
+  let X := (p.comp (M.comp J)).comp N.val
+  let Y := q.comp I.subtypeL
+  have hX := absolutePW_nuclear_postcomp N.val N.property (p.comp (M.comp J))
+  obtain ⟨hYX, hXY, hcyc⟩ := absolutePW_cross_trace X hX Y
+  have hfix (x : W) (hx : x ∈ I) : (p x : W) = x := I.starProjection_eq_self_iff.mpr hx
+  have hJN (x : H) : J (N.val x) ∈ I := by
+    have hh := hqA (J x)
+    rw [hqJ] at hh
+    rw [← hh, hJq]
+    exact I.sub_mem (hA _) (hQ _ (hA _))
+  have hmap : Y.comp X = (q.comp (M.comp J)) * N.val := by
+    ext x
+    change q (p (M (J (N.val x)))) = q (M (J (N.val x)))
+    rw [hfix _ (hM _ (hJN _))]
+  have hP (x : I) : (P x : W) = Q x := hfix _ (hQ _ x.property)
+  have hqa (x : W) : q (x - Q x) = q x := (congrArg q (hJq x).symm).trans (hqJ _)
+  let TQ : nuclearEndomorphisms I := ⟨T.val * P, mul_mem_nuclearEndomorphisms_right P T⟩
+  let S : nuclearEndomorphisms I := ⟨X.comp Y, hXY⟩
+  have hB : B = (T - TQ + S).val := by
+    apply ContinuousLinearMap.ext
+    intro x
+    change p (M (A ((x : W) - Q x))) = T.val x - T.val (P x) + p (M (J (N.val (q x))))
+    rw [hT, hT, hP]
+    have he : J (N.val (q x)) =
+        A ((x : W) - Q x) - Q (A ((x : W) - Q x)) := by
+      rw [← hJq, hqA, hqa]
+    rw [he]
+    simp only [map_sub]
+    abel
+  have hn : IsNuclearOperator B := hB ▸ (T - TQ + S).property
+  refine ⟨hn, ?_⟩
+  obtain ⟨L, hL⟩ := hilbertTrace_linear (H := I)
+  have hTS : L TQ = L T := by simpa [hL] using htr
+  calc
+    _ = hilbertTrace (⟨Y.comp X, hYX⟩ : nuclearEndomorphisms H) :=
+      congrArg hilbertTrace (Subtype.ext hmap.symm)
+    _ = hilbertTrace S := hcyc
+    _ = L (T - TQ + S) := by rw [map_add, map_sub, hTS, sub_self, zero_add, hL]
+    _ = hilbertTrace (⟨B, hn⟩ : nuclearEndomorphisms I) :=
+      (hL _).trans (congrArg hilbertTrace (Subtype.ext hB.symm))
+
+/-- Compressing a nuclear map whose whole image is in the closed subspace
+preserves its trace. -/
+private theorem absolutePW_trace_compression_eq_ambient {W : Type*}
+    [NormedAddCommGroup W] [InnerProductSpace ℂ W] [CompleteSpace W]
+    (I : Submodule ℂ W) [CompleteSpace I] (V : W →L[ℂ] W)
+    (hV : IsNuclearOperator V) (hI : ∀ x, V x ∈ I) :
+    ∃ hB : IsNuclearOperator (I.orthogonalProjectionOnto.comp (V.comp I.subtypeL)),
+      hilbertTrace (⟨I.orthogonalProjectionOnto.comp (V.comp I.subtypeL), hB⟩ :
+        nuclearEndomorphisms I) = hilbertTrace (⟨V, hV⟩ : nuclearEndomorphisms W) := by
+  let U := I.orthogonalProjectionOnto.comp V
+  have hU := absolutePW_nuclear_postcomp V hV I.orthogonalProjectionOnto
+  obtain ⟨hiU, hUi, htr⟩ := absolutePW_cross_trace U hU I.subtypeL
+  have he : I.subtypeL.comp U = V := by
+    ext x
+    exact I.starProjection_eq_self_iff.mpr (hI x)
+  exact ⟨hUi, htr.symm.trans (congrArg hilbertTrace (Subtype.ext he))⟩
+
+
+/-- A compatible compressed geometric trace leaves exactly the ambient
+trace after right restriction to the spectral complement. -/
+private theorem absolutePW_trace_compatibility_ambient {W H : Type*}
+    [NormedAddCommGroup W] [InnerProductSpace ℂ W] [CompleteSpace W]
+    [NormedAddCommGroup H] [InnerProductSpace ℂ H] [CompleteSpace H]
+    (I : Submodule ℂ W) [CompleteSpace I]
+    (q : W →L[ℂ] H) (J : H →L[ℂ] W) (Q E M A : W →L[ℂ] W)
+    (N : nuclearEndomorphisms H) (T : nuclearEndomorphisms I)
+    (hE : (ContinuousLinearMap.id ℂ W) - Q = E)
+    (hqJ : ∀ x, q (J x) = x) (hJq : ∀ x, J (q x) = x - Q x)
+    (hqA : ∀ x, q (A x) = N.val (q x))
+    (hQ : ∀ x ∈ I, Q x ∈ I) (hA : ∀ x, A x ∈ I) (hM : ∀ x ∈ I, M x ∈ I)
+    (hT : ∀ x : I, T.val x = I.orthogonalProjectionOnto (M (Q (A x))))
+    (htr : hilbertTrace (productTraceClass(T, I.orthogonalProjectionOnto.comp (Q.comp I.subtypeL))) =
+      hilbertTrace T) (hV : IsNuclearOperator ((M.comp A).comp E)) :
+    hilbertTrace (⟨(q.comp (M.comp J)) * N.val, mul_mem_nuclearEndomorphisms_left _ N⟩ :
+      nuclearEndomorphisms H) = hilbertTrace (⟨(M.comp A).comp E, hV⟩ : nuclearEndomorphisms W) := by
+  obtain ⟨_, htrace⟩ := absolutePW_trace_compatibility_split I q J Q M A N T
+    hqJ hJq hqA hQ hA hM hT htr
+  obtain ⟨_, hamb⟩ := absolutePW_trace_compression_eq_ambient I ((M.comp A).comp E) hV
+    (fun x ↦ hM _ (hA (E x)))
+  refine htrace.trans ?_
+  have eComp : I.orthogonalProjectionOnto.comp (M.comp (A.comp
+      (((ContinuousLinearMap.id ℂ W) - Q).comp I.subtypeL))) =
+      I.orthogonalProjectionOnto.comp (((M.comp A).comp E).comp I.subtypeL) := by
+    rw [hE]
+    rfl
+  exact (congrArg hilbertTrace (Subtype.ext eComp)).trans hamb
+
+private theorem absolutePW_trace_compatibility_of_section {W H : Type*}
+    [NormedAddCommGroup W] [InnerProductSpace ℂ W] [CompleteSpace W]
+    [NormedAddCommGroup H] [InnerProductSpace ℂ H] [CompleteSpace H]
+    (I : Submodule ℂ W) [CompleteSpace I]
+    (q : W →L[ℂ] H) (J : H →L[ℂ] W) (Q E M A : W →L[ℂ] W)
+    (N : nuclearEndomorphisms H)
+    (hMA : IsNuclearOperator (M.comp A))
+    (hsec : q.comp J = 1 ∧ J.comp q = E ∧ Q + E = 1)
+    (hqA : ∀ x, q (A x) = N.val (q x))
+    (hQ : ∀ x ∈ I, Q x ∈ I) (hA : ∀ x, A x ∈ I) (hM : ∀ x ∈ I, M x ∈ I)
+    (hcompat : ∃ T : nuclearEndomorphisms I,
+      (∀ x : I, T.val x = I.orthogonalProjectionOnto (M (Q (A x)))) ∧
+      hilbertTrace (productTraceClass(T, I.orthogonalProjectionOnto.comp (Q.comp I.subtypeL))) =
+        hilbertTrace T) :
+    hilbertTrace (productTraceClass((⟨M.comp A, hMA⟩ : nuclearEndomorphisms W), E)) =
+      hilbertTrace (⟨(q.comp (M.comp J)) * N.val,
+        mul_mem_nuclearEndomorphisms_left _ N⟩ : nuclearEndomorphisms H) := by
+  have hqJ : ∀ x, q (J x) = x := DFunLike.congr_fun hsec.1
+  have hJq (x : W) : J (q x) = x - Q x :=
+    (DFunLike.congr_fun hsec.2.1 x).trans (eq_sub_of_add_eq' (DFunLike.congr_fun hsec.2.2 x))
+  have hE : (ContinuousLinearMap.id ℂ W) - Q = E :=
+    ContinuousLinearMap.ext fun x ↦ (hJq x).symm.trans (DFunLike.congr_fun hsec.2.1 x)
+  obtain ⟨T, hT, htr⟩ := hcompat
+  exact (absolutePW_trace_compatibility_ambient I q J Q E M A N T hE hqJ hJq hqA hQ hA hM
+    hT htr (mul_mem_nuclearEndomorphisms_right E ⟨_, hMA⟩)).symm
+
+private theorem absolutePW_trace_mul_tendsto_zero {W : Type*}
+    [NormedAddCommGroup W] [InnerProductSpace ℂ W] [CompleteSpace W]
+    (B : ℝ → nuclearEndomorphisms W) (E : W →L[ℂ] W)
+    (hB : Tendsto (fun t ↦ traceNorm (B t)) atTop (𝓝 0)) :
+    Tendsto (fun t ↦ hilbertTrace (productTraceClass(B t, E))) atTop (𝓝 0) := by
+  apply tendsto_zero_iff_norm_tendsto_zero.mpr
+  apply squeeze_zero' (Eventually.of_forall fun _ ↦ norm_nonneg _) _
+    (show Tendsto (fun t ↦ ‖E‖ * traceNorm (B t)) atTop (𝓝 0) from by
+      simpa only [mul_zero] using hB.const_mul ‖E‖)
+  exact Eventually.of_forall fun t ↦ (norm_hilbertTrace_le _).trans (traceNorm_mul_right_le E (B t))
+
+end
+
+section
+
+/-- Uniformly bounded strong convergence gives convergence of the scalar trace
+after multiplication on the right by the converging maps. -/
+private theorem absolutePWCondensation_trace_tendsto_strong
+    (H : Type*) [NormedAddCommGroup H] [InnerProductSpace ℂ H] [CompleteSpace H]
+    (T : nuclearEndomorphisms H) (P : ℝ → H →L[ℂ] H) (Q : H →L[ℂ] H)
+    (hP : ∀ u, Tendsto (fun Λ ↦ P Λ u) atTop (𝓝 (Q u)))
+    (hbound : ∀ Λ, ‖P Λ‖ ≤ 1) :
+    Tendsto (fun Λ ↦ hilbertTrace (productTraceClass(T, P Λ))) atTop
+      (𝓝 (hilbertTrace (productTraceClass(T, Q)))) := by
+  obtain ⟨p⟩ := (isNuclearOperator_iff_nonempty_presentation T.val).mp T.property
+  obtain ⟨C, hC, hfun⟩ := ((NormedSpace.equicontinuous_tfae p.functional).out 1 7).mp
+    p.equicontinuous
+  obtain ⟨D, hvec⟩ := ((NormedSpace.isVonNBounded_iff ℂ).mp p.isBanachDisc.bounded).exists_norm_le
+  have htrace (A : H →L[ℂ] H) : hilbertTrace (productTraceClass(T, A)) =
+      ∑' n, p.coeff n * p.functional n (A (p.vector n)) := by
+    let r : NuclearPresentation (T.val * A) :=
+      { p with
+        functional := fun n ↦ (p.functional n).comp A
+        equicontinuous := fun U hU ↦ by
+          have h := (A.continuous.tendsto' 0 0 (map_zero A)).eventually (p.equicontinuous U hU)
+          simpa only [ContinuousLinearMap.comp_apply, map_zero] using h
+        hasSum := fun x ↦ p.hasSum (A x) }
+    rw [hilbertTrace_eq_nuclearTrace]
+    have hsum := ((exists_nuclearTrace_hasSum hilbert_approximationProperty
+      (T.val * A) (mul_mem_nuclearEndomorphisms_right A T)).exists.choose_spec r).2
+    exact hsum.tsum_eq.symm
+  simp_rw [htrace]
+  apply tendsto_tsum_of_dominated_convergence (p.summable_coeff.mul_right (C * D))
+  · intro n
+    exact ((p.functional n).continuous.tendsto _ |>.comp (hP (p.vector n))).const_mul _
+  · filter_upwards with Λ n
+    have hle := (p.functional n).le_opNorm (P Λ (p.vector n))
+    have hx := (P Λ).le_opNorm (p.vector n : H)
+    have hx' : ‖P Λ (p.vector n)‖ ≤ D := hx.trans
+      ((mul_le_of_le_one_left (norm_nonneg _) (hbound Λ)).trans (hvec _ (p.vector_mem n)))
+    rw [norm_mul]
+    exact mul_le_mul_of_nonneg_left
+      (hle.trans (mul_le_mul (hfun n) hx' (norm_nonneg _) hC)) (norm_nonneg _)
+
+end
+
+section
+
+local notation "CQ" => IdeleClassGroup (𝓞 ℚ) ℚ
+local notation "CQ₁" => (ideleClassNorm ℚ).ker
+local notation "mQ" => (⟨ideleClassNorm ℚ, (isProperMap_ideleClassNorm ℚ).continuous⟩ : CQ →ₜ* ℝ≥0ˣ)
+local notation "μQ" => ideleClassTamagawaMeasure ℚ
+local notation "logQ" => (fun g : CQ ↦ Real.log ((ideleClassNorm ℚ g).val : ℝ))
+local notation "νQ" => (μQ).withDensity (fun g : CQ ↦ ENNReal.ofReal (intervalSobolevDensity 0 0 2 (logQ g)))
+local notation "h₀" => le_rfl (a := (0 : ℝ))
+local notation "hs" => (show (1 : ℝ) < 2 from one_lt_two)
+local notation "hs₂" => (show (0 : ℝ) ≤ 2 from zero_le_two)
+local notation "W" => CompactIntervalSobolev μQ logQ 0 0 2
+local notation "Θ" => globalThetaSobolev ℚ (1/2) h₀ hs₂
+local notation "H" => spectralSobolevQuotient ℚ (1/2) h₀ hs₂
+local notation "τ" => hardySobolevTranslation μQ mQ 0 0 2 h₀ hs₂
+local notation "A(" φ ")" => hardySobolevTestAction μQ mQ 0 0 2 h₀ hs₂ φ
+local notation "S(" φ ")" => spectralConvolution (F := ℚ) (1/2) h₀ hs₂ φ
+
+/-- Logarithmic coordinates turn a positive real complex power into an exponential. -/
+private theorem absolutePW_cpow_exp (x : ℝ) (z : ℂ) :
+    ((Real.exp x : ℝ) : ℂ) ^ z = Complex.exp (z * x) := by
+  rw [Complex.ofReal_exp, Complex.cpow_def_of_ne_zero (Complex.exp_ne_zero _),
+    Complex.log_exp (by simp [Real.pi_pos]) (by simp [Real.pi_pos.le]), mul_comm]
+
+/-- A radial modulated cutoff on the rational classes has compact support by
+properness of the norm, as in `IsModulatedCutoff.isCompact_tsupport'` in Ch09 §3. -/
+private theorem absolutePW_cutoff_hasCompactSupport {R ε : ℝ} {ρ : CQ → ℝ}
+    (hρ : IsModulatedCutoff mQ R ε ρ) : HasCompactSupport ρ := by
+  let e := Nonneg.unitsHomeomorphPos ℝ
+  have hS : IsCompact ((Subtype.val : Ioi (0:ℝ) → ℝ) ⁻¹' Icc R⁻¹ R) := by
+    rw [Subtype.isCompact_iff, Subtype.image_preimage_coe,
+      inter_eq_right.mpr fun t (ht : t ∈ Icc R⁻¹ R) ↦
+        mem_Ioi.mpr ((inv_pos.mpr hρ.radius_pos).trans_le ht.1)]
+    exact isCompact_Icc
+  exact ((isProperMap_ideleClassNorm ℚ).isCompact_preimage (e.isCompact_preimage.mpr hS)).of_isClosed_subset
+    (isClosed_tsupport ρ) hρ.support_subset
+
+private theorem absolutePW_cutoff_convolution_nuclear
+    (φ : BruhatCompactSupport CQ) {R ε : ℝ} {ρ : CQ → ℝ}
+    (hρ : IsModulatedCutoff mQ R ε ρ) (hband : 0 < R⁻¹ + ε ∧ R⁻¹ + ε < R - ε) :
+    IsNuclearOperator ((modulatedCutoffOperator mQ νQ hρ).comp A(φ)) := by
+  have hφs : IsBruhatSmooth φ.val := (mem_bruhatSmoothSubmodule_iff _).mp φ.property.1
+  have hc := continuous_of_bruhatSmooth hφs
+  have hb := hc.bounded_above_of_compact_support (show HasCompactSupport φ.val from φ.property.2)
+  have hm : IsModulation mQ := ⟨isProperMap_ideleClassNorm ℚ, ideleClassNorm_ne_one (F := ℚ)⟩
+  have hsur : Function.Surjective mQ := (ideleGroup_quotient.{_, 0} ℚ).2.2.2.2.2.2.2.2.2.1
+  obtain ⟨hT, _, _⟩ := truncatedHardySobolevConvolution_trace μQ mQ 0 0 2 h₀ hs₂ φ.val
+    hc.aemeasurable φ.property.2 hb hm hsur hφs hρ hband
+  rw [hardySobolevConvolution_eq_testAction μQ mQ 0 0 2 h₀ hs₂ φ hc.aemeasurable hb] at hT
+  exact hT
+
+
+private def absolutePW_rational_isotype (l : ℝ) (hl : l ≤ 0) :
+    Submodule ℂ (CompactIntervalSobolev μQ logQ l 0 2) :=
+  actionIsotype ((hardySobolevTranslation μQ mQ l 0 2 hl hs₂).comp
+    (ideleClassNorm ℚ).ker.subtype) (1 : PontryaginDual CQ₁)
+
+private instance absolutePW_rational_isotype_complete (l : ℝ) (hl : l ≤ 0) :
+    CompleteSpace (absolutePW_rational_isotype l hl) :=
+  (instClosedSpectralIsotypeSec2 hl hs₂ (1 : PontryaginDual CQ₁)).completeSpace_coe
+
+private def absolutePW_rational_projection_preserves (l : ℝ) (hl : l ≤ 0) : Prop :=
+  ∀ x : absolutePW_rational_isotype l hl,
+    (globalThetaSobolev ℚ (1/2) hl hs₂).starProjection x.val ∈ absolutePW_rational_isotype l hl
+
+private theorem absolutePW_rational_projection_preserves_zero :
+    absolutePW_rational_projection_preserves 0 h₀ := by
+  have h : absolutePW_rational_projection_preserves (-(0 : ℝ)) (neg_nonpos.mpr h₀) := by
+    intro x
+    exact geometricProjection_preserves_normOneIsotype (F := ℚ) hs₂ (1/2)
+      (1 : PontryaginDual CQ₁) x
+  let P (l : {l : ℝ // l ≤ 0}) := absolutePW_rational_projection_preserves l.val l.property
+  have e : (⟨-(0 : ℝ), neg_nonpos.mpr h₀⟩ : {l : ℝ // l ≤ 0}) = ⟨0, h₀⟩ := Subtype.ext neg_zero
+  exact (congrArg P e).mp h
+
+private def absolutePW_rational_trace_compatible (l : ℝ) (hl : l ≤ 0) : Prop :=
+  let I := absolutePW_rational_isotype l hl
+  let Q := (globalThetaSobolev ℚ (1/2) hl hs₂).starProjection
+  let P := I.orthogonalProjectionOnto.comp (Q.comp I.subtypeL)
+  let ν := (μQ).withDensity (fun g : CQ ↦ ENNReal.ofReal (intervalSobolevDensity l 0 2 (logQ g)))
+  ∀ (φ : BruhatCompactSupport CQ), aboveOne(ℚ, φ) →
+    ∀ (R ε : ℝ) (ρ : CQ → ℝ) (hρ : IsModulatedCutoff mQ R ε ρ),
+    let M := modulatedCutoffOperator mQ ν hρ
+    let A := hardySobolevTestAction μQ mQ l 0 2 hl hs₂ φ
+    ∃ T : nuclearEndomorphisms I,
+      (∀ x : I, T.val x = I.orthogonalProjectionOnto (M (Q (A x)))) ∧
+      hilbertTrace (⟨T.val * P, mul_mem_nuclearEndomorphisms_right P T⟩ : nuclearEndomorphisms I) =
+        hilbertTrace T
+
+private theorem absolutePW_rational_trace_compatible_of_printed
+    (h : Printed.absolutePWCondensation_trace_tendsto) :
+    absolutePW_rational_trace_compatible 0 h₀ := by
+  have e : (1 : PontryaginDual CQ).comp
+      (⟨(ideleClassNorm ℚ).ker.subtype, continuous_subtype_val⟩ : CQ₁ →ₜ* CQ) = 1 := by
+    ext k
+    rfl
+  have h' : absolutePW_rational_trace_compatible (-(0 : ℝ)) (neg_nonpos.mpr h₀) := by
+    intro φ hφ R ε ρ hρ
+    let I := absolutePW_rational_isotype (-(0 : ℝ)) (neg_nonpos.mpr h₀)
+    let : CompleteSpace I := absolutePW_rational_isotype_complete _ _
+    let Q := (globalThetaSobolev ℚ (1/2) (neg_nonpos.mpr h₀) hs₂).starProjection
+    let P := I.orthogonalProjectionOnto.comp (Q.comp I.subtypeL)
+    have hh := h ℚ 1 ∅ (1/2) 2 hs₂
+      rational_one_unramifiedOutside_empty rational_empty_picTrivial φ hφ R ε ρ hρ
+    obtain ⟨T, ht, hlim⟩ := hh
+    let T' : nuclearEndomorphisms I := T
+    let PΛ (Λ : ℝ) : I →L[ℂ] I := absolutePWProjection (F := ℚ) (S := ∅) hs₂ (1/2) (1 : PontryaginDual CQ₁) Λ
+    have hu : NormOneCharacterUnramifiedOutside (1 : PontryaginDual CQ₁) ∅ :=
+      e ▸ rational_one_unramifiedOutside_empty
+    have hP (x : I) : Tendsto (fun Λ ↦ PΛ Λ x) atTop (𝓝 (P x)) :=
+      absolutePWProjection_tendsto (F := ℚ) (S := ∅) hs₂ (1/2) (1 : PontryaginDual CQ₁)
+        hu rational_empty_picTrivial x
+    have hPb : ∀ Λ, ‖PΛ Λ‖ ≤ 1 := by
+      intro Λ
+      apply ContinuousLinearMap.opNorm_le_bound (PΛ Λ) zero_le_one
+      intro x
+      rw [one_mul]
+      let K := (globalAbsolutePWSobolev (F := ℚ) (S := ∅) hs₂ (1/2)
+        (1 : PontryaginDual CQ₁) Λ).comap I.subtype
+      let : IsClosed (K : Set I) :=
+        (Submodule.isClosed_topologicalClosure _).preimage continuous_subtype_val
+      exact Submodule.norm_starProjection_apply_le K x
+    refine ⟨T', fun x ↦ ?_, tendsto_nhds_unique
+      (absolutePWCondensation_trace_tendsto_strong I T' PΛ P hP hPb) hlim⟩
+    exact DFunLike.congr_fun ht x
+  let P (l : {l : ℝ // l ≤ 0}) := absolutePW_rational_trace_compatible l.val l.property
+  have he : (⟨-(0 : ℝ), neg_nonpos.mpr h₀⟩ : {l : ℝ // l ≤ 0}) = ⟨0, h₀⟩ := Subtype.ext neg_zero
+  exact (congrArg P he).mp h'
+
+
+
+local notation "qQ" => (Θ).mkQL
+local notation "JQ" => (Θ).orthogonal.subtypeL.comp
+  (Θ).quotientEquivOrthogonal.toContinuousLinearEquiv.toContinuousLinearMap
+local notation "EQ" => (Θ).orthogonal.starProjection
+local notation "M(" ρ ")" => (modulatedCutoffOperator mQ νQ ρ : W →L[ℂ] W)
+local notation "N(" φ ")" => (⟨S(φ), spectralLineConvolution_nuclear (1/2) hs φ⟩ : nuclearEndomorphisms H)
+
+private theorem absolutePW_rational_match_traces
+    (hcompat : absolutePW_rational_trace_compatible 0 h₀)
+    (φ : BruhatCompactSupport CQ) (hsupport : aboveOne(ℚ, φ))
+    (hrad : ∀ (k : CQ₁) x, φ.val (k.val⁻¹ * x) = φ.val x)
+    {R ε : ℝ} {ρ : CQ → ℝ} (hρ : IsModulatedCutoff mQ R ε ρ)
+    (hA : IsNuclearOperator ((M(hρ)).comp A(φ))) :
+    hilbertTrace (productTraceClass((⟨(M(hρ)).comp A(φ), hA⟩ : nuclearEndomorphisms W), EQ)) =
+      hilbertTrace (⟨((qQ).comp ((M(hρ)).comp JQ)) * (N(φ)).val,
+        mul_mem_nuclearEndomorphisms_left _ N(φ)⟩ : nuclearEndomorphisms H) := by
+  exact absolutePW_trace_compatibility_of_section («W» := W) («H» := H)
+    (absolutePW_rational_isotype 0 h₀) qQ JQ (Θ).starProjection EQ M(hρ) A(φ) N(φ) hA
+    (absolutePW_quotient_section (Θ)) (fun x ↦ (spectralConvolution_mkQ (1/2) h₀ hs₂ φ x).symm)
+    (fun x hx ↦ absolutePW_rational_projection_preserves_zero ⟨x, hx⟩)
+    (absolutePW_radial_convolution_mem φ hrad) (absolutePW_cutoff_mem_trivial R ε ρ hρ)
+    (hcompat φ hsupport R ε ρ hρ)
+
+private theorem absolutePW_rational_shift_analysis
+    (ψ : ℝ → BruhatCompactSupport CQ) (g : ℝ → CQ) (hlog : ∀ t, logQ (g t) = t)
+    (hshift : ∀ t x, (ψ t).val x = (ψ 0).val ((g t)⁻¹ * x))
+    {R ε : ℝ} {ρ : CQ → ℝ} (hρ : IsModulatedCutoff mQ R ε ρ)
+    (hband : 0 < R⁻¹ + ε ∧ R⁻¹ + ε < R - ε) :
+    ∃ hA : ∀ t, IsNuclearOperator ((M(hρ)).comp A(ψ t)),
+      Tendsto (fun t ↦ traceNorm (⟨(M(hρ)).comp A(ψ t), hA t⟩ :
+        nuclearEndomorphisms W)) atTop (𝓝 0) :=
+  absolutePW_cutoff_shift_trace_decay (F := ℚ) (ψ 0) ψ g hlog hshift
+    ρ hρ.measurable hρ.abs_le_one (absolutePW_cutoff_hasCompactSupport hρ)
+    (absolutePW_cutoff_convolution_nuclear (ψ 0) hρ hband)
+
+private theorem absolutePW_rational_traces_decay_of_shift_norm
+    (hcompat : absolutePW_rational_trace_compatible 0 h₀) (ψ : ℝ → BruhatCompactSupport CQ)
+    (hrad : ∀ t (k : CQ₁) x, (ψ t).val (k.val⁻¹ * x) = (ψ t).val x)
+    (hsupport : ∀ t, 0 ≤ t → aboveOne(ℚ, ψ t))
+    {R ε : ℝ} {ρ : CQ → ℝ} (hρ : IsModulatedCutoff mQ R ε ρ)
+    (hA : ∀ t, IsNuclearOperator ((M(hρ)).comp A(ψ t)))
+    (hlim : Tendsto (fun t ↦ traceNorm (⟨(M(hρ)).comp A(ψ t), hA t⟩ :
+      nuclearEndomorphisms W)) atTop (𝓝 0)) :
+    Tendsto (fun t ↦ hilbertTrace (⟨((qQ).comp ((M(hρ)).comp JQ)) * (N(ψ t)).val,
+      mul_mem_nuclearEndomorphisms_left _ N(ψ t)⟩ : nuclearEndomorphisms H)) atTop (𝓝 0) := by
+  let B (t : ℝ) : nuclearEndomorphisms W := ⟨(M(hρ)).comp A(ψ t), hA t⟩
+  refine (absolutePW_trace_mul_tendsto_zero B EQ hlim).congr' ?_
+  filter_upwards [eventually_ge_atTop (0 : ℝ)] with t ht
+  exact absolutePW_rational_match_traces hcompat (ψ t) (hsupport t ht) (hrad t) hρ (hA t)
+
+/-- The printed convergence forces the fixed-cutoff quotient trace of the
+translated tests to decay along positive translations. -/
+private theorem absolutePW_rational_quotient_trace_decay
+    (hcompat : absolutePW_rational_trace_compatible 0 h₀) (ψ : ℝ → BruhatCompactSupport CQ)
+    (g : ℝ → CQ) (hlog : ∀ t, logQ (g t) = t)
+    (hshift : ∀ t x, (ψ t).val x = (ψ 0).val ((g t)⁻¹ * x))
+    (hrad : ∀ t (k : CQ₁) x, (ψ t).val (k.val⁻¹ * x) = (ψ t).val x)
+    (hsupport : ∀ t, 0 ≤ t → aboveOne(ℚ, ψ t))
+    {R ε : ℝ} {ρ : CQ → ℝ} (hρ : IsModulatedCutoff mQ R ε ρ)
+    (hε : 0 < R⁻¹ + ε) (hε' : R⁻¹ + ε < R - ε) :
+    Tendsto (fun t ↦ hilbertTrace (⟨((qQ).comp ((M(hρ)).comp JQ)) * (N(ψ t)).val,
+      mul_mem_nuclearEndomorphisms_left _ N(ψ t)⟩ : nuclearEndomorphisms H)) atTop (𝓝 0) := by
+  exact (absolutePW_rational_shift_analysis ψ g hlog hshift hρ ⟨hε, hε'⟩).elim
+    (absolutePW_rational_traces_decay_of_shift_norm hcompat ψ hrad hsupport hρ)
+
+
+private theorem absolutePW_orbit_eq_of_coordinates {X ι : Type*}
+    [NormedAddCommGroup X] [NormedSpace ℂ X]
+    (Λ : ι → StrongDual ℂ X) (hdense : Dense (Submodule.span ℂ (Set.range Λ) : Set (StrongDual ℂ X)))
+    (U N A : X →L[ℂ] X) (η d : ι → ℂ)
+    (hU : ∀ j x, Λ j (U x) = η j * Λ j x)
+    (hN : ∀ j x, Λ j (N x) = d j * Λ j x)
+    (hA : ∀ j x, Λ j (A x) = η j * d j * Λ j x) : U * N = A := by
+  apply ContinuousLinearMap.ext
+  intro x
+  apply (SeparatingDual.eq_iff_forall_dual_eq (R := ℂ)).mpr
+  have he : ContinuousLinearMap.apply ℂ ℂ (U (N x)) = ContinuousLinearMap.apply ℂ ℂ (A x) := by
+    apply ContinuousLinearMap.ext_on hdense
+    rintro _ ⟨j, rfl⟩
+    change Λ j (U (N x)) = Λ j (A x)
+    rw [hU, hN, hA, mul_assoc]
+  exact fun L ↦ DFunLike.congr_fun he L
+
+private theorem absolutePW_trivial_phase (x : CQ) (t γ : ℝ) (hx : logQ x = t) :
+    ideleClassNormTwist (1 : PontryaginDual CQ) ((γ : ℂ) * Complex.I) x =
+      (Real.fourierChar (t * (γ / (2 * Real.pi))) : ℂ) := by
+  have he : Real.exp t = ((ideleClassNorm ℚ x).val : ℝ) :=
+    (congrArg Real.exp hx).symm.trans (Real.exp_log (NNReal.coe_pos.mpr (Units.zero_lt _)))
+  change (((1 : PontryaginDual CQ) x : Circle) : ℂ) *
+    ((((ideleClassNorm ℚ x).val : ℝ) : ℂ) ^ ((γ : ℂ) * Complex.I)) = _
+  rw [PontryaginDual.one_apply, Circle.coe_one, one_mul, ← he, absolutePW_cpow_exp,
+    Real.fourierChar_apply]
+  congr 1
+  have hp : (2 : ℝ) * Real.pi ≠ 0 := by positivity
+  rw [show 2 * Real.pi * (t * (γ / (2 * Real.pi))) = γ * t from by field_simp, Complex.ofReal_mul]
+  ring
+
+private theorem absolutePW_cutoff_detects_pairing
+    (L : StrongDual ℂ W) (x : W) (hx : L x ≠ 0) :
+    ∃ (R ε : ℝ) (ρ : CQ → ℝ) (hρ : IsModulatedCutoff mQ R ε ρ),
+      0 < R⁻¹ + ε ∧ R⁻¹ + ε < R - ε ∧ L (modulatedCutoffOperator mQ νQ hρ x) ≠ 0 := by
+  obtain ⟨cut, _, hcut, hcutE⟩ := absolutePW_strong_cutoffs νQ
+  have ht : Tendsto (fun R ↦ L (cut R x)) atTop (𝓝 (L x)) :=
+    (L.continuous.tendsto x).comp (hcut x)
+  have hnz := ht.eventually (isOpen_ne.mem_nhds hx)
+  obtain ⟨R, hRn, ε, ρ, hρ, hε, hε', hcut_eq⟩ := (hnz.and hcutE).exists
+  exact ⟨R, ε, ρ, hρ, hε, hε', fun h ↦ hRn ((congrArg (fun C : W →L[ℂ] W ↦ L (C x)) hcut_eq).trans h)⟩
+
+private theorem absolutePW_jet_ordinal_sep
+    (χ : PontryaginDual CQ₁ → PontryaginDual CQ) (hχ1 : χ 1 = 1)
+    (j₀ : SpectralLineJetIndex χ (1/2) 2) (h₀ω : j₀.val.1 = 1) :
+    ∃ r : ℝ, 0 < r ∧ ∀ (j : SpectralLineJetIndex χ (1/2) 2), j ≠ j₀ → j.val.1 = 1 →
+      r ≤ dist (j.val.2.1 / (2 * Real.pi)) (j₀.val.2.1 / (2 * Real.pi)) := by
+  have hzero (j : SpectralLineJetIndex χ (1/2) 2) (hj : j.val.1 = 1) :
+      0 < (meromorphicOrderAt (continuedCompletedHeckeL (1 : PontryaginDual CQ))
+        ((1 : ℂ) / 2 + (j.val.2.1 : ℂ) * Complex.I)).untop₀.toNat := by
+    have hp := Nat.zero_lt_of_lt ((lt_spectralBoundaryMultiplicity _ _ _).mp j.property).1
+    change 0 < (meromorphicOrderAt (continuedCompletedHeckeL (χ j.val.1))
+      (((1/2 : ℝ) : ℂ) + (j.val.2.1 : ℂ) * Complex.I)).untop₀.toNat at hp
+    simpa only [hj, hχ1, Complex.ofReal_div, Complex.ofReal_one, Complex.ofReal_ofNat] using hp
+  obtain ⟨r, hr, hsep⟩ := absolutePW_zero_isolated _ (hzero j₀ h₀ω)
+  refine ⟨r, hr, fun j hj h ↦ hsep j.val.2.1 (fun he ↦ hj ?_) (hzero j h)⟩
+  exact Subtype.ext (Prod.ext (h.trans h₀ω.symm) (Prod.ext he
+    ((absolutePW_jet_order_zero j).trans (absolutePW_jet_order_zero j₀).symm)))
+
+/-- The fixed-cutoff trace identity fails for at least one radial translated test. -/
+private theorem absolutePW_rational_trace_compatible_false :
+    ¬ absolutePW_rational_trace_compatible 0 h₀ := by
+  classical
+  intro hcompat
+  obtain ⟨χ₀, hχ₀⟩ := exists_spectralBasepointChoice ℚ
+  let χ := Function.update χ₀ 1 (1 : PontryaginDual CQ)
+  have hχ1 : χ 1 = 1 := Function.update_self ..
+  have hχ : IsSpectralBasepointChoice χ := by
+    intro ω₁
+    by_cases h : ω₁ = 1
+    · subst ω₁
+      rw [hχ1]
+      rfl
+    · simpa [χ, Function.update_of_ne h] using hχ₀ ω₁
+  obtain ⟨γ, hγ⟩ := absolutePW_critical_line_point
+  let ι := SpectralLineJetIndex χ (1 / 2) 2
+  let j₀ : ι := ⟨(1, γ, 0), by
+    rw [lt_spectralBoundaryMultiplicity]
+    refine ⟨?_, by norm_num⟩
+    change 0 < (meromorphicOrderAt (continuedCompletedHeckeL (χ 1))
+      (((1/2 : ℝ) : ℂ) + (γ : ℂ) * Complex.I)).untop₀.toNat
+    simpa only [hχ1, Complex.ofReal_div, Complex.ofReal_one, Complex.ofReal_ofNat] using hγ⟩
+  obtain ⟨_, v, Λ, hBasis, hΛ⟩ := spectralLineMarkushevichBasis (a := (1 / 2 : ℝ)) χ hχ hs
+  obtain ⟨σ, ψ, hlog, hshift, hrad, hsupport, hmult⟩ := absolutePW_radial_translates γ
+  let g (t : ℝ) := σ (Multiplicative.ofAdd t)
+  have hgc : Continuous g := σ.continuous
+  let φ : BruhatCompactSupport CQ := ψ 0
+  let q := (Θ).mkQL
+  let J := (Θ).orthogonal.subtypeL.comp (Θ).quotientEquivOrthogonal.toContinuousLinearEquiv.toContinuousLinearMap
+  have hqJ : ∀ x, q (J x) = x := DFunLike.congr_fun (absolutePW_quotient_section (Θ)).1
+  let U (t : ℝ) := q.comp ((τ (g t)).comp J)
+  obtain ⟨hUc, hUb⟩ := absolutePW_quotient_translation g hgc hlog
+  let N (t : ℝ) : nuclearEndomorphisms H :=
+    ⟨S(ψ t), spectralLineConvolution_nuclear (1/2) hs (ψ t)⟩
+  let ξ (j : ι) : ℝ := j.val.2.1 / (2 * Real.pi)
+  let η (j : ι) := ideleClassNormTwist (χ j.val.1) ((j.val.2.1 : ℂ) * Complex.I)
+  let d (j : ι) := ∫ x, φ.val x * η j x ∂μQ
+  have hd₀ : d j₀ ≠ 0 := by
+    dsimp only [d, η, φ, j₀]
+    rwa [hχ1]
+  have hcoeff (j : ι) (t : ℝ) (x : H) :
+      Λ j ((N t).val x) = η j (g t) * d j * Λ j x :=
+    ((absolutePW_jet_eigen j (Λ j) (hΛ j)).2 (ψ t) x).trans
+      (congrArg (· * Λ j x) (absolutePW_translated_mellin (hshift t) (η j)))
+  have htrans (t : ℝ) (j : ι) (y : H) : Λ j (U t y) = η j (g t) * Λ j y :=
+    ((absolutePW_jet_eigen j (Λ j) (hΛ j)).1 (g t) (J y)).trans
+      (congrArg (fun z : H ↦ η j (g t) * Λ j z) (hqJ y))
+  have hOrbit (t : ℝ) : U t * (N 0).val = (N t).val :=
+    absolutePW_orbit_eq_of_coordinates Λ hBasis.2.2.2 (U t) (N 0).val (N t).val
+      (fun j ↦ η j (g t)) d (htrans t)
+      (fun j ↦ (absolutePW_jet_eigen j (Λ j) (hΛ j)).2 φ) (fun j ↦ hcoeff j t)
+  have hnontriv (j : ι) (hj : j.val.1 ≠ 1) : d j = 0 := by
+    apply absolutePW_radial_mellin_vanish φ (hrad 0)
+    intro h
+    apply hj
+    rw [← hχ j.val.1]
+    ext k
+    exact congrArg Subtype.val (h k)
+  have hphase (j : ι) (hj : j.val.1 = 1) (t : ℝ) :
+      η j (g t) = (Real.fourierChar (t * ξ j) : ℂ) := by
+    have he : χ j.val.1 = 1 := (congrArg χ hj).trans hχ1
+    exact (congrArg (fun c ↦ ideleClassNormTwist c ((j.val.2.1 : ℂ) * Complex.I) (g t)) he).trans
+      (absolutePW_trivial_phase (g t) t j.val.2.1 (hlog t))
+  have hD (t : ℝ) (j : ι) (x : H) :
+      Λ j (U t ((N 0).val x)) = (Real.fourierChar (t * ξ j) : ℂ) * d j * Λ j x := by
+    have h := (congrArg (fun D : H →L[ℂ] H ↦ Λ j (D x)) (hOrbit t)).trans (hcoeff j t x)
+    by_cases hj : j.val.1 = 1
+    · exact h.trans (congrArg (fun z ↦ z * d j * Λ j x) (hphase j hj t))
+    · change Λ j ((U t * (N 0).val) x) = _
+      simpa only [hnontriv j hj, mul_zero, zero_mul] using h
+  obtain ⟨r, hr, hsep₀⟩ := absolutePW_jet_ordinal_sep χ hχ1 j₀ rfl
+  have hsep (j : ι) (hj : j ≠ j₀) : r ≤ dist (ξ j) (ξ j₀) ∨ d j = 0 := by
+    by_cases h : j.val.1 = 1
+    · exact Or.inl (hsep₀ j hj h)
+    · exact Or.inr (hnontriv j h)
+  let L := (Λ j₀).comp q
+  have hL : L (J (v j₀)) ≠ 0 :=
+    ((congrArg (Λ j₀) (hqJ (v j₀))).trans (hBasis.1 j₀)).trans_ne one_ne_zero
+  obtain ⟨R, ε, ρ, hρ, hε, hε', hMq⟩ := absolutePW_cutoff_detects_pairing L (J (v j₀)) hL
+  let M : W →L[ℂ] W := modulatedCutoffOperator mQ νQ hρ
+  let Mq := q.comp (M.comp J)
+  apply absolutePW_orbit_trace_not_tendsto_zero v Λ hBasis U hUc
+    (show 0 ≤ ‖q‖ * ‖J‖ by positivity) hUb (N 0) Mq ξ d hD j₀ hd₀ hr hsep hMq
+  apply (absolutePW_rational_quotient_trace_decay hcompat ψ g hlog hshift hrad hsupport hρ hε hε').congr'
+  filter_upwards with t
+  exact congrArg hilbertTrace (Subtype.ext
+    ((congrArg (fun D : H →L[ℂ] H ↦ Mq * D) (hOrbit t).symm).trans (mul_assoc _ _ _).symm))
+
 /-- Paper: Theorem 11.2.1.2(2) and (11.2.1.5), p. 488.
-In the rational trivial isotype take S = {∞}, a = 1/2 and s = 2.
-In Fourier H¹ let E project onto the complement of the functions vanishing
-at the critical-line ordinates. A smooth frequency multiplier supported
-around a single ordinate γ and equal to one there induces a rank-one
-idempotent in the quotient. A fixed large symmetric cutoff leaves its trace
-near one. Translate the inverse transform far to the right, compensate by
-the phase at γ and cut the Schwartz tails to obtain a positive-time test.
-The spatially cut translated operator on E tends to zero in trace norm,
-while its quotient action retains the rank-one trace. The two fixed-cutoff
-traces thus differ. See the rational calculation in the PR review. -/
+Use the trivial rational isotype, no finite places, a = 1/2 and s = 2.
+As the radial test translates to positive log-norm, its convolution after a fixed
+spatial cutoff has trace norm tending to zero. The claimed scalar convergence
+would give the same decay for the cut spectral trace. A Schwartz filter in the
+translation parameter isolates a certified critical-line ordinate. Its rank-one
+trace has constant nonzero modulus for a suitably large cutoff, contradicting
+the decay. -/
 theorem Printed.absolutePWCondensation_trace_tendsto_false :
-    ¬ Printed.absolutePWCondensation_trace_tendsto := by sorry
+    ¬ Printed.absolutePWCondensation_trace_tendsto := fun hall ↦
+  absolutePW_rational_trace_compatible_false (absolutePW_rational_trace_compatible_of_printed hall)
+
+end
+
+end
 
 /-- Paper: Theorem 11.2.1.4(2) and (11.2.1.10), p. 489.
 The traces at fixed cutoff are asserted to converge to the trace of the
@@ -1196,12 +3520,66 @@ def Printed.invariantPWCondensation_trace_tendsto : Prop :=
               (productTraceClass(T, invariantPWProjection (F := F) (S := S) hs a ω Λ)))
               atTop (𝓝 (hilbertTrace T))
 
+section
+local notation "CQ" => IdeleClassGroup (𝓞 ℚ) ℚ
+local notation "CQ₁" => (ideleClassNorm ℚ).ker
+local notation "h₀" => le_rfl (a := (0 : ℝ))
+local notation "hs₂" => (show (0 : ℝ) ≤ 2 from zero_le_two)
+
+/-- The invariant printed trace convergence gives the same rational scalar trace
+compatibility as the absolute one: at the rational data the invariant projections
+also converge strongly to the isotypic geometric projection and are contractive,
+so the fixed-cutoff trace limit is unchanged. -/
+private theorem invariantPW_rational_trace_compatible_of_printed
+    (h : Printed.invariantPWCondensation_trace_tendsto) :
+    absolutePW_rational_trace_compatible 0 h₀ := by
+  have e : (1 : PontryaginDual CQ).comp
+      (⟨(ideleClassNorm ℚ).ker.subtype, continuous_subtype_val⟩ : CQ₁ →ₜ* CQ) = 1 := by
+    ext k
+    rfl
+  have h' : absolutePW_rational_trace_compatible (-(0 : ℝ)) (neg_nonpos.mpr h₀) := by
+    intro φ hφ R ε ρ hρ
+    let I := absolutePW_rational_isotype (-(0 : ℝ)) (neg_nonpos.mpr h₀)
+    let : CompleteSpace I := absolutePW_rational_isotype_complete _ _
+    let Q := (globalThetaSobolev ℚ (1/2) (neg_nonpos.mpr h₀) hs₂).starProjection
+    let P := I.orthogonalProjectionOnto.comp (Q.comp I.subtypeL)
+    have hh := h ℚ 1 ∅ (1/2) 2 hs₂
+      rational_one_unramifiedOutside_empty rational_empty_picTrivial φ hφ R ε ρ hρ
+    obtain ⟨T, ht, hlim⟩ := hh
+    let T' : nuclearEndomorphisms I := T
+    let PΛ (Λ : ℝ) : I →L[ℂ] I :=
+      invariantPWProjection (F := ℚ) (S := ∅) hs₂ (1/2) (1 : PontryaginDual CQ₁) Λ
+    have hu : NormOneCharacterUnramifiedOutside (1 : PontryaginDual CQ₁) ∅ :=
+      e ▸ rational_one_unramifiedOutside_empty
+    have hP (x : I) : Tendsto (fun Λ ↦ PΛ Λ x) atTop (𝓝 (P x)) :=
+      invariantPWProjection_tendsto (F := ℚ) (S := ∅) hs₂ (1/2) (1 : PontryaginDual CQ₁)
+        hu rational_empty_picTrivial x
+    have hPb : ∀ Λ, ‖PΛ Λ‖ ≤ 1 := by
+      intro Λ
+      apply ContinuousLinearMap.opNorm_le_bound (PΛ Λ) zero_le_one
+      intro x
+      rw [one_mul]
+      let K := (globalInvariantPWSobolev (F := ℚ) (S := ∅) hs₂ (1/2)
+        (1 : PontryaginDual CQ₁) Λ).comap I.subtype
+      let : IsClosed (K : Set I) :=
+        (Submodule.isClosed_topologicalClosure _).preimage continuous_subtype_val
+      exact Submodule.norm_starProjection_apply_le K x
+    refine ⟨T', fun x ↦ ?_, tendsto_nhds_unique
+      (absolutePWCondensation_trace_tendsto_strong I T' PΛ P hP hPb) hlim⟩
+    exact DFunLike.congr_fun ht x
+  let P (l : {l : ℝ // l ≤ 0}) := absolutePW_rational_trace_compatible l.val l.property
+  have he : (⟨-(0 : ℝ), neg_nonpos.mpr h₀⟩ : {l : ℝ // l ≤ 0}) = ⟨0, h₀⟩ := Subtype.ext neg_zero
+  exact (congrArg P he).mp h'
+
+end
+
 /-- Paper: Theorem 11.2.1.4(2) and (11.2.1.10), p. 489.
 For the rational data of the absolute scalar counterexample the
 only place in S is real. The product region equals the box at every level,
 so both scalar limits have the same discrepancy. -/
 theorem Printed.invariantPWCondensation_trace_tendsto_false :
-    ¬ Printed.invariantPWCondensation_trace_tendsto := by sorry
+    ¬ Printed.invariantPWCondensation_trace_tendsto := fun hall ↦
+  absolutePW_rational_trace_compatible_false (invariantPW_rational_trace_compatible_of_printed hall)
 
 local notation "theta0(" F ", " hs ")" => globalThetaSobolev F 0 (le_rfl (a := (0 : ℝ))) hs
 local notation "Sₚ(" F ", " p ")" => (finite_nuclearityPlacesAbove (F := F) p).toFinset

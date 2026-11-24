@@ -2,8 +2,12 @@ module
 
 public import RiemannMasullo.Ch07_SchauderBasesZeta.Sec1b
 import all RiemannMasullo.Ch05_ThetaZSpaces.Sec1
+import Mathlib.Analysis.Calculus.BumpFunction.InnerProduct
+import Mathlib.Analysis.Calculus.BumpFunction.Normed
+import Mathlib.LinearAlgebra.Dimension.ErdosKaplansky
 import Mathlib.Algebra.Field.ULift
 import Mathlib.NumberTheory.LSeries.DirichletContinuation
+import RiemannMasullo.Ch01_Introduction.Sec4
 import RiemannMasullo.External.ZetaLab.HardyFirstZero.FirstZero
 import RiemannMasullo.ForMathlib.NumberTheory.NumberField.Basic
 import RiemannMasullo.ForMathlib.NumberTheory.NumberField.Completion.FinitePlace
@@ -359,6 +363,164 @@ def Printed.spectralAnnihilator_product : Prop :=
     let Λ := regularizedCompletedHeckeL χ τ hτ L hL hEq
     Nonempty ((∀ ρ : Zeros(L), ↥(Jet(L, ρ.val))) ≃L[ℂ] entireIdealAnnihilator Λ)
 
+/-- An infinite product of nonzero finite-dimensional complex vector spaces has
+strictly larger algebraic dimension than their direct sum. -/
+private theorem spectralAnnihilator_product_false_no_equiv
+    (ι : Type) [Infinite ι] (E : ι → Type)
+    [∀ i, AddCommGroup (E i)] [∀ i, Module ℂ (E i)]
+    [∀ i, FiniteDimensional ℂ (E i)] [∀ i, Nontrivial (E i)] :
+    ¬ Nonempty ((∀ i, E i) ≃ₗ[ℂ] (DirectSum ι E)) := by
+  classical
+  choose v hv using fun i ↦ exists_ne (0 : E i)
+  let T : (ι → ℂ) →ₗ[ℂ] (∀ i, E i) :=
+    { toFun := fun f i ↦ f i • v i
+      map_add' := fun f g ↦ by funext i; exact add_smul _ _ _
+      map_smul' := fun c f ↦ by funext i; exact mul_smul _ _ _ }
+  have hT : Function.Injective T := by
+    intro f g h
+    funext i
+    exact smul_left_injective ℂ (hv i) (congrFun h i)
+  have hsum : Module.rank ℂ (DirectSum ι E) ≤ Cardinal.mk ι := by
+    rw [rank_directSum]
+    calc
+      Cardinal.sum (fun i ↦ Module.rank ℂ (E i)) ≤
+          Cardinal.sum (fun _ : ι ↦ Cardinal.aleph0) :=
+        Cardinal.sum_le_sum _ _ fun i ↦ (Module.rank_lt_aleph0 ℂ (E i)).le
+      _ = Cardinal.mk ι := by
+        rw [Cardinal.sum_const', Cardinal.mk_mul_aleph0_eq]
+  have hprod : Cardinal.mk ι < Module.rank ℂ (∀ i, E i) := by
+    refine lt_of_lt_of_le ?_ (T.rank_le_of_injective hT)
+    rw [rank_fun_infinite, ← Cardinal.power_def]
+    exact Cardinal.cantor' _ (Cardinal.one_lt_iff_nontrivial.mpr inferInstance)
+  rintro ⟨e⟩
+  exact hprod.not_ge (e.rank_eq.trans_le hsum)
+
+/-- A completed Hecke continuation has finite meromorphic order everywhere:
+infinite order would propagate to the zero-free point `2`. -/
+private theorem spectralAnnihilator_product_false_order_ne_top
+    (F : Type u) [Field F] [NumberField F]
+    (χ : PontryaginDual (IdeleClassGroup (𝓞 F) F))
+    (L : ℂ → ℂ) (hL : MeromorphicNFOn L Set.univ)
+    (hEq : ∀ s : Complex.re ⁻¹' Set.Ioi (1 : ℝ), L s = completedHeckeL χ s)
+    (z : ℂ) : meromorphicOrderAt L z ≠ ⊤ := by
+  intro hz
+  have ht : meromorphicOrderAt L (2 : ℂ) = ⊤ :=
+    hL.meromorphicOn.meromorphicOrderAt_eq_top_of_isPreconnected
+      isPreconnected_univ (Set.mem_univ z) (Set.mem_univ 2) hz
+  have hpos : 0 < meromorphicOrderAt L (2 : ℂ) := by rw [ht]; exact WithTop.coe_lt_top 0
+  have h := completedHeckeL_continuation_zeros χ L hL hEq (by norm_num) hpos
+  norm_num at h
+
+/-- Once a completed Hecke continuation has infinitely many zeros, its product
+of jet spaces cannot be isomorphic to the annihilator's direct-sum model. -/
+private theorem spectralAnnihilator_product_false_of_infinite
+    (F : Type u) [Field F] [NumberField F]
+    (χ : PontryaginDual (IdeleClassGroup (𝓞 F) F))
+    (τ : ℝ≥0ˣ →ₜ* IdeleGroup (𝓞 F) F) (hτ : Function.RightInverse τ (ideleNorm F))
+    (L : ℂ → ℂ) (hL : MeromorphicNFOn L Set.univ)
+    (hEq : ∀ s : Complex.re ⁻¹' Set.Ioi (1 : ℝ), L s = completedHeckeL χ s)
+    (hInfinite : Infinite {ρ : ℂ // 0 < meromorphicOrderAt L ρ}) :
+    ¬ Nonempty ((∀ ρ : {ρ : ℂ // 0 < meromorphicOrderAt L ρ},
+      ↥(entireJetSpace ρ.val (meromorphicOrderAt L ρ.val).untop₀.toNat)) ≃L[ℂ]
+      entireIdealAnnihilator (regularizedCompletedHeckeL χ τ hτ L hL hEq)) := by
+  classical
+  let Z := {ρ : ℂ // 0 < meromorphicOrderAt L ρ}
+  let J (ρ : Z) := entireJetSpace ρ.val (meromorphicOrderAt L ρ.val).untop₀.toNat
+  let : Infinite Z := hInfinite
+  let : ∀ ρ : Z, AddCommGroup ↥(J ρ) := fun ρ ↦ Submodule.addCommGroup (J ρ)
+  let : ∀ ρ : Z, Module ℂ ↥(J ρ) := fun ρ ↦ Submodule.module (J ρ)
+  let : ∀ ρ : Z, FiniteDimensional ℂ ↥(J ρ) := fun ρ ↦
+    FiniteDimensional.span_of_finite ℂ (Set.finite_range
+      (fun m : Fin (meromorphicOrderAt L ρ.val).untop₀.toNat ↦ entireJet ρ.val m.val))
+  have hmult (ρ : Z) : 0 < (meromorphicOrderAt L ρ.val).untop₀.toNat := by
+    obtain ⟨n, hn⟩ := WithTop.ne_top_iff_exists.mp
+      (spectralAnnihilator_product_false_order_ne_top F χ L hL hEq ρ.val)
+    have hpos := ρ.property
+    rw [← hn] at hpos ⊢
+    rw [WithTop.untop₀_coe]
+    have : (0 : ℤ) < n := WithTop.coe_lt_coe.mp hpos
+    omega
+  let : ∀ ρ : Z, Nontrivial ↥(J ρ) := fun ρ ↦
+    Module.nontrivial_of_finrank_pos (by
+      change 0 < Module.finrank ℂ (entireJetSpace ρ.val _)
+      rw [entireJetSpace_finrank]
+      exact hmult ρ)
+  let inclusion := DirectSum.lof ℂ Z (fun ρ ↦ ↥(J ρ))
+  let : TopologicalSpace (DirectSum Z (fun ρ ↦ ↥(J ρ))) := locallyConvexFinalTopology inclusion
+  obtain ⟨eSum, _⟩ := spectralAnnihilator_directSum χ τ hτ L hL hEq
+  rintro ⟨eProd⟩
+  exact spectralAnnihilator_product_false_no_equiv Z (fun ρ ↦ ↥(J ρ))
+    ⟨eProd.toLinearEquiv.trans eSum.symm.toLinearEquiv⟩
+
+/-- The completed trivial Hecke functions of a degree-one field and of ℚ agree
+on the convergence half-plane. The isomorphism of rings of integers preserves ideal norms. -/
+private theorem spectralAnnihilator_product_false_degree_one_eq_rat
+    (F : Type u) [Field F] [NumberField F] (hF : Module.finrank ℚ F = 1) (s : halfPlane) :
+    completedHeckeL (1 : U𝔽(F)) s = completedHeckeL (1 : U𝔽(ℚ)) s := by
+  let e := RingEquiv.ofBijective (algebraMap ℚ F)
+    (Algebra.finrank_eq_one_iff_bijective_algebraMap.mp hF)
+  let i := RingOfIntegers.mapRingEquiv e.symm
+  have hnorm (I : Ideal (𝓞 F)) : (I.map i).absNorm = I.absNorm := by
+    rw [Ideal.absNorm_eq_natCard, Ideal.absNorm_eq_natCard]
+    exact (Nat.card_congr (Ideal.quotientEquiv I (I.map i) i rfl).toEquiv).symm
+  have hcoeff (n : ℕ) : Nat.card {I : Ideal (𝓞 F) // I.absNorm = n} =
+      Nat.card {I : Ideal (𝓞 ℚ) // I.absNorm = n} := by
+    apply Nat.card_congr
+    refine Equiv.subtypeEquiv i.idealComapOrderIso.symm.toEquiv fun I ↦ ?_
+    change I.absNorm = n ↔ (I.map i).absNorm = n
+    rw [hnorm]
+  simp only [completedHeckeL_one_eq_dedekindZeta,
+    InfinitePlace.nrRealPlaces_eq_one_of_finrank_eq_one hF,
+    InfinitePlace.nrComplexPlaces_eq_zero_of_finrank_eq_one hF,
+    InfinitePlace.nrRealPlaces_eq_one_of_finrank_eq_one (Module.finrank_self ℚ),
+    InfinitePlace.nrComplexPlaces_eq_zero_of_finrank_eq_one (Module.finrank_self ℚ),
+    dedekindZeta, hcoeff]
+
+/-- Paper: Theorem 7.1.4.2(1), p. 326. Analytic input for the product refutation.
+The trivial completed Hecke function over a degree-one number field has
+infinitely many distinct positive-order zeros. This is the remaining analytic
+input: under the unique rational-field isomorphism it is the classical
+infinitude of nontrivial Riemann-zeta zeros. Finite meromorphic orders are proved
+separately above, so this statement asks only for the infinite zero set. -/
+private theorem spectralAnnihilator_product_false_degree_one_zeros
+    (F : Type u) [Field F] [NumberField F] (hF : Module.finrank ℚ F = 1)
+    (L : ℂ → ℂ) (hL : MeromorphicNFOn L Set.univ)
+    (hEq : ∀ s : Complex.re ⁻¹' Set.Ioi (1 : ℝ),
+      L s = completedHeckeL (1 : PontryaginDual (IdeleClassGroup (𝓞 F) F)) s) :
+    Infinite {ρ : ℂ // 0 < meromorphicOrderAt L ρ} := by
+  have hRat := continuedCompletedHeckeL_spec (F := ℚ) 1
+  have he : L = continuedCompletedHeckeL (F := ℚ) 1 := by
+    apply eq_of_agree_rightHalf hL hRat.1 1
+    intro z hz
+    let s : halfPlane := ⟨z, hz⟩
+    exact (hEq s).trans ((spectralAnnihilator_product_false_degree_one_eq_rat F hF s).trans
+      (hRat.2 s).symm)
+  subst L
+  refine (Equiv.subtypeEquivRight (fun z ↦ ?_)).infinite_iff.mp
+    introTrace_rat_positive_divisor_infinite
+  rw [MeromorphicOn.divisor_apply hRat.1.meromorphicOn (mem_univ z), ← WithTop.coe_lt_coe,
+    WithTop.coe_zero, WithTop.coe_untop₀_of_ne_top
+      (spectralAnnihilator_product_false_order_ne_top ℚ 1 _ hRat.1 hRat.2 z)]
+
+/-- The degree-one zero infinitude and the dimension obstruction contradict
+an instance of the printed product assertion in the same universe. -/
+private theorem spectralAnnihilator_product_false_contra
+    (h : Printed.spectralAnnihilator_product.{u}) : False := by
+  have : CharZero (ULift.{u} ℚ) :=
+    ⟨fun a b hab ↦ by simpa using congrArg ULift.down hab⟩
+  have : NumberField (ULift.{u} ℚ) :=
+    { to_finiteDimensional := Module.Finite.ulift (R := ℚ) (M := ℚ) }
+  let χ : PontryaginDual (IdeleClassGroup (𝓞 (ULift.{u} ℚ)) (ULift.{u} ℚ)) := 1
+  obtain ⟨L, hL, hEq⟩ := completedHeckeL_exists_continuation χ
+  let τ : ℝ≥0ˣ →ₜ* IdeleGroup (𝓞 (ULift.{u} ℚ)) (ULift.{u} ℚ) :=
+    ⟨canonicalIdeleNormSection _, canonicalIdeleNormSection_continuous _⟩
+  have hτ : Function.RightInverse τ (ideleNorm (ULift.{u} ℚ)) :=
+    canonicalIdeleNormSection_rightInverse _
+  have hInf := spectralAnnihilator_product_false_degree_one_zeros
+    (ULift.{u} ℚ) (by simp) L hL hEq
+  exact spectralAnnihilator_product_false_of_infinite
+    (ULift.{u} ℚ) χ τ hτ L hL hEq hInf (h (ULift.{u} ℚ) χ τ hτ L hL hEq)
+
 /-- Paper: Theorem 7.1.4.2(1), equation (7.1.4.2), p. 326.
 Take the trivial rational character and the meromorphic normal form of the completed
 Riemann zeta function. There are countably infinitely many distinct zeros and
@@ -367,7 +529,9 @@ finite-dimensional. The annihilator consists of finite-support jets and has coun
 algebraic dimension. The product has uncountable dimension, as seen by embedding
 complex sequences and using the independent sequences `(a^n)ₙ` for distinct a. -/
 theorem Printed.spectralAnnihilator_product_false :
-    ¬ Printed.spectralAnnihilator_product := by sorry
+    ¬ Printed.spectralAnnihilator_product := by
+  intro h
+  exact spectralAnnihilator_product_false_contra h
 
 /-- Paper: Theorem 7.1.4.2(2), equation (7.1.4.6), p. 327.
 As printed: The derivative functional at a completed Hecke zero is the moment of the
@@ -691,14 +855,307 @@ def Printed.schwartzBergman_jet_continuous_on_ordinary_schwartz : Prop :=
             ∫ u : ℝ, f (expUnit u) * Complex.exp ((ρ.val + (x₀ : ℂ) * Complex.I) * u) *
               (u : ℂ) ^ m
 
+
+/-- Pullback along the logarithm carries ordinary Schwartz functions continuously
+to Schwartz–Bruhat functions on the positive reals. -/
+private theorem schwartzBergman_jet_continuous_on_ordinary_schwartz_false_coordinate :
+    ∃ T : SchwartzMap ℝ ℂ →L[ℂ] SchwartzBruhat ℝ≥0ˣ,
+      ∀ (f : SchwartzMap ℝ ℂ) (u : ℝ),
+        T f ((Nonneg.unitsHomeomorphPos ℝ).symm (Real.expOrderIso u)) = f u := by
+  let I : Set ℝ := {0}
+  let P := PositiveRealExponentialDecay I
+  have hmem (f : SchwartzMap ℝ ℂ) : (f : ℝ → ℂ) ∈ logExponentialDecaySubmodule I := by
+    apply (Submodule.mem_iInf _).mpr
+    intro a
+    have ha : (a : ℝ) = 0 := a.property
+    change logExponentialWeight a (f : ℝ → ℂ) ∈ realSchwartzCoe.range
+    rw [ha, logExponentialWeight_zero]
+    exact ⟨f, rfl⟩
+  let A : SchwartzMap ℝ ℂ →ₗ[ℂ] P :=
+    { toFun := fun f ↦ ⟨f, hmem f⟩
+      map_add' := fun _ _ ↦ rfl
+      map_smul' := fun _ _ ↦ rfl }
+  have hA : Continuous A := by
+    apply (positiveRealExponentialDecay_isEmbedding I (singleton_nonempty _)).isInducing.continuous_iff.mpr
+    apply continuous_pi
+    intro a
+    have he : (fun f : SchwartzMap ℝ ℂ ↦ logExponentialDecayTwist I a (A f)) = id := by
+      funext f
+      ext x
+      change logExponentialDecayTwist I a ⟨f, hmem f⟩ x = f x
+      rw [logExponentialDecayTwist_apply]
+      have ha : (a : ℝ) = 0 := a.property
+      simp only [ha, zero_mul, Real.exp_zero, Complex.ofReal_one, one_mul]
+    exact he ▸ continuous_id
+  obtain ⟨e, he⟩ := identityModulationExponentialDecay_equiv I ordConnected_singleton (singleton_nonempty _)
+  have hm : IsModulation (ContinuousMonoidHom.id ℝ≥0ˣ) :=
+    ⟨isProperMap_id, ⟨Units.mk0 2 (by norm_num), by
+      intro h
+      have := congrArg (fun t : ℝ≥0ˣ ↦ (t.val : ℝ)) h
+      norm_num at this⟩⟩
+  obtain ⟨s, hs⟩ := modulatedExponentialDecay_singleton_schwartz
+    (ContinuousMonoidHom.id ℝ≥0ˣ) hm surjective_id 0
+  refine ⟨s.toContinuousLinearMap.comp (e.toContinuousLinearMap.comp ⟨A, hA⟩), ?_⟩
+  intro f u
+  change s (e (A f)) _ = _
+  let t : ℝ≥0ˣ := (Nonneg.unitsHomeomorphPos ℝ).symm (Real.expOrderIso u)
+  calc
+    s (e (A f)) t = modulationWeight (ContinuousMonoidHom.id ℝ≥0ˣ) 0 (e (A f)).val t :=
+      congrFun (hs (e (A f))) t
+    _ = (e (A f)).val t := congrFun (modulationWeight_zero _ _) t
+    _ = (A f).val (Real.log (t.val : ℝ)) := he (A f) t
+    _ = f u := by change f (Real.log (Real.exp u)) = f u; rw [Real.log_exp]
+
+/-- Translates of a fixed Schwartz function by `n`, damped by `exp (-c n)` with `c > 0`,
+form a bounded set: the polynomial growth of the seminorms in `n` loses to the damping. -/
+private theorem schwartzBergman_jet_continuous_on_ordinary_schwartz_false_damped_bounded (c : ℝ) (hc : 0 < c)
+    (h : SchwartzMap ℝ ℂ) (G : ℕ → SchwartzMap ℝ ℂ)
+    (hG : ∀ (n : ℕ) (x : ℝ), G n x = (Real.exp (-(c * n)) : ℂ) * h (x - n)) :
+    Bornology.IsVonNBounded ℂ (range G) := by
+  refine (schwartz_withSeminorms ℂ ℝ ℂ).isVonNBounded_iff_seminorm_bounded.mpr ?_
+  rintro ⟨k, l⟩
+  let Ch := 2 ^ k * (Finset.Iic (k, l)).sup (fun m => SchwartzMap.seminorm ℂ m.1 m.2) h
+  have hCh : 0 ≤ Ch := by positivity
+  let M := (k.factorial : ℝ) * Real.exp c / c ^ k * Ch
+  refine ⟨M + 1, by positivity, ?_⟩
+  rintro _ ⟨n, rfl⟩
+  refine lt_of_le_of_lt ?_ (lt_add_one M)
+  refine SchwartzMap.seminorm_le_bound ℂ k l (G n) (by positivity) fun x ↦ ?_
+  have hfun : (G n : ℝ → ℂ) = fun x ↦ (Real.exp (-(c * n)) : ℂ) • h (x - n) :=
+    funext fun x ↦ hG n x
+  have hd : iteratedFDeriv ℝ l (G n : ℝ → ℂ) x =
+      (Real.exp (-(c * n)) : ℂ) • iteratedFDeriv ℝ l (h : ℝ → ℂ) (x - n) := by
+    have hsm : ContDiffAt ℝ l (fun z : ℝ ↦ h (z - n)) x :=
+      ((h.smooth ⊤).comp (contDiff_id.sub contDiff_const)).contDiffAt.of_le
+        (by exact_mod_cast le_top)
+    rw [hfun, iteratedFDeriv_const_smul_apply' hsm, iteratedFDeriv_comp_sub]
+  rw [hd, norm_smul, Complex.norm_real, Real.norm_of_nonneg (Real.exp_pos _).le]
+  have hx : ‖x‖ ≤ (1 + n) * (1 + ‖x - n‖) := by
+    have : ‖x‖ ≤ ‖x - n‖ + n := by
+      have := norm_add_le (x - n) (n : ℝ)
+      rwa [sub_add_cancel, Real.norm_natCast] at this
+    nlinarith [norm_nonneg (x - n), (Nat.cast_nonneg n : (0 : ℝ) ≤ n)]
+  have hh := SchwartzMap.one_add_le_sup_seminorm_apply (𝕜 := ℂ) (m := (k, l)) le_rfl le_rfl h
+    (x - n)
+  have hpow : ‖x‖ ^ k ≤ (1 + n) ^ k * (1 + ‖x - n‖) ^ k := by
+    rw [← mul_pow]; exact pow_le_pow_left₀ (norm_nonneg _) hx k
+  have hexp : (1 + (n : ℝ)) ^ k * Real.exp (-(c * n)) ≤ (k.factorial : ℝ) * Real.exp c / c ^ k := by
+    have h1 := Real.pow_div_factorial_le_exp (x := c * (1 + n)) (by positivity) k
+    rw [div_le_iff₀ (by positivity)] at h1
+    rw [le_div_iff₀ (by positivity)]
+    have h4 : Real.exp (c * (1 + n)) * Real.exp (-(c * n)) = Real.exp c := by
+      rw [← Real.exp_add]; congr 1; ring
+    calc (1 + (n : ℝ)) ^ k * Real.exp (-(c * n)) * c ^ k
+        = (c * (1 + n)) ^ k * Real.exp (-(c * n)) := by rw [mul_pow]; ring
+      _ ≤ (Real.exp (c * (1 + n)) * k.factorial) * Real.exp (-(c * n)) := by gcongr
+      _ = k.factorial * Real.exp c := by rw [mul_right_comm, h4, mul_comm]
+  calc ‖x‖ ^ k * (Real.exp (-(c * n)) * ‖iteratedFDeriv ℝ l (h : ℝ → ℂ) (x - n)‖)
+      ≤ (1 + n) ^ k * (1 + ‖x - n‖) ^ k *
+          (Real.exp (-(c * n)) * ‖iteratedFDeriv ℝ l (h : ℝ → ℂ) (x - n)‖) := by
+        gcongr
+    _ = ((1 + n) ^ k * Real.exp (-(c * n))) *
+          ((1 + ‖x - n‖) ^ k * ‖iteratedFDeriv ℝ l (h : ℝ → ℂ) (x - n)‖) := by ring
+    _ ≤ ((k.factorial : ℝ) * Real.exp c / c ^ k) * Ch := by
+        gcongr
+    _ = M := rfl
+
+/-- Evaluation of the bilateral Laplace transform at a point of positive real part
+cannot extend continuously to the ordinary real-line Schwartz space. -/
+private theorem schwartzBergman_jet_continuous_on_ordinary_schwartz_false_moment
+    (z : ℂ) (hz : 0 < z.re) (A : SchwartzMap ℝ ℂ →L[ℂ] ℂ)
+    (hA : ∀ f : SchwartzMap ℝ ℂ, HasCompactSupport (f : ℝ → ℂ) →
+      A f = ∫ x : ℝ, f x * Complex.exp (z * x)) : False := by
+  let b : ContDiffBump (0 : ℝ) := ⟨1 / 2, 1, by norm_num, by norm_num⟩
+  let h (x : ℝ) : ℂ := (b x : ℂ) * Complex.exp (-z * x)
+  have hs : HasCompactSupport h :=
+    (b.hasCompactSupport.comp_left Complex.ofReal_zero).mul_right
+  have hd : ContDiff ℝ (⊤ : ℕ∞) h :=
+    (Complex.ofRealCLM.contDiff.comp b.contDiff).mul
+      ((contDiff_const.mul Complex.ofRealCLM.contDiff).cexp)
+  let hS : SchwartzMap ℝ ℂ := hs.toSchwartzMap hd
+  let c : ℝ := z.re / 2
+  have hc : 0 < c := half_pos hz
+  let G (n : ℕ) : SchwartzMap ℝ ℂ :=
+    (Real.exp (-(c * n)) : ℂ) • (hS.compSubConstCLM ℂ (n : ℝ))
+  have hG (n : ℕ) (x : ℝ) : G n x =
+      (Real.exp (-(c * n)) : ℂ) * hS (x - n) := rfl
+  have hGs (n : ℕ) : HasCompactSupport (G n : ℝ → ℂ) := by
+    have ht := hs.comp_homeomorph (Homeomorph.addRight (-(n : ℝ)))
+    change HasCompactSupport (fun x : ℝ ↦ h (x + -(n : ℝ))) at ht
+    have ht' : HasCompactSupport (fun x : ℝ ↦ h (x - n)) := by
+      simpa only [sub_eq_add_neg] using ht
+    exact ht'.mul_left
+  have hbounded := schwartzBergman_jet_continuous_on_ordinary_schwartz_false_damped_bounded
+    c hc hS G hG
+  let B : ℝ := ∫ x : ℝ, b x
+  have hB : 0 < B := b.integral_pos
+  have hmoment (n : ℕ) : A (G n) =
+      (Real.exp (-(c * n)) : ℂ) * Complex.exp (z * (n : ℂ)) * (B : ℂ) := by
+    rw [hA (G n) (hGs n)]
+    rw [← integral_add_right_eq_self
+      (fun x : ℝ ↦ G n x * Complex.exp (z * x)) (n : ℝ)]
+    have he (x : ℝ) : G n (x + n) * Complex.exp (z * ((x + n : ℝ) : ℂ)) =
+        ((Real.exp (-(c * n)) : ℂ) * Complex.exp (z * (n : ℂ))) * (b x : ℂ) := by
+      change (Real.exp (-(c * n)) : ℂ) *
+        ((b (x + n - n) : ℂ) * Complex.exp (-z * ((x + n - n : ℝ) : ℂ))) *
+        Complex.exp (z * ((x + n : ℝ) : ℂ)) = _
+      rw [add_sub_cancel_right]
+      simp only [Complex.ofReal_add, Complex.ofReal_natCast]
+      have hexp : Complex.exp (-z * (x : ℂ)) *
+          Complex.exp (z * ((x : ℂ) + (n : ℂ))) = Complex.exp (z * (n : ℂ)) := by
+        rw [← Complex.exp_add]
+        congr 1
+        ring
+      calc
+        _ = (Real.exp (-(c * n)) : ℂ) * (b x : ℂ) *
+            (Complex.exp (-z * (x : ℂ)) *
+              Complex.exp (z * ((x : ℂ) + (n : ℂ)))) := by ring
+        _ = _ := by rw [hexp]; ring
+    rw [integral_congr_ae (ae_of_all volume he), integral_const_mul,
+      integral_complex_ofReal]
+  have hnorm (n : ℕ) : ‖A (G n)‖ = Real.exp (c * n) * B := by
+    rw [hmoment, norm_mul, norm_mul,
+      Complex.norm_of_nonneg (Real.exp_pos _).le, Complex.norm_exp,
+      Complex.norm_of_nonneg hB.le]
+    have hre : (z * (n : ℂ)).re = z.re * (n : ℝ) := by simp
+    rw [hre, ← Real.exp_add]
+    have hx : -(c * (n : ℝ)) + z.re * n = c * n := by dsimp [c]; ring
+    rw [hx]
+  obtain ⟨R, hR⟩ := (NormedSpace.isVonNBounded_iff' (𝕜 := ℂ)).mp
+    (hbounded.image A)
+  obtain ⟨n, hn⟩ := exists_nat_gt (R / (c * B))
+  have hRlt : R < c * (n : ℝ) * B := by
+    have hh := (div_lt_iff₀ (mul_pos hc hB)).mp hn
+    nlinarith
+  have he : c * (n : ℝ) ≤ Real.exp (c * n) :=
+    (le_add_of_nonneg_right zero_le_one).trans (Real.add_one_le_exp _)
+  have hRle : Real.exp (c * n) * B ≤ R := by
+    rw [← hnorm n]
+    exact hR _ ⟨G n, mem_range_self n, rfl⟩
+  exact (not_lt_of_ge hRle) (hRlt.trans_le (mul_le_mul_of_nonneg_right he hB.le))
+
+/-- The completed L-function of the trivial character over a universe lift of the
+rationals has a finite positive-order zero with real part one half. The witness
+comes from the kernel-checked first zero of the Riemann zeta function. -/
+private theorem schwartzBergman_jet_continuous_on_ordinary_schwartz_false_zero
+    [NumberField (ULift.{u} ℚ)] :
+    ∃ L : ℂ → ℂ, MeromorphicNFOn L univ ∧
+      (∀ s : Complex.re ⁻¹' Ioi (1 : ℝ),
+        L s = completedHeckeL
+          (1 : PontryaginDual (IdeleClassGroup (𝓞 (ULift.{u} ℚ)) (ULift.{u} ℚ))) s) ∧
+      ∃ ρ : ℂ, ρ.re = 1 / 2 ∧ 0 < meromorphicOrderAt L ρ ∧
+        0 < (meromorphicOrderAt L ρ).untop₀.toNat := by
+  let χ : PontryaginDual (IdeleClassGroup (𝓞 (ULift.{u} ℚ)) (ULift.{u} ℚ)) := 1
+  obtain ⟨γ, -, hz⟩ := HardyFirstZero.first_zero_on_line
+  have hf : MeromorphicOn riemannZeta univ :=
+    schwartzBergman_jet_eq_mellinInv_shifted_moment_meromorphic
+  have hfa (s : ℂ) (hs : s ≠ 1) : AnalyticAt ℂ riemannZeta s := by
+    apply DifferentiableOn.analyticAt
+      (s := {z : ℂ | z ≠ 1})
+      (fun z hz ↦ (differentiableAt_riemannZeta hz).differentiableWithinAt)
+    exact (isOpen_ne_fun continuous_id continuous_const).mem_nhds hs
+  have hfeq (s : Complex.re ⁻¹' Ioi (1 : ℝ)) :
+      riemannZeta s = finiteHeckeL χ s := by
+    rw [schwartzBergman_jet_eq_mellinInv_shifted_moment_one,
+      schwartzBergman_jet_eq_mellinInv_shifted_moment_dedekindZeta,
+      schwartzBergman_jet_eq_mellinInv_shifted_moment_rat s.property]
+  have hΓa (s : ℂ) (hs : 0 < s.re) : AnalyticAt ℂ (heckeGammaFactor χ) s := by
+    apply DifferentiableOn.analyticAt (s := {z : ℂ | 0 < z.re})
+      (fun z hz ↦ (differentiableAt_heckeGammaFactor_of_re_pos χ hz).differentiableWithinAt)
+    exact (isOpen_lt continuous_const Complex.continuous_re).mem_nhds hs
+  let f : ℂ → ℂ := fun s ↦ heckeGammaFactor χ s * riemannZeta s
+  have hf' : MeromorphicOn f univ := fun s _ ↦
+    (meromorphic_heckeGammaFactor χ s).mul (hf s (mem_univ s))
+  let L := toMeromorphicNFOn f univ
+  have hL : MeromorphicNFOn L univ := meromorphicNFOn_toMeromorphicNFOn _ _
+  have hLe (s : Complex.re ⁻¹' Ioi (1 : ℝ)) : L s = completedHeckeL χ s := by
+    have hs : 0 < (s : ℂ).re := zero_lt_one.trans s.property
+    have hne : (s : ℂ) ≠ 1 := fun h1 ↦ by
+      have hh : 1 < (s : ℂ).re := s.property
+      rw [h1, Complex.one_re] at hh
+      exact lt_irrefl _ hh
+    have ha : AnalyticAt ℂ f s := (hΓa s hs).mul (hfa s hne)
+    change toMeromorphicNFOn f univ s = _
+    rw [toMeromorphicNFOn_eq_toMeromorphicNFAt hf' (mem_univ _),
+      toMeromorphicNFAt_eq_self.mpr ha.meromorphicNFAt]
+    change heckeGammaFactor χ s * riemannZeta s = _
+    rw [hfeq s]
+    rfl
+  let ρ : ℂ := 1 / 2 + γ * Complex.I
+  have hρre : ρ.re = 1 / 2 := by simp [ρ]
+  have hρne : ρ ≠ 1 := fun h1 ↦ by
+    have hh := congrArg Complex.re h1
+    rw [hρre, Complex.one_re] at hh
+    norm_num at hh
+  have hρpos : 0 < ρ.re := by rw [hρre]; norm_num
+  have hzρ : riemannZeta ρ = 0 := hz
+  have hord : 0 < meromorphicOrderAt riemannZeta ρ := by
+    apply (tendsto_zero_iff_meromorphicOrderAt_pos (hf _ (mem_univ _))).mp
+    rw [← hzρ]
+    exact (hfa ρ hρne).continuousAt.continuousWithinAt
+  have htwo : meromorphicOrderAt riemannZeta 2 ≠ ⊤ := by
+    have hv : riemannZeta 2 ≠ 0 := riemannZeta_ne_zero_of_one_lt_re (by norm_num)
+    rw [(hfa 2 (by norm_num)).meromorphicNFAt.meromorphicOrderAt_eq_zero_iff.mpr hv]
+    exact WithTop.zero_ne_top
+  have hfin : meromorphicOrderAt riemannZeta ρ ≠ ⊤ := fun ht ↦ htwo
+    (hf.meromorphicOrderAt_eq_top_of_isPreconnected isPreconnected_univ (mem_univ _)
+      (mem_univ _) ht)
+  have hordL : meromorphicOrderAt riemannZeta ρ = meromorphicOrderAt L ρ := by
+    rw [meromorphicOrderAt_congr (hf'.toMeromorphicNFOn_eq_self_on_nhdsNE (mem_univ ρ))]
+    exact (meromorphicOrderAt_mul_of_ne_zero (hΓa ρ hρpos)
+      (heckeGammaFactor_ne_zero_of_re_pos χ hρpos)).symm
+  have hm : 0 < (meromorphicOrderAt L ρ).untop₀.toNat := by
+    rw [← hordL]
+    obtain ⟨n, hn⟩ := WithTop.ne_top_iff_exists.mp hfin
+    rw [← hn] at hord ⊢
+    rw [WithTop.untop₀_coe]
+    have : 0 < n := WithTop.coe_lt_coe.mp hord
+    omega
+  exact ⟨L, hL, hLe, ρ, hρre, hordL ▸ hord, hm⟩
+
+/-- A continuous functional with the printed jet moments contradicts the
+bounded family of damped translates at a completed-zeta zero. -/
+private theorem schwartzBergman_jet_continuous_on_ordinary_schwartz_false_contra
+    (h : Printed.schwartzBergman_jet_continuous_on_ordinary_schwartz.{u}) : False := by
+  have : NumberField (ULift.{u} ℚ) :=
+    schwartzBergman_jet_eq_mellinInv_shifted_moment_numberField
+  obtain ⟨L, hL, hEq, ρ₀, hρre, hord, hm⟩ :=
+    schwartzBergman_jet_continuous_on_ordinary_schwartz_false_zero.{u}
+  let τ : ℝ≥0ˣ →ₜ* IdeleGroup (𝓞 (ULift.{u} ℚ)) (ULift.{u} ℚ) :=
+    ⟨canonicalIdeleNormSection _, canonicalIdeleNormSection_continuous _⟩
+  have hτ : Function.RightInverse τ (ideleNorm (ULift.{u} ℚ)) :=
+    canonicalIdeleNormSection_rightInverse _
+  let ρ : {z : ℂ // 0 < meromorphicOrderAt L z} := ⟨ρ₀, hord⟩
+  obtain ⟨ℓ, hℓ⟩ := h (ULift.{u} ℚ) 1 τ hτ L hL hEq ρ 0 hm
+  obtain ⟨T, hT⟩ :=
+    schwartzBergman_jet_continuous_on_ordinary_schwartz_false_coordinate
+  let x₀ := (existsUnique_ideleNormSection_character_phase
+    (1 : PontryaginDual (IdeleClassGroup (𝓞 (ULift.{u} ℚ)) (ULift.{u} ℚ))) τ hτ).exists.choose
+  let z : ℂ := ρ₀ + (x₀ : ℂ) * Complex.I
+  have hz : 0 < z.re := by simp [z, hρre]
+  let A : SchwartzMap ℝ ℂ →L[ℂ] ℂ :=
+    ℓ.comp ((Submodule.mkQL _).comp T)
+  apply schwartzBergman_jet_continuous_on_ordinary_schwartz_false_moment z hz A
+  intro f hf
+  have hmem : (fun u : ℝ ↦ T f
+      ((Nonneg.unitsHomeomorphPos ℝ).symm (Real.expOrderIso u))) ∈
+      logExponentialDecaySubmodule univ := by
+    simpa only [hT] using
+      mem_logExponentialDecaySubmodule_of_hasCompactSupport univ hf (f.smooth ⊤)
+  change ℓ (Submodule.Quotient.mk (T f)) = _
+  simpa only [hT, pow_zero, mul_one] using hℓ (T f) hmem
+
 /-- Paper: Theorem 7.1.4.2(4), p. 327.
 Take the trivial rational character, a completed zeta zero ρ with a = Re ρ > 0,
-and m = 0. Take a smooth nonzero nonnegative bump b supported in (0,1) and the
-log-profile `h(u) = b(u) exp(-i Im(ρ) u)`. The ordinary Schwartz profiles
-`exp(-an) h(u - n)` tend to zero, while their ρ-moments have the same strictly
-positive modulus as the ρ-moment of h. -/
+and m = 0. For a nonzero nonnegative compactly supported smooth bump b, the
+profile `h(u) = b(u) exp(-ρu)` has positive ρ-moment. The damped translates
+`exp(-an/2) h(u - n)` form a bounded set in ordinary Schwartz space, while their
+ρ-moments have unbounded modulus. -/
 theorem Printed.schwartzBergman_jet_continuous_on_ordinary_schwartz_false :
-    ¬ Printed.schwartzBergman_jet_continuous_on_ordinary_schwartz := by sorry
+    ¬ Printed.schwartzBergman_jet_continuous_on_ordinary_schwartz := by
+  intro h
+  exact schwartzBergman_jet_continuous_on_ordinary_schwartz_false_contra h
+
 
 /-- Paper: Estimate after equation (7.1.4.22), p. 330.
 As printed: The norm of the normalized derivative throughout the closed critical strip

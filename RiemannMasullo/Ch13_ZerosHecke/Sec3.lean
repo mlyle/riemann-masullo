@@ -106,6 +106,271 @@ def criticalTraceTestSubmodule (τ : ℝ≥0ˣ →ₜ* C𝔽) : Submodule ℂ D�
   ⨅ (χ : sectionCharacters(τ)) (k : Fin (Module.finrank ℚ F)),
     ((criticalTraceMoment_isLinearMap χ.val k.val).mk' _).ker
 
+/-- Differentiation under the integral sign for exponential moments on a measure space: if
+every moment of `h` against `exp (σ * ℓ x)` is integrable for `σ` in an open interval, then on
+the corresponding vertical strip the `k`th derivative of the integral of `h x * exp (w * ℓ x)`
+is the `k`th moment. Adapted from `iteratedDeriv_exp_moment_of_measurable` in
+`Ch09_HardySobolev/Sec2.lean`. -/
+private theorem mem_criticalTraceTestSubmodule_iff_expMoment {X : Type*} [MeasurableSpace X]
+    {μ : Measure X} {h : X → ℂ} {ℓ : X → ℝ} (hℓ : Measurable ℓ) {α β : ℝ}
+    (hint : ∀ σ ∈ Ioo α β, ∀ n : ℕ,
+      Integrable (fun x ↦ h x * (ℓ x : ℂ) ^ n * Complex.exp ((σ : ℂ) * (ℓ x : ℂ))) μ)
+    (k : ℕ) {z : ℂ} (hz : z.re ∈ Ioo α β) :
+    iteratedDeriv k (fun w : ℂ ↦ ∫ x, h x * Complex.exp (w * (ℓ x : ℂ)) ∂μ) z =
+      ∫ x, h x * (ℓ x : ℂ) ^ k * Complex.exp (z * (ℓ x : ℂ)) ∂μ := by
+  let F : ℕ → ℂ → X → ℂ := fun n w x ↦ h x * (ℓ x : ℂ) ^ n * Complex.exp (w * (ℓ x : ℂ))
+  have hℓc : Measurable fun x ↦ (ℓ x : ℂ) := Complex.measurable_ofReal.comp hℓ
+  have hexpc : ∀ w : ℂ, Measurable fun x ↦ Complex.exp (w * (ℓ x : ℂ)) := fun w ↦
+    Complex.measurable_exp.comp (hℓc.const_mul w)
+  have hm : AEStronglyMeasurable h μ := by
+    refine ((hint z.re hz 0).aestronglyMeasurable.mul
+      (hexpc (-(z.re : ℂ))).aestronglyMeasurable).congr (ae_of_all _ fun x ↦ ?_)
+    show h x * (ℓ x : ℂ) ^ 0 * Complex.exp ((z.re : ℂ) * (ℓ x : ℂ)) *
+      Complex.exp (-(z.re : ℂ) * (ℓ x : ℂ)) = h x
+    rw [pow_zero, mul_one, mul_assoc, ← Complex.exp_add, neg_mul, add_neg_cancel,
+      Complex.exp_zero, mul_one]
+  have hFm : ∀ n w, AEStronglyMeasurable (F n w) μ := fun n w ↦
+    (hm.mul (hℓc.pow_const n).aestronglyMeasurable).mul (hexpc w).aestronglyMeasurable
+  have hnorm : ∀ n (w : ℂ) (x : X),
+      ‖F n w x‖ = ‖h x‖ * |ℓ x| ^ n * Real.exp (w.re * ℓ x) := by
+    intro n w x
+    have hre : (w * (ℓ x : ℂ)).re = w.re * ℓ x := by simp
+    show ‖h x * (ℓ x : ℂ) ^ n * Complex.exp (w * (ℓ x : ℂ))‖ = _
+    rw [norm_mul, norm_mul, norm_pow, Complex.norm_real, Real.norm_eq_abs, Complex.norm_exp,
+      hre]
+  have hFi : ∀ n (w : ℂ), w.re ∈ Ioo α β → Integrable (F n w) μ := fun n w hw ↦
+    (hint w.re hw n).mono (hFm n w) (ae_of_all _ fun x ↦ le_of_eq (by
+      show ‖F n w x‖ = ‖F n (w.re : ℂ) x‖
+      rw [hnorm, hnorm, Complex.ofReal_re]))
+  have hderiv : ∀ n (w : ℂ), w.re ∈ Ioo α β →
+      HasDerivAt (fun w ↦ ∫ x, F n w x ∂μ) (∫ x, F (n + 1) w x ∂μ) w := by
+    intro n w hw
+    obtain ⟨ε, hε, hεa, hεb⟩ : ∃ ε : ℝ, 0 < ε ∧ α < w.re - ε ∧ w.re + ε < β := by
+      have h0 : 0 < min (w.re - α) (β - w.re) := lt_min (sub_pos.2 hw.1) (sub_pos.2 hw.2)
+      have h1 := min_le_left (w.re - α) (β - w.re)
+      have h2 := min_le_right (w.re - α) (β - w.re)
+      exact ⟨min (w.re - α) (β - w.re) / 2, half_pos h0, by linarith, by linarith⟩
+    have hlo : ((w.re - ε : ℝ) : ℂ).re ∈ Ioo α β := by
+      rw [Complex.ofReal_re]
+      exact ⟨hεa, by linarith⟩
+    have hhi : ((w.re + ε : ℝ) : ℂ).re ∈ Ioo α β := by
+      rw [Complex.ofReal_re]
+      exact ⟨by linarith, hεb⟩
+    refine (hasDerivAt_integral_of_dominated_loc_of_deriv_le (Metric.ball_mem_nhds w hε)
+      (Filter.Eventually.of_forall (hFm n)) (hFi n w hw) (hFm (n + 1) w)
+      (ae_of_all _ fun x w' hw' ↦ ?_)
+      ((hFi (n + 1) _ hlo).norm.add (hFi (n + 1) _ hhi).norm)
+      (ae_of_all _ fun x w' _ ↦ ?_)).2
+    · show ‖F (n + 1) w' x‖ ≤
+        ‖F (n + 1) ((w.re - ε : ℝ) : ℂ) x‖ + ‖F (n + 1) ((w.re + ε : ℝ) : ℂ) x‖
+      rw [hnorm, hnorm, hnorm, Complex.ofReal_re, Complex.ofReal_re]
+      have h2 : ‖w' - w‖ < ε := by
+        rw [← dist_eq_norm]
+        exact hw'
+      have h1 := (Complex.abs_re_le_norm (w' - w)).trans_lt h2
+      rw [Complex.sub_re] at h1
+      obtain ⟨hl, hu⟩ := abs_lt.1 h1
+      have hexp : Real.exp (w'.re * ℓ x) ≤
+          Real.exp ((w.re - ε) * ℓ x) + Real.exp ((w.re + ε) * ℓ x) := by
+        rcases le_total 0 (ℓ x) with hx | hx
+        · have hp := mul_nonneg (by linarith : (0 : ℝ) ≤ w.re + ε - w'.re) hx
+          exact (Real.exp_le_exp.2 (by nlinarith)).trans
+            (le_add_of_nonneg_left (Real.exp_pos _).le)
+        · have hp := mul_nonneg (by linarith : (0 : ℝ) ≤ w'.re - w.re + ε) (neg_nonneg.2 hx)
+          exact (Real.exp_le_exp.2 (by nlinarith)).trans
+            (le_add_of_nonneg_right (Real.exp_pos _).le)
+      calc ‖h x‖ * |ℓ x| ^ (n + 1) * Real.exp (w'.re * ℓ x)
+          ≤ ‖h x‖ * |ℓ x| ^ (n + 1) *
+            (Real.exp ((w.re - ε) * ℓ x) + Real.exp ((w.re + ε) * ℓ x)) :=
+            mul_le_mul_of_nonneg_left hexp (by positivity)
+        _ = _ := mul_add _ _ _
+    · exact (((hasDerivAt_id' w').mul_const (ℓ x : ℂ)).cexp.const_mul
+        (h x * (ℓ x : ℂ) ^ n)).congr_deriv (by
+          show h x * (ℓ x : ℂ) ^ n * (Complex.exp (w' * (ℓ x : ℂ)) * (1 * (ℓ x : ℂ))) =
+            h x * (ℓ x : ℂ) ^ (n + 1) * Complex.exp (w' * (ℓ x : ℂ))
+          ring)
+  have hS : IsOpen {w : ℂ | w.re ∈ Ioo α β} := isOpen_Ioo.preimage Complex.continuous_re
+  have hM : (fun w : ℂ ↦ ∫ x, h x * Complex.exp (w * (ℓ x : ℂ)) ∂μ) =
+      fun w ↦ ∫ x, F 0 w x ∂μ := by
+    funext w
+    refine integral_congr_ae (ae_of_all _ fun x ↦ ?_)
+    show h x * Complex.exp (w * (ℓ x : ℂ)) = h x * (ℓ x : ℂ) ^ 0 * Complex.exp (w * (ℓ x : ℂ))
+    rw [pow_zero, mul_one]
+  have hiter : ∀ n (w : ℂ), w.re ∈ Ioo α β →
+      iteratedDeriv n (fun w ↦ ∫ x, F 0 w x ∂μ) w = ∫ x, F n w x ∂μ := by
+    intro n
+    induction n with
+    | zero =>
+      intro w _
+      rw [iteratedDeriv_zero]
+    | succ n ih =>
+      intro w hw
+      have hev : iteratedDeriv n (fun w ↦ ∫ x, F 0 w x ∂μ) =ᶠ[nhds w]
+          fun w ↦ ∫ x, F n w x ∂μ :=
+        (hS.eventually_mem hw).mono fun w' hw' ↦ ih w' hw'
+      rw [iteratedDeriv_succ, hev.deriv_eq]
+      exact (hderiv n w hw).deriv
+  rw [hM]
+  exact hiter k z hz
+
+/-- Twisting a unitary character by a purely imaginary power of the norm gives a unitary
+character. -/
+private theorem mem_criticalTraceTestSubmodule_iff_unitaryTwist (χ : U𝔽) (y : ℝ) :
+    ∃ η : U𝔽, ∀ g : C𝔽, (η g : ℂ) = ideleClassNormTwist χ ((y : ℂ) * Complex.I) g := by
+  let c := ideleClassNormTwist χ ((y : ℂ) * Complex.I)
+  have hunit (g : C𝔽) : ‖c g‖ = 1 := by
+    change ‖(χ g : ℂ) * ((((ideleClassNorm F g : ℝ≥0) : ℝ) : ℂ) ^ ((y : ℂ) * Complex.I))‖ = 1
+    rw [norm_mul, Complex.norm_cpow_eq_rpow_re_of_pos (NNReal.coe_pos.mpr (Units.zero_lt _))]
+    simp
+  exact ⟨(⟨⟨⟨fun g ↦ ⟨c g, mem_sphere_zero_iff_norm.mpr (hunit g)⟩, Subtype.ext c.map_one⟩,
+      fun g k ↦ Subtype.ext (c.map_mul g k)⟩, c.continuous.subtype_mk _⟩ : C𝔽 →ₜ* Circle),
+    fun g ↦ rfl⟩
+
+/-- Along a continuous homomorphic section of the norm, the idele class measure is a nonzero
+multiple of the product of `dt/t` and the norm-one class measure, so integrals of continuous
+compactly supported functions are iterated integrals up to that constant. -/
+private theorem mem_criticalTraceTestSubmodule_iff_decomp (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (hτ : RightInverse τ (ideleClassNorm F)) :
+    ∃ c : ℂ, c ≠ 0 ∧ ∀ f : C𝔽 → ℂ, Continuous f → HasCompactSupport f →
+      ∫ x, f x ∂μ𝔽 = c * ∫ t : ℝ≥0ˣ, (∫ g : C₁, f (τ t * g.val)
+        ∂normOneIdeleClassTamagawaMeasure F) ∂positiveRealHaar := by
+  let : MeasurableSpace C₁ := Subtype.instMeasurableSpace
+  let ν := normOneIdeleClassTamagawaMeasure F
+  let : BorelSpace ℝ≥0ˣ := borelSpace_units_of_continuousInv₀ _
+  let : SecondCountableTopology ℝ≥0ˣ := Units.isEmbedding_val₀.secondCountableTopology
+  let : positiveRealHaar.IsHaarMeasure := positiveRealHaar_isHaarMeasure
+  have hc : IsCompact ((ideleClassNorm F).ker : Set C𝔽) :=
+    (isProperMap_ideleClassNorm F).isCompact_preimage isCompact_singleton
+  let : CompactSpace C₁ := isCompact_iff_compactSpace.mp hc
+  have hspec := (multiplicativeTamagawaMeasures_existsUnique F).exists.choose_spec
+  let : ν.IsHaarMeasure := hspec.2.2.2.1
+  have hn : Continuous (ideleClassNorm F) := (isProperMap_ideleClassNorm F).continuous
+  have hp (x : C𝔽) : x / τ (ideleClassNorm F x) ∈ (ideleClassNorm F).ker := by
+    change ideleClassNorm F (x / τ (ideleClassNorm F x)) = 1
+    rw [map_div, hτ, div_self']
+  have hnτ (p : ℝ≥0ˣ × C₁) : ideleClassNorm F (τ p.1 * p.2.val) = p.1 := by
+    rw [map_mul, hτ, MonoidHom.mem_ker.mp p.2.property, mul_one]
+  let e : (ℝ≥0ˣ × C₁) ≃ₜ* C𝔽 :=
+    { toFun := fun p ↦ τ p.1 * p.2.val
+      invFun := fun x ↦ (ideleClassNorm F x, ⟨x / τ (ideleClassNorm F x), hp x⟩)
+      left_inv := fun p ↦ by
+        refine Prod.ext (hnτ p) (Subtype.ext ?_)
+        change τ p.1 * p.2.val / τ (ideleClassNorm F (τ p.1 * p.2.val)) = p.2.val
+        rw [hnτ p, mul_div_cancel_left]
+      right_inv := fun x ↦ by
+        change τ (ideleClassNorm F x) * (x / τ (ideleClassNorm F x)) = x
+        exact mul_div_cancel _ _
+      map_mul' := fun p q ↦ by
+        change τ (p.1 * q.1) * (p.2.val * q.2.val) = τ p.1 * p.2.val * (τ q.1 * q.2.val)
+        rw [map_mul, mul_mul_mul_comm]
+      continuous_toFun :=
+        (τ.continuous.comp continuous_fst).mul (continuous_subtype_val.comp continuous_snd)
+      continuous_invFun :=
+        hn.prodMk ((continuous_id.div' (τ.continuous.comp hn)).subtype_mk _) }
+  let P := (positiveRealHaar.prod ν).map e
+  obtain ⟨c, hc0, hμ⟩ : ∃ c : ℝ≥0, c ≠ 0 ∧ μ𝔽 = c • P :=
+    ⟨_, (Measure.haarScalarFactor_pos_of_isHaarMeasure _ _).ne',
+      Measure.isMulLeftInvariant_eq_smul _ _⟩
+  refine ⟨((c : ℝ) : ℂ), by exact_mod_cast hc0, fun f hf hfc ↦ ?_⟩
+  have he : Measurable e := e.continuous.measurable
+  have hfi : Integrable (f ∘ e) (positiveRealHaar.prod ν) :=
+    (hf.comp e.continuous).integrable_of_hasCompactSupport (hfc.comp_homeomorph e.toHomeomorph)
+  rw [hμ, integral_smul_nnreal_measure, integral_map he.aemeasurable hf.aestronglyMeasurable,
+    integral_prod (fun p ↦ f (e p)) hfi, NNReal.smul_def, Complex.real_smul]
+  rfl
+
+/-- The `k`th derivative of the printed Mellin integral at `z` is the iterated integral,
+along the norm section, of the test times the twist `χ |·|^z` times the `k`th power of the
+log norm. -/
+private theorem mem_criticalTraceTestSubmodule_iff_mellin (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (hτ : RightInverse τ (ideleClassNorm F)) (χ : U𝔽) (φ : D𝔽) (z : ℂ) (k : ℕ) :
+    iteratedDeriv k (fun s : ℂ ↦ ∫ t : ℝ≥0ˣ, (χ (τ t) : ℂ) * ((t.val : ℝ) : ℂ) ^ s *
+        (∫ g : C₁, φ.val (τ t * g.val) * (χ g.val : ℂ) ∂normOneIdeleClassTamagawaMeasure F)
+          ∂positiveRealHaar) z =
+      ∫ t : ℝ≥0ˣ, (∫ g : C₁, φ.val (τ t * g.val) * ideleClassNormTwist χ z (τ t * g.val) *
+          (Real.log ((ideleClassNorm F (τ t * g.val)).val : ℝ) : ℂ) ^ k
+            ∂normOneIdeleClassTamagawaMeasure F) ∂positiveRealHaar := by
+  let : MeasurableSpace C₁ := Subtype.instMeasurableSpace
+  let ν := normOneIdeleClassTamagawaMeasure F
+  let : BorelSpace ℝ≥0ˣ := borelSpace_units_of_continuousInv₀ _
+  let : SecondCountableTopology ℝ≥0ˣ := Units.isEmbedding_val₀.secondCountableTopology
+  let : positiveRealHaar.IsHaarMeasure := positiveRealHaar_isHaarMeasure
+  have hc : IsCompact ((ideleClassNorm F).ker : Set C𝔽) :=
+    (isProperMap_ideleClassNorm F).isCompact_preimage isCompact_singleton
+  let : CompactSpace C₁ := isCompact_iff_compactSpace.mp hc
+  have hspec := (multiplicativeTamagawaMeasures_existsUnique F).exists.choose_spec
+  let : ν.IsHaarMeasure := hspec.2.2.2.1
+  have hφ : Continuous φ.val :=
+    continuous_schwartzBruhat
+      (⟨φ.val, bruhatCompactSupport_mem_schwartz φ.property⟩ : SchwartzBruhat C𝔽)
+  have hχc : Continuous (fun x : C𝔽 ↦ (χ x : ℂ)) := continuous_subtype_val.comp χ.continuous
+  have hpos (t : ℝ≥0ˣ) : (0 : ℝ) < ((t : ℝ≥0) : ℝ) := NNReal.coe_pos.mpr (Units.zero_lt t)
+  have hval : Continuous (fun t : ℝ≥0ˣ ↦ ((t : ℝ≥0) : ℝ)) :=
+    NNReal.continuous_coe.comp Units.continuous_val
+  let ℓ : ℝ≥0ˣ → ℝ := fun t ↦ Real.log ((t : ℝ≥0) : ℝ)
+  have hℓ : Continuous ℓ := hval.log fun t ↦ (hpos t).ne'
+  let G : ℝ≥0ˣ → ℂ := fun t ↦ ∫ g : C₁, φ.val (τ t * g.val) * (χ g.val : ℂ) ∂ν
+  have hG : Continuous G := by
+    have := continuous_parametric_integral_of_continuous (μ := ν)
+      (f := fun t (g : C₁) ↦ φ.val (τ t * g.val) * (χ g.val : ℂ))
+      ((hφ.comp ((τ.continuous.comp continuous_fst).mul
+        (continuous_subtype_val.comp continuous_snd))).mul
+        (hχc.comp (continuous_subtype_val.comp continuous_snd))) isCompact_univ
+    simpa only [Measure.restrict_univ] using this
+  let K := (fun x : C𝔽 ↦ ideleClassNorm F x) '' tsupport φ.val
+  have hK : IsCompact K :=
+    φ.property.2.isCompact.image (isProperMap_ideleClassNorm F).continuous
+  have hnτ (t : ℝ≥0ˣ) (g : C₁) : ideleClassNorm F (τ t * g.val) = t := by
+    rw [map_mul, hτ t, MonoidHom.mem_ker.mp g.property, mul_one]
+  have hGK (t : ℝ≥0ˣ) (ht : t ∉ K) : G t = 0 := by
+    have hz : ∀ g : C₁, φ.val (τ t * g.val) * (χ g.val : ℂ) = 0 := by
+      intro g
+      have hφz : φ.val (τ t * g.val) = 0 := by
+        apply image_eq_zero_of_notMem_tsupport
+        intro hm
+        exact ht ⟨_, hm, hnτ t g⟩
+      rw [hφz, zero_mul]
+    simp only [G, hz, integral_zero]
+  let h : ℝ≥0ˣ → ℂ := fun t ↦ (χ (τ t) : ℂ) * G t
+  have hh : Continuous h := (hχc.comp τ.continuous).mul hG
+  have hhc : HasCompactSupport h :=
+    HasCompactSupport.intro hK fun t ht ↦ by simp only [h, hGK t ht, mul_zero]
+  have hcpow (t : ℝ≥0ˣ) (s : ℂ) : (((t : ℝ≥0) : ℝ) : ℂ) ^ s = Complex.exp (s * (ℓ t : ℂ)) := by
+    rw [Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr (hpos t).ne'),
+      ← Complex.ofReal_log (hpos t).le, mul_comm]
+  have hfun : (fun s : ℂ ↦ ∫ t : ℝ≥0ˣ, (χ (τ t) : ℂ) * ((t.val : ℝ) : ℂ) ^ s * G t
+      ∂positiveRealHaar) = fun s ↦ ∫ t, h t * Complex.exp (s * (ℓ t : ℂ)) ∂positiveRealHaar := by
+    funext s
+    congr 1
+    funext t
+    rw [hcpow]
+    ring
+  have hint : ∀ σ ∈ Ioo (z.re - 1) (z.re + 1), ∀ n : ℕ, Integrable
+      (fun t ↦ h t * (ℓ t : ℂ) ^ n * Complex.exp ((σ : ℂ) * (ℓ t : ℂ))) positiveRealHaar := by
+    intro σ _ n
+    exact ((hh.mul ((Complex.continuous_ofReal.comp hℓ).pow n)).mul
+      (Complex.continuous_exp.comp (continuous_const.mul
+        (Complex.continuous_ofReal.comp hℓ)))).integrable_of_hasCompactSupport
+      (hhc.mul_right.mul_right)
+  change iteratedDeriv k (fun s : ℂ ↦ ∫ t : ℝ≥0ˣ, (χ (τ t) : ℂ) * ((t.val : ℝ) : ℂ) ^ s * G t
+    ∂positiveRealHaar) z = _
+  rw [hfun, mem_criticalTraceTestSubmodule_iff_expMoment hℓ.measurable hint k
+    ⟨by linarith, by linarith⟩]
+  congr 1
+  funext t
+  have e (g : C₁) : φ.val (τ t * g.val) * ideleClassNormTwist χ z (τ t * g.val) *
+      (Real.log ((ideleClassNorm F (τ t * g.val)).val : ℝ) : ℂ) ^ k =
+      ((χ (τ t) : ℂ) * (ℓ t : ℂ) ^ k * Complex.exp (z * (ℓ t : ℂ))) *
+        (φ.val (τ t * g.val) * (χ g.val : ℂ)) := by
+    change φ.val (τ t * g.val) * ((χ (τ t * g.val) : ℂ) *
+      ((((ideleClassNorm F (τ t * g.val) : ℝ≥0) : ℝ) : ℂ) ^ z)) *
+      (Real.log ((ideleClassNorm F (τ t * g.val)).val : ℝ) : ℂ) ^ k = _
+    rw [hnτ t g, hcpow, map_mul, Circle.coe_mul]
+    ring
+  simp only [e, integral_const_mul]
+  simp only [h, G]
+  ring
+
 /-- Paper: (13.3.1.2), p. 522. Membership in the test subspace is equivalent to
 the printed Mellin-derivative conditions at `−i x₀(χ)` for all unitary characters.
 The continuous norm section and the exponent along it are given explicitly. -/
@@ -119,7 +384,73 @@ theorem mem_criticalTraceTestSubmodule_iff (τ : ℝ≥0ˣ →ₜ* C𝔽)
             ∫ t : ℝ≥0ˣ, (χ (τ t) : ℂ) * ((t.val : ℝ) : ℂ) ^ s *
               (∫ g : C₁, φ.val (τ t * g.val) * (χ g.val : ℂ)
                 ∂normOneIdeleClassTamagawaMeasure F) ∂positiveRealHaar)
-            (-((x : ℂ) * Complex.I)) = 0 := by sorry
+            (-((x : ℂ) * Complex.I)) = 0 := by
+  obtain ⟨c, hc0, hc⟩ := mem_criticalTraceTestSubmodule_iff_decomp τ _hτ
+  have hφ : Continuous φ.val :=
+    continuous_schwartzBruhat
+      (⟨φ.val, bruhatCompactSupport_mem_schwartz φ.property⟩ : SchwartzBruhat C𝔽)
+  have hlog : Continuous (fun g : C𝔽 ↦ Real.log ((ideleClassNorm F g).val : ℝ)) :=
+    ((NNReal.continuous_coe.comp (Units.continuous_val.comp
+      (isProperMap_ideleClassNorm F).continuous))).log fun g ↦
+        ne_of_gt (NNReal.coe_pos.mpr (Units.zero_lt _))
+  -- Each twisted log-norm moment is `c` times the printed Mellin derivative.
+  have key (χ : U𝔽) (z : ℂ) (k : ℕ) :
+      (∫ g, φ.val g * ideleClassNormTwist χ z g *
+          (Real.log ((ideleClassNorm F g).val : ℝ) : ℂ) ^ k ∂μ𝔽) =
+        c * iteratedDeriv k (fun s : ℂ ↦ ∫ t : ℝ≥0ˣ, (χ (τ t) : ℂ) * ((t.val : ℝ) : ℂ) ^ s *
+          (∫ g : C₁, φ.val (τ t * g.val) * (χ g.val : ℂ) ∂normOneIdeleClassTamagawaMeasure F)
+            ∂positiveRealHaar) z := by
+    rw [mem_criticalTraceTestSubmodule_iff_mellin τ _hτ χ φ z k]
+    exact hc _ ((hφ.mul (ideleClassNormTwist χ z).continuous).mul
+      ((Complex.continuous_ofReal.comp hlog).pow k)) φ.property.2.mul_right.mul_right
+  have hmom (η : U𝔽) (k : ℕ) :
+      (∫ g, momentIntegrand(η, k, φ) g ∂μ𝔽) =
+        ∫ g, φ.val g * ideleClassNormTwist η 0 g *
+          (Real.log ((ideleClassNorm F g).val : ℝ) : ℂ) ^ k ∂μ𝔽 := by
+    congr 1
+    funext g
+    unfold spectralZeroJet
+    simp only [Complex.ofReal_zero, zero_mul, add_zero, mul_assoc]
+  have hmem : φ ∈ criticalTraceTestSubmodule τ ↔
+      ∀ (η : sectionCharacters(τ)) (k : Fin (Module.finrank ℚ F)),
+        (∫ g, momentIntegrand(η.val, k.val, φ) g ∂μ𝔽) = 0 := by
+    simp only [criticalTraceTestSubmodule, Submodule.mem_iInf, LinearMap.mem_ker,
+      IsLinearMap.mk'_apply]
+  rw [hmem]
+  constructor
+  · intro h χ x hx k
+    obtain ⟨η, hη⟩ := mem_criticalTraceTestSubmodule_iff_unitaryTwist χ (-x)
+    have hητ : ∀ t, η (τ t) = 1 := by
+      intro t
+      apply Subtype.ext
+      rw [hη]
+      change (χ (τ t) : ℂ) * ((((ideleClassNorm F (τ t) : ℝ≥0) : ℝ) : ℂ) ^
+        (((-x : ℝ) : ℂ) * Complex.I)) = 1
+      rw [_hτ t, hx t, ← Complex.cpow_add _ _
+        (Complex.ofReal_ne_zero.mpr (NNReal.coe_pos.mpr (Units.zero_lt t)).ne')]
+      simp
+    have h0 := h ⟨η, hητ⟩ k
+    rw [hmom] at h0
+    have htw : ∀ g,
+        ideleClassNormTwist η 0 g = ideleClassNormTwist χ (-((x : ℂ) * Complex.I)) g := by
+      intro g
+      change (η g : ℂ) * ((((ideleClassNorm F g : ℝ≥0) : ℝ) : ℂ) ^ (0 : ℂ)) = _
+      rw [Complex.cpow_zero, mul_one, hη]
+      congr 2
+      push_cast
+      ring
+    simp only [htw] at h0
+    rw [key] at h0
+    exact (mul_eq_zero.mp h0).resolve_left hc0
+  · intro h η k
+    have hη0 : ∀ t : ℝ≥0ˣ, (η.val (τ t) : ℂ) = ((t.val : ℝ) : ℂ) ^ (((0 : ℝ) : ℂ) * Complex.I) := by
+      intro t
+      rw [η.property t]
+      simp
+    have hD := h η.val 0 hη0 k
+    have hz : (-(((0 : ℝ) : ℂ) * Complex.I)) = 0 := by simp
+    rw [hz] at hD
+    rw [hmom, key, hD, mul_zero]
 
 open scoped NumberField.AdeleRing in
 /-- The finite sign idele with real coordinate one gives a nontrivial involution. -/
@@ -475,7 +806,54 @@ theorem criticalTraceGeometric_converges_functional (τ : ℝ≥0ˣ →ₜ* C�
       restrictsAtInfinity(a, φ) → restrictsAtFinite(b, φ) →
       L φ = mellinAt(φ, 1, -1 / 2) + mellinAt(φ, 1, 1 / 2) -
         (∑ w : InfinitePlace F, infiniteConnesWeilPrincipalValue w (a w)) -
-        ∑' v : V, finiteTerm(v, b v) := by sorry
+        ∑' v : V, finiteTerm(v, b v) := by
+  classical
+  obtain ⟨_, poles, arch, fin, _, hpoles, harch, hfin, _, _, hsum, _⟩ :=
+    idelicExplicitFormula τ hτ
+  let vol : ℝ := (normOneIdeleClassTamagawaMeasure F univ).toReal
+  have hvol : 0 < vol := by
+    dsimp [vol]
+    rw [normOneIdeleClassTamagawaMeasure_volume]
+    have := NumberField.classNumber_pos F
+    have := NumberField.Units.regulator_pos F
+    have := NumberField.Units.torsionOrder_pos F
+    have := Int.natAbs_pos.mpr (NumberField.discr_ne_zero F)
+    rw [ENNReal.toReal_ofReal (by positivity)]
+    positivity
+  -- The printed finite-place coefficients change the dual series only at the different.
+  let printed (v : V) : StrongDual ℂ D𝔽 := finiteUnitMass(v) • fin v
+  have hmass : ∀ᶠ v : V in Filter.cofinite, finiteLocalMultiplicativeTamagawaMeasure F v
+      (v.adicCompletionIntegers F).units = 1 := by
+    simpa only [finiteLocalMultiplicativeTamagawaMeasure_integerUnits, Filter.eventually_cofinite]
+      using finiteLocalTamagawaMass_finite F
+  have hprinted : Summable printed := hsum.congr_cofinite (hmass.mono fun v hv ↦ by
+    simp [printed, hv])
+  refine ⟨(vol : ℂ) • poles - (∑ w, arch w) - (∑' v, printed v), ?_⟩
+  intro φ a b ha hb
+  let ev : StrongDual ℂ D𝔽 →+ ℂ :=
+    { toFun := fun L ↦ L φ, map_zero' := rfl, map_add' := fun _ _ ↦ rfl }
+  have hp : (vol : ℂ) * poles φ = mellinAt(φ, 1, -1 / 2) + mellinAt(φ, 1, 1 / 2) := by
+    have htwist (s : ℂ) (g : C𝔽) : ideleClassNormTwist (1 : U𝔽) s g =
+        (((ideleClassNorm F g).val : ℝ) : ℂ) ^ s := by
+      exact one_mul ((((ideleClassNorm F g).val : ℝ) : ℂ) ^ s)
+    simp only [htwist, hpoles]
+    exact mul_div_cancel₀ _ (Complex.ofReal_ne_zero.mpr hvol.ne')
+  have hinf : ev (∑ w, arch w) = ∑ w, infiniteConnesWeilPrincipalValue w (a w) := by
+    rw [map_sum]
+    refine Finset.sum_congr rfl fun w _ ↦ ?_
+    obtain ⟨t, ht, he⟩ := harch w φ
+    have ht' : t = a w := Subtype.ext (funext fun u ↦ (ht u).trans (ha w u).symm)
+    exact ht' ▸ he
+  have hfinite : ev (∑' v, printed v) = ∑' v : V, finiteTerm(v, b v) := by
+    have heval : Continuous ev := continuous_eval_const φ
+    refine (hprinted.hasSum.map ev heval).tsum_eq.symm.trans (tsum_congr fun v ↦ ?_)
+    obtain ⟨t, ht, he⟩ := hfin v φ
+    have ht' : t = b v := Subtype.ext (funext fun u ↦ (ht u).trans (hb v u).symm)
+    change finiteUnitMass(v) * fin v φ = _
+    rw [he, ht', Complex.ofReal_div, ← mul_assoc, mul_div_cancel₀ _
+      (criticalTraceGeometric_converges_unitMass_ne_zero (F := F) v)]
+  change (vol : ℂ) * poles φ - ev (∑ w, arch w) - ev (∑' v, printed v) = _
+  rw [hp, hinf, hfinite]
 
 /-- Paper: Theorem 13.3.1.1, (13.3.1.3)–(13.3.1.5), p. 522. The finite-place
 series converges, and the polar terms minus the local principal values form a

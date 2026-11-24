@@ -8,6 +8,7 @@ import Mathlib.Analysis.Complex.ExponentialBounds
 import RiemannMasullo.Ch13_ZerosHecke.Targets
 import RiemannMasullo.External.ZetaLab.HardyTenZeros.TenZeros
 import RiemannMasullo.External.ZetaLab.RHHeight.Main
+import Mathlib.Logic.Equiv.Nat
 
 /-! # Further assertions in the proofs of §10.3 that are false as printed -/
 
@@ -994,6 +995,187 @@ def Printed.spectralLineSamples_rapid_for_any_numbering : Prop :=
         φ.val g * ideleClassNormTwist (χ ω) (shift(0, (e n).val)) g
           ∂ideleClassTamagawaMeasure F) atTop (𝓝 0)
 
+/-- A compact bump supported away from zero has an entire Mellin transform.
+A single translate of this transform avoids zero on any countable set. -/
+private theorem spectralLineSamples_mellin_shift (b : ContDiffBump (1 : ℝ))
+    (hb : b.rOut = 1 / 2) (t : ℕ → ℝ) :
+    ∃ c : ℂ, ∀ n, mellin (fun x : ℝ ↦ (b x : ℂ)) ((t n : ℂ) * Complex.I + c) ≠ 0 := by
+  let B (x : ℝ) : ℂ := b x
+  have hlow (x : ℝ) (hx : x ≤ 1 / 2) : b x = 0 := by
+    apply b.zero_of_le_dist
+    rw [hb, Real.dist_eq, abs_of_nonpos (by linarith : x - 1 ≤ 0)]
+    linarith
+  have htop : B =ᶠ[atTop] 0 := by
+    filter_upwards [eventually_ge_atTop (2 : ℝ)] with x hx
+    change (b x : ℂ) = 0
+    rw [b.zero_of_le_dist, Complex.ofReal_zero]
+    rw [hb, Real.dist_eq, abs_of_nonneg (by linarith : 0 ≤ x - 1)]
+    linarith
+  have hbot : B =ᶠ[𝓝[>] 0] 0 := by
+    filter_upwards [mem_nhdsWithin_of_mem_nhds (gt_mem_nhds (by norm_num : (0 : ℝ) < 1 / 2))] with x hx
+    change (b x : ℂ) = 0
+    simp [hlow x hx.le]
+  have hM : Differentiable ℂ (mellin B) := by
+    intro z
+    apply mellin_differentiableAt_of_isBigO_rpow (a := z.re + 1) (b := z.re - 1)
+      ((Complex.continuous_ofReal.comp b.continuous).continuousOn.locallyIntegrableOn measurableSet_Ioi)
+    · exact htop.isBigO.trans (Asymptotics.isBigO_zero _ _)
+    · linarith
+    · exact hbot.isBigO.trans (Asymptotics.isBigO_zero _ _)
+    · linarith
+  have hne : mellin B 1 ≠ 0 := by
+    simp only [mellin, sub_self, Complex.cpow_zero, one_smul, B]
+    rw [show (∫ x : ℝ in Ioi 0, (b x : ℂ)) = ((∫ x : ℝ in Ioi 0, b x : ℝ) : ℂ) from integral_ofReal]
+    rw [setIntegral_eq_integral_of_forall_compl_eq_zero (s := Ioi (0 : ℝ)) (fun x hx ↦
+      hlow x ((not_lt.mp hx).trans (by norm_num)))]
+    exact Complex.ofReal_ne_zero.mpr (b.integral_pos (μ := volume)).ne'
+  let Z := (mellin B) ⁻¹' ({0} : Set ℂ)
+  have hZ : Z.Countable := (HereditarilyLindelofSpace.isLindelof _).countable_of_isDiscrete
+    (compl_mem_codiscrete_iff.mp ((show AnalyticOnNhd ℂ (mellin B) univ from fun z _ ↦ hM.analyticAt z).preimage_zero_mem_codiscrete hne)).2
+  let bad := ⋃ n, (fun c : ℂ ↦ (t n : ℂ) * Complex.I + c) ⁻¹' Z
+  have hbad : bad.Countable := Set.countable_iUnion fun n ↦ hZ.preimage (add_right_injective _)
+  obtain ⟨c, hc⟩ := (hbad.dense_compl ℂ).nonempty
+  refine ⟨c, fun n hn ↦ hc (mem_iUnion.mpr ⟨n, ?_⟩)⟩
+  exact hn
+
+/-- Composition with a smooth scalar function preserves Bruhat smoothness in
+each elementary quotient chart. -/
+private theorem spectralLineSamples_smooth_comp {G : Type*} [CommGroup G] [TopologicalSpace G]
+    {v : G → ℂ} (hv : IsBruhatSmooth v) {f : ℂ → ℂ} (hf : ContDiff ℝ (⊤ : ℕ∞) f) :
+    IsBruhatSmooth (fun x ↦ f (v x)) := by
+  intro p
+  obtain ⟨k, hk, hi, hd⟩ := hv p
+  refine ⟨k, hk, fun h x ↦ congrArg f (hi h x), fun a ha ↦ ?_⟩
+  obtain ⟨q, hq, hdiff⟩ := hd a ha
+  exact ⟨fun y ↦ f (q y), fun x ↦ congrArg f (hq x),
+    fun e z b ↦ (hf.of_le (by simp)).comp (hdiff e z b)⟩
+
+/-- A compactly supported radial test can have all its Mellin samples at a
+specified sequence of frequencies nonzero. -/
+private theorem spectralLineSamples_nonvanishing (t : ℕ → ℝ) :
+    ∃ φ : BruhatCompactSupport C𝔽(ℚ), ∀ n,
+      (∫ g, φ.val g * ideleClassNormTwist (1 : PontryaginDual C𝔽(ℚ))
+        (shift(0, t n)) g ∂ideleClassTamagawaMeasure ℚ) ≠ 0 := by
+  let b : ContDiffBump (1 : ℝ) := ⟨1 / 4, 1 / 2, by norm_num, by norm_num⟩
+  obtain ⟨c, hc⟩ := spectralLineSamples_mellin_shift b rfl t
+  let f (x : ℝ) : ℂ := (x : ℂ) ^ c * (b x : ℂ)
+  have hfs : ContDiff ℝ (⊤ : ℕ∞) f := by
+    rw [contDiff_iff_contDiffAt]
+    intro x
+    by_cases h : 0 < x
+    · have he : (fun y : ℝ ↦ (y : ℂ) ^ c) =ᶠ[𝓝 x]
+          fun y ↦ Complex.exp ((Real.log y : ℂ) * c) := by
+        filter_upwards [lt_mem_nhds h] with y hy
+        rw [Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr hy.ne'), Complex.ofReal_log hy.le]
+      apply ContDiffAt.mul _ (Complex.ofRealCLM.contDiff.comp b.contDiff).contDiffAt
+      apply ContDiffAt.congr_of_eventuallyEq _ he
+      exact Complex.contDiff_exp.contDiffAt.comp x
+        ((Complex.ofRealCLM.contDiff.contDiffAt.comp x (Real.contDiffAt_log.mpr h.ne')).mul contDiffAt_const)
+    · apply (contDiffAt_const (c := (0 : ℂ))).congr_of_eventuallyEq
+      have he : ∀ᶠ y in 𝓝 x, y < 1 / 2 := gt_mem_nhds (by linarith)
+      filter_upwards [he] with y hy
+      have hy' : b y = 0 := b.zero_of_le_dist (by
+        rw [Real.dist_eq, abs_of_nonpos (by linarith : y - 1 ≤ 0)]
+        change (1 / 2 : ℝ) ≤ _
+        linarith)
+      simp [f, hy']
+  let N (g : C𝔽(ℚ)) : ℝ := ((ideleClassNorm ℚ g).val : ℝ)
+  let χ : QuasiCharacter C𝔽(ℚ) :=
+    { toFun := fun g ↦ (N g : ℂ)
+      map_one' := by simp [N]
+      map_mul' := fun x y ↦ by simp [N]
+      continuous_toFun := Complex.continuous_ofReal.comp (NNReal.continuous_coe.comp
+        (Units.continuous_val.comp (isProperMap_ideleClassNorm ℚ).continuous)) }
+  have hs : IsBruhatSmooth (fun g ↦ f (N g)) :=
+    spectralLineSamples_smooth_comp (v := fun x ↦ χ x) (f := fun z ↦ f z.re)
+      ((mem_bruhatSmoothSubmodule_iff _).1 (quasiCharacter_mem_bruhatSmooth (G := C𝔽(ℚ)) χ))
+      (hfs.comp Complex.reCLM.contDiff)
+  let e := (Nonneg.unitsHomeomorphPos ℝ).symm
+  let K := Icc (⟨1 / 2, by norm_num⟩ : {x : ℝ // 0 < x}) ⟨3 / 2, by norm_num⟩
+  have hK : IsCompact K := by
+    apply Topology.IsEmbedding.subtypeVal.isCompact_iff.mpr
+    change IsCompact (Subtype.val '' Icc (⟨1 / 2, by norm_num⟩ : Ioi (0 : ℝ)) ⟨3 / 2, by norm_num⟩)
+    rw [image_subtype_val_Icc]
+    exact isCompact_Icc
+  have hcs : HasCompactSupport (fun g ↦ f (N g)) := by
+    apply HasCompactSupport.intro ((isProperMap_ideleClassNorm ℚ).isCompact_preimage
+      (hK.image e.continuous))
+    intro g hg
+    suffices hb : b (N g) = 0 by simp [f, hb]
+    by_contra hn
+    have hb := subset_tsupport _ hn
+    rw [b.tsupport_eq, Metric.mem_closedBall, Real.dist_eq, abs_le] at hb
+    change -(1 / 2 : ℝ) ≤ N g - 1 ∧ N g - 1 ≤ 1 / 2 at hb
+    apply hg
+    refine ⟨e.symm (ideleClassNorm ℚ g), ?_, e.apply_symm_apply _⟩
+    change (1 / 2 : ℝ) ≤ N g ∧ N g ≤ 3 / 2
+    constructor <;> linarith [hb.1, hb.2]
+  let φ : BruhatCompactSupport C𝔽(ℚ) := ⟨_, (mem_bruhatSmoothSubmodule_iff _).2 hs, hcs⟩
+  have hφ (g : C𝔽(ℚ)) : φ.val g = introTraceTest (1 : PontryaginDual C𝔽(ℚ)) f g := by
+    simp [φ, introTraceTest, N]
+  let ν := normOneIdeleClassTamagawaMeasure ℚ
+  let : CompactSpace (ideleClassNorm ℚ).ker := (ideleClassGroup_finiteness ℚ).2.1
+  let : ν.IsHaarMeasure := (multiplicativeTamagawaMeasures_existsUnique ℚ).exists.choose_spec.2.2.2.1
+  have hvol : (ν univ).toReal ≠ 0 := ENNReal.toReal_ne_zero.mpr ⟨NeZero.ne _, measure_ne_top _ _⟩
+  refine ⟨φ, fun n ↦ ?_⟩
+  rw [(introTraceTest_mellin 1 f φ hφ _).2]
+  apply mul_ne_zero (Complex.ofReal_ne_zero.mpr hvol)
+  change mellin (fun x : ℝ ↦ (x : ℂ) ^ c • (b x : ℂ)) (shift(0, t n)) ≠ 0
+  rw [mellin_cpow_smul]
+  simpa only [Complex.ofReal_zero, zero_add] using hc n
+
+/-- A permutation of any sequence of nonzero samples can move some samples far
+enough out that multiplication by the index no longer tends to zero. -/
+private theorem spectralLineSamples_bad_numbering (v : ℕ → ℂ) (hv : ∀ n, v n ≠ 0) :
+    ∃ σ : Equiv.Perm ℕ, ¬ Tendsto (fun n : ℕ ↦ (n : ℂ) * v (σ n)) atTop (𝓝 0) := by
+  let k (j : ℕ) := ⌈‖v (Nat.pair j 0)‖⁻¹⌉₊
+  let σ := Nat.pairEquiv.symm.trans
+    ((Equiv.prodCongrRight fun j ↦ Equiv.swap (k j) 0).trans Nat.pairEquiv)
+  refine ⟨σ, fun h ↦ ?_⟩
+  obtain ⟨j, hj⟩ := Metric.tendsto_atTop.mp h 1 zero_lt_one
+  let n := Nat.pair j (k j)
+  have he : σ n = Nat.pair j 0 := by
+    change σ (Nat.pairEquiv (j, k j)) = _
+    simp [σ, Equiv.prodCongrRight_apply, Nat.pairEquiv_apply]
+  have hlt := hj n (Nat.left_le_pair j (k j))
+  rw [dist_zero_right, norm_mul, Complex.norm_natCast, he] at hlt
+  have hpos := norm_pos_iff.mpr (hv (Nat.pair j 0))
+  have hle : ‖v (Nat.pair j 0)‖⁻¹ ≤ (n : ℝ) :=
+    (Nat.le_ceil _).trans (by exact_mod_cast Nat.right_le_pair j (k j))
+  exact (not_lt_of_ge ((inv_le_iff_one_le_mul₀ hpos).mp hle)) (by simpa [mul_comm] using hlt)
+
+/-- Paper: Theorem 10.3.1.1, p. 453. Hardy's theorem supplies infinitely many
+ordinates of ordinary Riemann zeta zeros on the critical line. -/
+private theorem spectralLineSamples_hardy :
+    {t : ℝ | riemannZeta (shift(1 / 2, t)) = 0}.Infinite := by
+  sorry
+
+/-- The trivial rational row on the critical line admits a numbering by ℕ. -/
+private theorem spectralLineSamples_enumeration :
+    Nonempty (ℕ ≃ lineZeros((1 : PontryaginDual C𝔽(ℚ)), 1 / 2)) := by
+  let χ : PontryaginDual C𝔽(ℚ) := 1
+  let Z := {z : ℂ | 0 < orderAt(χ, z)}
+  obtain ⟨hL, heq⟩ := continuedCompletedHeckeL_spec χ
+  have hfinite : orderAt(χ, (2 : ℂ)) ≠ ⊤ := by
+    intro h
+    have hp : 0 < orderAt(χ, (2 : ℂ)) := h ▸ WithTop.coe_lt_top (0 : ℤ)
+    have := completedHeckeL_continuation_zeros χ _ hL heq (by norm_num : 0 < (2 : ℂ).re) hp
+    norm_num at this
+  have hdisc : Zᶜ ∈ codiscrete ℂ := by
+    filter_upwards [hL.meromorphicOn.codiscreteWithin_setOfPred_meromorphicOrderAt_eq_zero_or_top] with z hz
+    rcases hz.2 with h | h
+    · simp [Z, h]
+    · exact (hL.meromorphicOn.meromorphicOrderAt_ne_top_of_isPreconnected
+        isPreconnected_univ (mem_univ _) (mem_univ z) hfinite h).elim
+  have hZ := (HereditarilyLindelofSpace.isLindelof Z).countable_of_isDiscrete
+    (compl_mem_codiscrete_iff.mp hdisc).2
+  let U := lineZeros(χ, 1 / 2)
+  let : Countable U := (hZ.preimage (f := fun t : ℝ ↦ shift(1 / 2, t))
+    (by intro x y h; simpa using congrArg Complex.im h)).to_subtype
+  let : Infinite U := (spectralLineSamples_hardy.mono fun t ht ↦
+    spectralLineSelection_mem_lineZeros t ht).to_subtype
+  exact nonempty_equiv_of_countable
+
 /-- Paper: Theorem 10.3.1.1, after (10.3.1.26), p. 453.
 Take F = ℚ, the trivial base character and a = 1/2. Modulate a nonzero smooth radial
 bump in y = log |g| by exp(icy). Its entire transform has discrete real zeros. Avoid the
@@ -1001,7 +1183,28 @@ countably many frequencies c for which a sample is zero. Place infinitely many s
 vⱼ at increasing nonadjacent indices nⱼ ≥ 1/|vⱼ|, leaving infinitely many ordinates for
 the other indices. Then nⱼ|vⱼ| ≥ 1, which violates decay at k = 1. -/
 theorem Printed.spectralLineSamples_rapid_for_any_numbering_false :
-    ¬ Printed.spectralLineSamples_rapid_for_any_numbering := by sorry
+    ¬ Printed.spectralLineSamples_rapid_for_any_numbering := by
+  classical
+  intro hall
+  obtain ⟨χ, hχ⟩ := exists_spectralBasepointChoice ℚ
+  let χ' := Function.update χ 1 (1 : PontryaginDual C𝔽(ℚ))
+  have htriv : χ' 1 = 1 := Function.update_self ..
+  have hχ' : IsSpectralBasepointChoice χ' := by
+    intro ω
+    by_cases h : ω = 1
+    · subst ω
+      rw [htriv]
+      rfl
+    · simpa [χ', Function.update_of_ne h] using hχ ω
+  obtain ⟨e⟩ := spectralLineSamples_enumeration
+  obtain ⟨φ, hφ⟩ := spectralLineSamples_nonvanishing (fun n ↦ (e n).val)
+  let v (n : ℕ) := ∫ g, φ.val g * ideleClassNormTwist (1 : PontryaginDual C𝔽(ℚ))
+    (shift(0, (e n).val)) g ∂ideleClassTamagawaMeasure ℚ
+  obtain ⟨σ, hσ⟩ := spectralLineSamples_bad_numbering v hφ
+  apply hσ
+  have h := hall ℚ χ' hχ' (1 / 2) φ 1
+  rw [htriv] at h
+  simpa only [pow_one, Equiv.trans_apply, v] using h (σ.trans e) 1
 
 /-- Paper: Theorem 10.3.2.1, (10.3.2.10)–(11), p. 455.
 As printed: for each integration-by-parts order N > 1, one constant bounds all admitted
@@ -1027,12 +1230,115 @@ def Printed.spectralStripMellinJet_norm_le : Prop :=
             C * (∏ n ∈ Finset.range N, ((i : ℝ) - (n : ℝ))) / ‖shift(b, t)‖ ^ N
 
 /-- Paper: Theorem 10.3.2.1, (10.3.2.10)–(11), p. 455.
-Take F = ℚ, the trivial base character, a = 1/2, α = 1, s = 2 and N = 2. Let z = iγ
-for the first positive critical-line zeta ordinate γ. The interior multiplicity admits
-i = 0. For φ(g) = h(log |g|) exp(−iγ log |g|), with h a nonnegative smooth bump of
-positive integral, M(φ)(iγ) has positive norm. The n = 0 factor forces the right-hand
-side to vanish for every constant C. -/
+Over ℚ, changing the basepoint of the trivial norm-one character translates its
+critical-line ordinates. At least one of the two certified simple zeros remains at a nonzero ordinate. -/
+private theorem spectralStripMellinJet_norm_le_false_exists_zero
+    (χ : PontryaginDual C₁(ℚ) → PontryaginDual C𝔽(ℚ)) (hχ : IsSpectralBasepointChoice χ) :
+    ∃ (ω : PontryaginDual C₁(ℚ)) (t : ℝ), t ≠ 0 ∧
+      0 < orderAt(χ ω, shift(1 / 2, t)) ∧
+      0 < (orderAt(χ ω, shift(1 / 2, t))).untop₀.toNat := by
+  obtain ⟨r, hr, -⟩ := globalConverse_existsUnique_normTwist (χ 1) (hχ 1)
+  have hgauss : adelicStandardGaussian (χ 1) = adelicStandardGaussian (1 : PontryaginDual C𝔽(ℚ)) := by
+    apply adelicStandardGaussian_eq_of_restriction
+    ext g : 1
+    have hg : (χ 1) g.val = 1 := DFunLike.congr_fun (hχ 1) g
+    change ((χ 1) g.val : ℂ) * _ ^ (0 : ℂ) = (1 : ℂ) * _ ^ (0 : ℂ)
+    simp [hg]
+  have hshift : gaussianCompletedHeckeL (χ 1) =
+      fun z ↦ gaussianCompletedHeckeL (1 : PontryaginDual C𝔽(ℚ)) (z + r * Complex.I) := by
+    funext z
+    unfold gaussianCompletedHeckeL
+    rw [hgauss]
+    exact congrArg _ (by simpa only [zero_add, add_comm ((r : ℂ) * Complex.I) z] using
+      ideleClassNormTwist_add_of_eq hr z)
+  -- Over ℚ the Gaussian normalization has discriminant factor one.
+  have horder (ψ : PontryaginDual C𝔽(ℚ)) (z : ℂ) :
+      orderAt(ψ, z) = meromorphicOrderAt (gaussianCompletedHeckeL ψ) z := by
+    have hC := continuedCompletedHeckeL_spec ψ
+    have hG := globalIdelicZFunction_meromorphic (adelicStandardGaussian ψ) ψ
+    apply meromorphicOrderAt_congr
+    apply meromorphicContinuation_eventuallyEq hC.1.meromorphicOn hG.meromorphicOn _ z
+    intro w hw
+    change continuedCompletedHeckeL ψ w = gaussianCompletedHeckeL ψ w
+    rw [hC.2 ⟨w, hw⟩, gaussianCompletedHeckeL_eq_completedHeckeL ψ w hw]
+    norm_num [Rat.numberField_discr]
+  obtain ⟨u, v, hu, huv, hv, hzeros⟩ := spectralLineBand_jetCount_le_false_low_zeros
+  obtain ⟨s, hs, hsr⟩ : ∃ s : ℝ, (s = u ∨ s = v) ∧ s ≠ r := by
+    by_cases h : u = r
+    · exact ⟨v, Or.inr rfl, by linarith⟩
+    · exact ⟨u, Or.inl rfl, h⟩
+  have hband : s ∈ Icc (-22 : ℝ) 22 := by
+    rcases hs with rfl | rfl <;> constructor <;> linarith
+  have he : shift(1 / 2, (s - r : ℝ)) + (r : ℂ) * Complex.I = shift(1 / 2, s) := by
+    push_cast
+    ring
+  have hone : orderAt(χ 1, shift(1 / 2, (s - r : ℝ))) = 1 := by
+    rw [horder, hshift, meromorphicOrderAt_fun_comp_add_const_eq_meromorphicOrderAt, he,
+      ← horder, hzeros s hband, ite_eq_left (Or.inr (Or.inr hs))]
+  refine ⟨1, s - r, sub_ne_zero.mpr hsr, ?_⟩
+  rw [hone]
+  norm_num
+
+/-- Paper: Theorem 10.3.2.1, (10.3.2.10)–(11), p. 455.
+The compact-character Mellin transform of the printed test is the quantity that the printed
+bound controls. At a prescribed frequency it does not vanish for a suitable test: take the
+test trivial on the norm-one subgroup, with norm profile a nonzero smooth bump multiplied by
+the inverse of the oscillation `r ↦ r ^ (i t)`, so that the Mellin integral at `shift(0, t)`
+becomes the integral of the bump against the multiplicative Haar measure, hence is nonzero.
+Missing input: the construction of an element of `BruhatCompactSupport` from a norm profile
+on the idele class group of `ℚ`, and the identification of `positiveRealHaar` with Lebesgue
+measure in the logarithmic coordinate. -/
+private theorem spectralStripMellinJet_norm_le_false_exists_mellin
+    (τ : ℝ≥0ˣ →ₜ* C𝔽(ℚ)) (ω : PontryaginDual C₁(ℚ)) (t : ℝ) :
+    ∃ φ : BruhatCompactSupport C𝔽(ℚ),
+      (∫ r : ℝ≥0ˣ, ((r.val : ℝ) : ℂ) ^ (shift(0, t)) *
+        (∫ k : C₁(ℚ), (ω k : ℂ) * φ.val (τ r * k.val)
+          ∂normOneIdeleClassTamagawaMeasure ℚ) ∂positiveRealHaar) ≠ 0 := by
+  sorry
+
+/-- Paper: Theorem 10.3.2.1, (10.3.2.10)–(11), p. 455.
+Take F = ℚ, any spectral basepoint choice, a = 1/2, α = 3, s = 2 and N = 2, and test the
+bound at the interior parameter b = 0 and at order i = 0. The order-zero multiplicity is at
+least one at the zero of `spectralStripMellinJet_norm_le_false_exists_zero`, and the factor
+for n = 0 in the falling factorial vanishes, so the right-hand side is zero for every
+constant C. A test as in `spectralStripMellinJet_norm_le_false_exists_mellin` has nonzero
+Mellin value there. -/
 theorem Printed.spectralStripMellinJet_norm_le_false :
-    ¬ Printed.spectralStripMellinJet_norm_le := by sorry
+    ¬ Printed.spectralStripMellinJet_norm_le := by
+  intro h
+  obtain ⟨χ, hχ⟩ := exists_spectralBasepointChoice (F := ℚ)
+  let q : IdeleGroup (𝓞 ℚ) ℚ →ₜ* C𝔽(ℚ) :=
+    ⟨QuotientGroup.mk' _, continuous_quotient_mk'⟩
+  let τ : ℝ≥0ˣ →ₜ* C𝔽(ℚ) :=
+    q.comp ⟨canonicalIdeleNormSection ℚ, canonicalIdeleNormSection_continuous ℚ⟩
+  have hτ : Function.RightInverse τ (ideleClassNorm ℚ) :=
+    canonicalIdeleNormSection_rightInverse ℚ
+  obtain ⟨ω, t, ht, hord, hmult⟩ := spectralStripMellinJet_norm_le_false_exists_zero χ hχ
+  obtain ⟨φ, hφ⟩ := spectralStripMellinJet_norm_le_false_exists_mellin τ ω t
+  obtain ⟨C, hC, hbound⟩ :=
+    h ℚ χ hχ τ hτ (1 / 2) 3 2 (by norm_num) (by norm_num) φ 2 (by norm_num)
+  have hmem : (0 : ℝ) ∈ Set.Icc (-3 : ℝ) 3 := by norm_num
+  have hshift : shift((1 : ℝ) / 2 + 0, t) = shift(1 / 2, t) := by norm_num
+  have hord' : 0 < orderAt(χ ω, shift(1 / 2 + 0, t)) := by rw [hshift]; exact hord
+  have hmult' : 0 < (orderAt(χ ω, shift(1 / 2 + 0, t))).untop₀.toNat := by
+    rw [hshift]; exact hmult
+  have hif : ¬ ((0 : ℝ) = -3 ∨ (0 : ℝ) = 3) := by norm_num
+  have hcount : 0 < (if (0 : ℝ) = -3 ∨ (0 : ℝ) = 3 then
+      min (orderAt(χ ω, shift(1 / 2 + 0, t))).untop₀.toNat (floorCut((2 : ℝ)))
+      else (orderAt(χ ω, shift(1 / 2 + 0, t))).untop₀.toNat) := by
+    simpa only [hif, ite_false] using hmult'
+  have hle := hbound ω 0 t hmem ht hord' 0 hcount
+  have hprod : (∏ n ∈ Finset.range 2, (((0 : ℕ) : ℝ) - ((n : ℕ) : ℝ))) = 0 := by
+    simp [Finset.prod_range_succ]
+  rw [hprod, mul_zero, zero_div] at hle
+  have hnorm : ‖iteratedDeriv 0 ((fun (ω : PontryaginDual C₁(ℚ)) (z : ℂ) ↦
+      ∫ r : ℝ≥0ˣ, ((r.val : ℝ) : ℂ) ^ z *
+        (∫ k : C₁(ℚ), (ω k : ℂ) * φ.val (τ r * k.val)
+          ∂normOneIdeleClassTamagawaMeasure ℚ) ∂positiveRealHaar) ω) (shift(0, t))‖ ≤ 0 := hle
+  have hzero : (∫ r : ℝ≥0ˣ, ((r.val : ℝ) : ℂ) ^ (shift(0, t)) *
+        (∫ k : C₁(ℚ), (ω k : ℂ) * φ.val (τ r * k.val)
+          ∂normOneIdeleClassTamagawaMeasure ℚ) ∂positiveRealHaar) = 0 := by
+    simpa using norm_eq_zero.mp (le_antisymm hnorm (norm_nonneg _))
+  exact hφ hzero
 
 end RiemannMasullo

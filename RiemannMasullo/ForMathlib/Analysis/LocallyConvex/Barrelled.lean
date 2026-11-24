@@ -14,6 +14,36 @@ open Filter Set Topology
 
 namespace RiemannMasullo
 
+/-- On an open set, every derivative of a pointwise holomorphic family of continuous
+linear forms on a barrelled space is again a continuous linear form. -/
+theorem exists_continuousLinearMap_iteratedDeriv_of_analytic
+    {E : Type*} [AddCommGroup E] [Module ℂ E] [UniformSpace E] [IsUniformAddGroup E]
+    [ContinuousSMul ℂ E] [BarrelledSpace ℂ E] (Φ : E → ℂ → ℂ) {U : Set ℂ}
+    (hU : IsOpen U) (hΦ : ∀ f, AnalyticOnNhd ℂ (Φ f) U)
+    (heval : ∀ y ∈ U, ∃ L : E →L[ℂ] ℂ, ∀ f, L f = Φ f y) (n : ℕ) :
+    ∀ y ∈ U, ∃ L : E →L[ℂ] ℂ, ∀ f, L f = iteratedDeriv n (Φ f) y := by
+  classical
+  have analyticDeriv (f : E) {x : ℂ} (hx : x ∈ U) (n : ℕ) : AnalyticAt ℂ (iteratedDeriv n (Φ f)) x := by
+    induction n with
+    | zero => simpa only [iteratedDeriv_zero] using hΦ f x hx
+    | succ n ih => rw [iteratedDeriv_succ]; exact ih.deriv
+  induction n with
+  | zero => exact fun y hy ↦ by simp only [iteratedDeriv_zero]; exact heval y hy
+  | succ n ih =>
+    intro x hx
+    let A (y : ℂ) : E →L[ℂ] ℂ := if hy : y ∈ U then (ih y hy).choose else 0
+    have hA {y : ℂ} (hy : y ∈ U) (f : E) : A y f = iteratedDeriv n (Φ f) y := by
+      simpa only [A, dite_eq_left hy] using (ih y hy).choose_spec f
+    let D (y : ℂ) := (y - x)⁻¹ • (A y - A x)
+    have hlim : Tendsto (fun y f ↦ D y f) (𝓝[≠] x) (𝓝 fun f ↦ iteratedDeriv (n + 1) (Φ f) x) := by
+      refine tendsto_pi_nhds.mpr fun f ↦ ?_
+      have hd := analyticDeriv f hx n
+      rw [iteratedDeriv_succ]
+      refine hd.differentiableAt.hasDerivAt.tendsto_slope.congr' ?_
+      filter_upwards [mem_nhdsWithin_of_mem_nhds (hU.mem_nhds hx)] with y hy
+      simp only [D, smul_apply, sub_apply, hA hy, hA hx, slope, vsub_eq_sub]
+    exact ⟨continuousLinearMapOfTendsto D hlim, fun _ ↦ rfl⟩
+
 /-- A pointwise holomorphic family of functionals on a barrelled space consists of continuous
 linear functionals throughout a connected open set if it does so in a neighborhood of one point. -/
 theorem exists_continuousLinearMap_of_analytic_continuation
@@ -26,28 +56,9 @@ theorem exists_continuousLinearMap_of_analytic_continuation
   let P := {z : ℂ | ∃ L : E →L[ℂ] ℂ, ∀ f, L f = Φ f z}
   let V := interior P ∩ U
   have hV : IsOpen V := isOpen_interior.inter hU
-  have analyticDeriv (f : E) {x : ℂ} (hx : x ∈ U) (n : ℕ) : AnalyticAt ℂ (iteratedDeriv n (Φ f)) x := by
-    induction n with
-    | zero => simpa only [iteratedDeriv_zero] using hΦ f x hx
-    | succ n ih => rw [iteratedDeriv_succ]; exact ih.deriv
-  -- Difference quotients recover the Taylor coefficients wherever the evaluations are continuous.
-  have hcoeff (n : ℕ) : ∀ y ∈ V, ∃ L : E →L[ℂ] ℂ, ∀ f, L f = iteratedDeriv n (Φ f) y := by
-    induction n with
-    | zero => exact fun y hy ↦ by simp only [iteratedDeriv_zero]; exact (interior_subset hy.1 : y ∈ P)
-    | succ n ih =>
-      intro x hx
-      let A (y : ℂ) : E →L[ℂ] ℂ := if hy : y ∈ V then (ih y hy).choose else 0
-      have hA {y : ℂ} (hy : y ∈ V) (f : E) : A y f = iteratedDeriv n (Φ f) y := by
-        simpa only [A, dite_eq_left hy] using (ih y hy).choose_spec f
-      let D (y : ℂ) := (y - x)⁻¹ • (A y - A x)
-      have hlim : Tendsto (fun y f ↦ D y f) (𝓝[≠] x) (𝓝 fun f ↦ iteratedDeriv (n + 1) (Φ f) x) := by
-        refine tendsto_pi_nhds.mpr fun f ↦ ?_
-        have hd := analyticDeriv f hx.2 n
-        rw [iteratedDeriv_succ]
-        refine hd.differentiableAt.hasDerivAt.tendsto_slope.congr' ?_
-        filter_upwards [mem_nhdsWithin_of_mem_nhds (hV.mem_nhds hx)] with y hy
-        simp only [D, smul_apply, sub_apply, hA hy, hA hx, slope, vsub_eq_sub]
-      exact ⟨continuousLinearMapOfTendsto D hlim, fun _ ↦ rfl⟩
+  have hcoeff (n : ℕ) : ∀ y ∈ V, ∃ L : E →L[ℂ] ℂ, ∀ f, L f = iteratedDeriv n (Φ f) y :=
+    exists_continuousLinearMap_iteratedDeriv_of_analytic Φ hV (fun f y hy ↦ hΦ f y hy.2)
+      (fun _ hy ↦ interior_subset hy.1) n
   -- The Taylor series propagates continuity across every ball contained in the domain.
   have hball (y : ℂ) (hy : y ∈ V) {r : ℝ} (hr : Metric.ball y r ⊆ U) : Metric.ball y r ⊆ P := by
     choose A hA using fun n ↦ hcoeff n y hy

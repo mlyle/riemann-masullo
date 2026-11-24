@@ -275,9 +275,11 @@ class AutoMerge(unittest.TestCase):
         self.api.pull_request(7, {LEAN: (OLD, NEW)}, draft=True)
         self.api.pull_request(8, {LEAN: (OLD, NEW)}, labels=["integrator"])
         self.api.pull_request(9, {LEAN: (OLD, NEW)}, verdict="read")
+        self.api.pull_request(10, {LEAN: (OLD, NEW)}, labels=["train"])
         outcomes = self.drain()
         self.assertEqual(self.api.changes, [])
         self.assertNotIn(9, outcomes)
+        self.assertIn("left to the batch", outcomes[10])
 
     def test_check_running_again_or_superseded(self):
         self.api.pull_request(7, {LEAN: (OLD, NEW)}, run=dict(status="in_progress", conclusion=None))

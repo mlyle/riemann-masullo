@@ -24,7 +24,7 @@ attribute [local instance] instIdeleClassMeasurableSpaceSec1 instIdeleClassBorel
 local notation "C𝔽(" F ")" => IdeleClassGroup (𝓞 F) F
 local notation "m𝔽(" F ")" =>
   (⟨ideleClassNorm F, (isProperMap_ideleClassNorm F).continuous⟩ : C𝔽(F) →ₜ* ℝ≥0ˣ)
-local notation "logNorm(" F ")" => (fun g : C𝔽(F) ↦ Real.log ((ideleClassNorm F g).val : ℝ))
+local notation "logNorm(" F ")" => (logIdeleClassNorm F)
 
 /-- Paper: Proof of Proposition 11.2.0.1(2), p. 485. As printed: On each norm-one
 isotype the range of the completed 0-line principal value is the common kernel

@@ -3249,7 +3249,8 @@ private theorem partialTensor_schwartz (S : Finset V) (A : Arch) (p : (v : S) �
   apply congrArg (fun z : SAdeleRing F ∅ ↦ A (Multiplicative.ofAdd z))
   exact Prod.ext rfl (Subsingleton.elim _ _)
 
-private theorem partialTensor_integrable (S : Finset V) (f : SchwartzBruhat (Multiplicative (SAdeleRing F S))) :
+/-- A Schwartz-Bruhat function on the `S`-adeles is integrable for the additive Tamagawa measure. -/
+theorem partialTensor_integrable (S : Finset V) (f : SchwartzBruhat (Multiplicative (SAdeleRing F S))) :
     Integrable (fun x ↦ f (Multiplicative.ofAdd x)) (sAdditiveTamagawaMeasure F S) := by
   let G := Multiplicative (SAdeleRing F S)
   let m : Measure G := sAdditiveTamagawaMeasure F S
@@ -3324,7 +3325,9 @@ private theorem finiteFT_continuous (v : V) (f : v.adicCompletion F → ℂ) (hf
   · exact (hf.integrable_of_hasCompactSupport (μ := μ) hc).norm
   · exact ae_of_all μ fun x ↦ continuous_const.mul (hcont.comp (continuous_const.mul continuous_id)).star
 
-private theorem integralTail_iff (S : Finset V) (x : AdeleRing (𝓞 F) F) :
+/-- An adele lies in `integralAdelesOutside F S` exactly when each of its components outside `S` is
+a local integer. -/
+theorem integralTail_iff (S : Finset V) (x : AdeleRing (𝓞 F) F) :
     x ∈ integralAdelesOutside F S ↔ ∀ v ∉ S, x.2 v ∈ v.adicCompletionIntegers F := by
   simp only [integralAdelesOutside, Subring.mem_iInf]
   rfl
@@ -4940,9 +4943,9 @@ private theorem scaledArchGamma_reflection_bound (q d : ℝ) (hq : 0 < q) (hd : 
     _ ≤ _ := mul_le_mul_of_nonneg_right
       (mul_le_mul_of_nonneg_left (hweight.trans (le_max_right _ _)) hC.le) (Real.rpow_nonneg hspos.le _)
 
-/-- Multiply the local estimates, adding the exponents with the multiplicities of
-the infinite places. Their sum is the degree of the number field. -/
-private theorem heckeGamma_reflection_bound (χ : U[F]) (a b : ℝ) :
+/-- On a closed vertical strip at large absolute height, the reflected Hecke gamma
+ratio has polynomial bound with exponent `[F : ℚ] * (1 / 2 - Re(s))`. -/
+theorem heckeGamma_reflection_bound (χ : U[F]) (a b : ℝ) :
     ∃ C T : ℝ, 0 < C ∧ 0 < T ∧ ∀ s : ℂ, a ≤ s.re → s.re ≤ b → T ≤ |s.im| →
       ‖heckeGammaFactor χ⁻¹ (1 - s) / heckeGammaFactor χ s‖ ≤
         C * |s.im| ^ ((Module.finrank ℚ F : ℝ) * (1 / 2 - s.re)) := by
@@ -4996,6 +4999,9 @@ private theorem heckeGamma_reflection_bound (χ : U[F]) (a b : ℝ) :
     _ = _ := by
       rw [Finset.prod_mul_distrib, ← Real.rpow_sum_of_pos hpos, ← Finset.sum_mul,
         ← Nat.cast_sum, InfinitePlace.sum_mult_eq]
+
+/-- The reflected Hecke gamma ratio has polynomial growth on every closed vertical strip. -/
+alias heckeGammaFactor_reflection_bound_on_strip := heckeGamma_reflection_bound
 
 /-- Paper: Equation (3.2.1.10), p. 124. On a fixed closed vertical strip with
 nonnegative real part, the reflection multiplier satisfies the stated power bound

@@ -187,6 +187,54 @@ def sAdeleSchwartzFourier (f : ℬ(Aₛ)) : ℬ(Aₛ) :=
   ⟨fun y ↦ tamagawaFourier (sAdditiveTamagawaMeasure F S) (sAdeleStandardCharacter F S)
     (fun x ↦ f (Multiplicative.ofAdd x)) y.toAdd, sAdeleSchwartzFourier_mem f⟩
 
+open Classical in
+/-- Paper: Theorem 2.2.3.2, p. 82. Fourier transformation of an S-adelic test
+inserted with the integer tail multiplies its local transform by the tail mass
+on the inverse different and vanishes elsewhere. -/
+theorem adeleSchwartzFourier_sAdeleSchwartzToGlobal :
+    ∃ c : ℝ≥0, c ≠ 0 ∧ ∀ (h : ℬ(Aₛ)) (y : AdeleRing (𝓞 F) F),
+      adeleSchwartzFourier (sAdeleSchwartzToGlobal F S h) (Multiplicative.ofAdd y) =
+        if ∀ v : HeightOneSpectrum (𝓞 F), v ∉ S →
+          ‖y.2 v‖ ≤ (v.asIdeal.absNorm : ℝ) ^ multiplicity v.asIdeal (differentIdeal ℤ (𝓞 F)) then
+          (c : ℝ) • sAdeleSchwartzFourier h (Multiplicative.ofAdd (adeleProjection F S y))
+        else 0 := by
+  classical
+  obtain ⟨c, hc, _, hp, _⟩ := sAdeleProjection_dual_masses F S
+  refine ⟨c, hc, fun h y ↦ ?_⟩
+  let G := Multiplicative Aₛ
+  let μ : Measure G := sAdditiveTamagawaMeasure F S
+  have hG := sAdele_fourierMeasure (F := F) (S := S)
+  let : T2Space G := hG.1
+  let : LocallyCompactSpace G := hG.2.1
+  let : BorelSpace G := hG.2.2.1
+  let : μ.IsHaarMeasure := hG.2.2.2.1
+  let f := fun x : Aₛ ↦ h (Multiplicative.ofAdd x)
+  let I := integralAdelesOutside F S
+  let p := adeleProjection F S
+  have he : (fun x ↦ sAdeleSchwartzToGlobal F S h (Multiplicative.ofAdd x)) =
+      (I : Set (AdeleRing (𝓞 F) F)).indicator (f ∘ p) := by
+    funext x
+    rw [sAdeleSchwartzToGlobal_apply]
+    have hi : x ∈ I ↔ ∀ v ∉ S, x.2 v ∈ v.adicCompletionIntegers F := by
+      simp only [I, integralAdelesOutside, Subring.mem_iInf]
+      rfl
+    by_cases hx : x ∈ I
+    · rw [ite_eq_left (hi.mp hx), indicator_of_mem hx]
+      rfl
+    · rw [ite_eq_right (hi.not.mp hx), indicator_of_notMem hx]
+  let : MeasurableSpace (AdeleRing (𝓞 F) F) := borel _
+  let ft := tamagawaFourier (additiveTamagawaMeasure F) (adeleStandardCharacter F)
+  change ft (fun x ↦ sAdeleSchwartzToGlobal F S h (Multiplicative.ofAdd x)) y = _
+  rw [he]
+  have ht := congrFun (tamagawaFourier_sAdeleLift F S c hp f (SchwartzBruhat.integrable μ h)) y
+  refine ht.trans ?_
+  split
+  · rename_i hy
+    rw [indicator_of_mem (show y ∈ sAdeleTailDual F S from hy)]
+    rfl
+  · rename_i hy
+    exact indicator_of_notMem (show y ∉ sAdeleTailDual F S from hy) _
+
 /-- Paper: §3.3.1, p. 128. The Fourier transform at zero integrates the
 test function against the additive Tamagawa measure. -/
 theorem sAdeleSchwartzFourier_apply_zero (f : ℬ(Aₛ)) :
@@ -211,6 +259,44 @@ theorem sAdeleSchwartzFourier_apply_zero (f : ℬ(Aₛ)) :
       (Finset.prod_eq_one fun _ _ ↦ h0)).trans (one_mul 1)
   change tamagawaFourier _ _ _ (0 : Aₛ) = _
   simp [tamagawaFourier, hS]
+
+/-- Integer-indicator insertion multiplies Fourier evaluation at zero by the
+same nonzero additive tail mass for every local test. -/
+theorem sAdeleSchwartzToGlobal_fourier_zero_scale :
+    ∃ c : ℂ, c ≠ 0 ∧ ∀ f : ℬ(Aₛ),
+      adeleSchwartzFourier (sAdeleSchwartzToGlobal F S f) (Multiplicative.ofAdd 0) =
+        c * sAdeleSchwartzFourier f (Multiplicative.ofAdd 0) := by
+  classical
+  obtain ⟨c, hc, -, hm, -⟩ := sAdeleProjection_dual_masses F S
+  refine ⟨((c : ℝ) : ℂ), by exact_mod_cast hc, fun f ↦ ?_⟩
+  let (w : InfinitePlace F) : BorelSpace w.Completion := ⟨rfl⟩
+  let (w : InfinitePlace F) : SecondCountableTopology w.Completion :=
+    (InfinitePlace.Completion.isometry_extensionEmbedding w).isEmbedding.secondCountableTopology
+  let (v : HeightOneSpectrum (𝓞 F)) : BorelSpace (v.adicCompletion F) := ⟨rfl⟩
+  let (v : HeightOneSpectrum (𝓞 F)) : ProperSpace (v.adicCompletion F) := properSpace_adicCompletion v
+  let : BorelSpace Aₛ := inferInstanceAs
+    (BorelSpace (((w : InfinitePlace F) → w.Completion) × ((v : S) → v.val.adicCompletion F)))
+  let : MeasurableSpace (AdeleRing (𝓞 F) F) := borel _
+  let : BorelSpace (AdeleRing (𝓞 F) F) := ⟨rfl⟩
+  let I := (integralAdelesOutside F S : Set (AdeleRing (𝓞 F) F))
+  let z (y : Aₛ) := f (Multiplicative.ofAdd y)
+  have hf : (fun x ↦ sAdeleSchwartzToGlobal F S f (Multiplicative.ofAdd x)) =
+      I.indicator (z ∘ adeleProjection F S) := by
+    funext x
+    have hI : x ∈ I ↔ ∀ v ∉ S, x.2 v ∈ v.adicCompletionIntegers F := by
+      change x ∈ integralAdelesOutside F S ↔ _
+      simp only [integralAdelesOutside, Subring.mem_iInf]
+      rfl
+    rw [sAdeleSchwartzToGlobal_apply, indicator_apply, hI]
+    rfl
+  rw [(adeleSchwartzFourier_apply_zero _).2, sAdeleSchwartzFourier_apply_zero, hf,
+    integral_indicator (isOpen_integralAdelesOutside F S).measurableSet]
+  have hZ : Continuous z := (schwartzBruhat_continuous f).comp continuous_ofAdd
+  have he := integral_map (μ := (additiveTamagawaMeasure F).restrict I)
+    hm.measurable.aemeasurable (f := z)
+    (by rw [hm.map_eq]; exact hZ.aestronglyMeasurable)
+  refine he.symm.trans ?_
+  rw [hm.map_eq, integral_smul_nnreal_measure, NNReal.smul_def, Complex.real_smul]
 
 /-- Paper: Equation (3.3.1.1), p. 129. The S-local zeta integral weights
 the restriction of the test function to the S-ideles by the quasi-character. -/
@@ -2367,7 +2453,7 @@ private theorem sLocal_functionalEquation_of_tensor (χ : PontryaginDual Jₛ) (
 
 /-- Self-duality carries the continuous Fourier map on the Pontryagin dual
 back to the S-adelic Schwartz space. -/
-private theorem sLocal_fourier_continuousLinear :
+theorem sLocal_fourier_continuousLinear :
     ∃ T : ℬ(Aₛ) →L[ℂ] ℬ(Aₛ), ∀ f, T f = sAdeleSchwartzFourier f := by
   let G := Multiplicative Aₛ
   let μ : Measure G := sAdditiveTamagawaMeasure F S
@@ -2548,14 +2634,12 @@ private theorem sLocalIdelicZetaIntegral_exists_chartContinuation (f : ℬ(Aₛ)
 unitary character, with real exponent its abscissa. -/
 private theorem sLocal_exists_chart (c : Xₛ) :
     ∃ (χ : PontryaginDual Jₛ) (s : ℂ), c = chartₛ(χ) s := by
-  have : IsClosed ((Subgroup.map (Units.map (RingHom.toMonoidHom (RingHom.comp
-      (adeleProjection F S) (Subring.subtype (integralAdelesOutside F S)))))
-      (MonoidHom.range (Units.map (RingHom.toMonoidHom (integralAdeleDiagonal F S))))) :
+  have : IsClosed ((sProjectedDiagonal F S) :
         Set Iₛ) := by
     let p := (adeleProjection F S).comp (integralAdelesOutside F S).subtype
     let d := p.comp (integralAdeleDiagonal F S)
     obtain ⟨hd, hc, _⟩ := sAdele_additive_quotient F S
-    rw [MonoidHom.map_range]
+    rw [sProjectedDiagonal, MonoidHom.map_range]
     exact isClosed_range_unitsMap d.toMonoidHom hd hc
   have : LocallyCompactSpace Iₛ := (sIdeleGroup_description F S).2.2.1
   have hp := isProperMap_sIdeleQuotientNorm F S
@@ -2654,10 +2738,7 @@ theorem sLocalIdelicZFunction_poles (f : ℬ(Aₛ)) (χ : PontryaginDual Jₛ) (
   rw [meromorphicOrderAt_congr heq, meromorphicOrderAt_mul (hR s) hD.meromorphicAt]
   exact (min_le_right _ _).trans (le_add_of_nonneg_right hD.meromorphicOrderAt_nonneg)
 
-local notation "diagₛ" =>
-  Subgroup.map (Units.map (RingHom.toMonoidHom (RingHom.comp (adeleProjection F S)
-    (Subring.subtype (integralAdelesOutside F S)))))
-    (MonoidHom.range (Units.map (RingHom.toMonoidHom (integralAdeleDiagonal F S))))
+local notation "diagₛ" => sProjectedDiagonal F S
 
 /-- Paper: Equation (3.1.2.1), p. 120. The projected diagonal S-units are closed in the
 S-ideles. -/
@@ -2665,7 +2746,7 @@ theorem isClosed_sProjectedDiagonal : IsClosed (diagₛ : Set Iₛ) := by
   let p := (adeleProjection F S).comp (integralAdelesOutside F S).subtype
   let d := p.comp (integralAdeleDiagonal F S)
   obtain ⟨hd, hc, _⟩ := sAdele_additive_quotient F S
-  rw [MonoidHom.map_range]
+  rw [sProjectedDiagonal, MonoidHom.map_range]
   exact isClosed_range_unitsMap d.toMonoidHom hd hc
 
 /-- Paper: Equation (3.1.2.1), p. 120. The projected diagonal S-units are discrete, since

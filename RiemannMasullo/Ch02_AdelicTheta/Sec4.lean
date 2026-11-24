@@ -184,10 +184,7 @@ variable (S : Finset (HeightOneSpectrum (𝓞 ℚ)))
 
 local notation "A" => SAdeleRing ℚ S
 local notation "U" => (Set.integer (S : Set (HeightOneSpectrum (𝓞 ℚ))) ℚ)ˣ
-local notation "unitAtS" =>
-  MonoidHom.comp (Units.map (RingHom.toMonoidHom (RingHom.comp (adeleProjection ℚ S)
-    (Subring.subtype (integralAdelesOutside ℚ S)))))
-    (Units.map (RingHom.toMonoidHom (integralAdeleDiagonal ℚ S)))
+local notation "unitAtS" => sUnitEmbedding ℚ S
 local notation "ratNorm" => fun (g : Aˣ) ↦ ((Units.val (sIdeleNorm ℚ S g) : ℝ≥0) : ℝ)
 local notation "w" => Rat.infinitePlace
 
@@ -495,10 +492,7 @@ section LogGrowth
 open scoped Classical
 
 local notation "Uₛ" => (Set.integer (S : Set (HeightOneSpectrum (𝓞 F))) F)ˣ
-local notation "unitAtS" =>
-  MonoidHom.comp (Units.map (RingHom.toMonoidHom (RingHom.comp (adeleProjection F S)
-    (Subring.subtype (integralAdelesOutside F S)))))
-    (Units.map (RingHom.toMonoidHom (integralAdeleDiagonal F S)))
+local notation "unitAtS" => sUnitEmbedding F S
 local notation "sRank" => (Fintype.card (InfinitePlace F) + S.card - 1)
 
 /-- For every translate of the diagonal S-units, the set with all normalized logarithms

@@ -1,13 +1,19 @@
 module
 
+import RiemannMasullo.ForMathlib.Analysis.LocallyConvex.MittagLefflerLift
+import Mathlib.Analysis.SpecialFunctions.Pow.Asymptotics
+
 import all RiemannMasullo.Ch05_ThetaZSpaces.Sec1
 import all RiemannMasullo.Ch05_ThetaZSpaces.Sec2
 import all RiemannMasullo.Ch05_ThetaZSpaces.Sec5
+import RiemannMasullo.Ch06_LocalGlobal.Sec2
+import RiemannMasullo.Ch06_LocalGlobal.Sec3
 import all RiemannMasullo.Ch07_SchauderBasesZeta.Sec2
 
 public import RiemannMasullo.Ch07_SchauderBasesZeta.Sec3a
 import RiemannMasullo.ForMathlib.NumberTheory.NumberField.Completion.FinitePlace
 import RiemannMasullo.ForMathlib.MeasureTheory.Integral.ProdPi
+import RiemannMasullo.ForMathlib.Analysis.SpecialFunctions.Complex.ExpPolynomial
 
 import all RiemannMasullo.Ch03_IdelicZeta.Sec3
 
@@ -194,7 +200,7 @@ private theorem sLocalPWTests_moments_surjective_zero_bump_modulate
 Every neighborhood of zero contains the support of a compact Schwartz–Bruhat
 bump vanishing at zero and having nonzero additive Tamagawa integral.
 One can place a nonnegative bump near a nonzero point in the neighborhood. -/
-private theorem sLocalPWTests_moments_surjective_zero_bump
+theorem sLocalPWTests_moments_surjective_zero_bump
     {F : Type*} [Field F] [NumberField F]
     (S : Finset (HeightOneSpectrum (𝓞 F))) (K : Set (SAdeleRing F S)) (hK : K ∈ 𝓝 0) :
     ∃ h : SchwartzBruhat (Multiplicative (SAdeleRing F S)),
@@ -630,6 +636,321 @@ theorem sLocalAbsolutePW_mono (hST : S ⊆ T) {X Y : ℝ} (_hXY : X ≤ Y)
     Submodule.map_mono (Submodule.span_mono hgen)
   exact Submodule.topologicalClosure_mono (Submodule.map_mono (inf_le_inf htests le_rfl))
 
+private theorem sLocalZeroMomentTheta_eq_top_of_translate
+    {E W : Type*} [AddCommGroup E] [Module ℂ E] [AddCommGroup W] [Module ℂ W]
+    (p : E →ₗ[ℂ] ℂ × ℂ) (θ : E →ₗ[ℂ] W) (t : E → E)
+    (a b : ℂ) (ha : a ≠ 1) (hab : a ≠ b)
+    (hp : ∀ f, p (t f) = ((p f).1, b * (p f).2)) (hθ : ∀ f, θ (t f) = a • θ f) :
+    p.ker.map θ.ker.mkQ = ⊤ := by
+  apply top_unique
+  rintro x -
+  obtain ⟨f, rfl⟩ := θ.ker.mkQ_surjective x
+  -- The first difference kills evaluation at zero. The second kills the Fourier value at zero.
+  let k := t f - f
+  let h := t k - b • k
+  have hk : (p k).1 = 0 := by simp [k, hp]
+  have hh : h ∈ p.ker := by
+    change p (t k - b • k) = 0
+    rw [map_sub, map_smul, hp, sub_eq_zero]
+    exact Prod.ext (by simp [hk]) (by simp)
+  have hθk : θ k = (a - 1) • θ f := by simp [k, hθ, sub_smul]
+  have hθh : θ h = ((a - b) * (a - 1)) • θ f := by
+    change θ (t k - b • k) = _
+    rw [map_sub, map_smul, hθ, ← sub_smul, hθk, smul_smul]
+  let c := (a - b) * (a - 1)
+  have hc : c ≠ 0 := mul_ne_zero (sub_ne_zero.mpr hab) (sub_ne_zero.mpr ha)
+  refine ⟨c⁻¹ • h, p.ker.smul_mem _ hh, ?_⟩
+  simp only [Submodule.mkQ_apply, Submodule.Quotient.eq]
+  change θ (c⁻¹ • h - f) = 0
+  rw [map_sub, map_smul, hθh]
+  change c⁻¹ • (c • θ f) - θ f = 0
+  rw [inv_smul_smul₀ hc, sub_self]
+
+open MeasureTheory in
+private theorem sLocalZeroMomentTheta_eq_top_fourier {F : Type*} [Field F] [NumberField F]
+    {T : Finset (HeightOneSpectrum (𝓞 F))} (u : (SAdeleRing F T)ˣ) :
+    ∃ b : ℝ≥0, ∀ f : SchwartzBruhat (Multiplicative (SAdeleRing F T)),
+      sAdeleSchwartzFourier (schwartzBruhatUnitTranslate u f) (Multiplicative.ofAdd 0) =
+        ((b : ℝ) : ℂ) * sAdeleSchwartzFourier f (Multiplicative.ofAdd 0) := by
+  let A := SAdeleRing F T
+  let G := Multiplicative A
+  let (w : InfinitePlace F) : MeasurableSpace w.Completion := borel _
+  let (v : HeightOneSpectrum (𝓞 F)) : MeasurableSpace (v.adicCompletion F) := borel _
+  let : MeasurableSpace (InfiniteAdeleRing F) :=
+    inferInstanceAs (MeasurableSpace ((w : InfinitePlace F) → w.Completion))
+  let : MeasurableSpace A :=
+    inferInstanceAs (MeasurableSpace (InfiniteAdeleRing F × ((v : T) → v.val.adicCompletion F)))
+  let μ : Measure G := sAdditiveTamagawaMeasure F T
+  obtain ⟨hT₂, hLC, hBor, hHaar, hReg⟩ := sAdele_fourierMeasure (F := F) (S := T)
+  let : T2Space G := hT₂
+  let : LocallyCompactSpace G := hLC
+  let : BorelSpace G := hBor
+  let : μ.IsHaarMeasure := hHaar
+  let : μ.Regular := hReg
+  let d : G ≃ₜ* G :=
+    { toFun := fun x ↦ Multiplicative.ofAdd ((↑u⁻¹ : A) * x.toAdd)
+      invFun := fun x ↦ Multiplicative.ofAdd ((u : A) * x.toAdd)
+      left_inv := fun x ↦ Multiplicative.ext (by simp [← mul_assoc])
+      right_inv := fun x ↦ Multiplicative.ext (by simp [← mul_assoc])
+      map_mul' := fun x y ↦ Multiplicative.ext (mul_add _ _ _)
+      continuous_toFun := continuous_ofAdd.comp (continuous_const.mul continuous_toAdd)
+      continuous_invFun := continuous_ofAdd.comp (continuous_const.mul continuous_toAdd) }
+  -- Dilation sends additive Haar measure to a nonnegative multiple of itself.
+  let ν := μ.map d
+  let : ν.IsHaarMeasure := d.isHaarMeasure_map μ
+  let : ν.Regular := Measure.Regular.map d.toHomeomorph
+  refine ⟨ν.haarScalarFactor μ, fun f ↦ ?_⟩
+  rw [sAdeleSchwartzFourier_apply_zero, sAdeleSchwartzFourier_apply_zero]
+  change (∫ x : G, f (d.toHomeomorph.toMeasurableEquiv x) ∂μ) = _ * ∫ x : G, f x ∂μ
+  rw [← integral_map_equiv d.toHomeomorph.toMeasurableEquiv (fun x ↦ f x)]
+  change (∫ x : G, f x ∂ν) = _
+  calc
+    _ = ∫ x : G, f x ∂(ν.haarScalarFactor μ • μ) :=
+      congrArg (fun m : Measure G ↦ ∫ x : G, f x ∂m)
+        (Measure.isMulLeftInvariant_eq_smul_of_regular ν μ)
+    _ = _ := by
+      rw [integral_smul_nnreal_measure]
+      rfl
+
+/-- Paper: Equation (7.3.3.25), p. 363.
+For a nontrivial norm-one character the tests with both zero moments
+have the same homogeneous theta image as the unrestricted tests. -/
+theorem sLocalZeroMomentTheta_eq_top (ω : PontryaginDual J₁(T)) (_hω : ω ≠ 1) :
+    (Z₀(T)).map (q(T, ω)) = ⊤ := by
+  have hex : ∃ h : J₁(T), (ω h : ℂ) ≠ 1 :=
+    not_forall.mp fun hall ↦ _hω (PontryaginDual.ext fun x ↦ Subtype.ext (hall x))
+  obtain ⟨h, hh⟩ := hex
+  obtain ⟨u, hu⟩ := QuotientGroup.mk_surjective h.val
+  obtain ⟨b, hb⟩ := sLocalZeroMomentTheta_eq_top_fourier u
+  have hne : (ω h : ℂ) ≠ ((b : ℝ) : ℂ) := by
+    intro he
+    have hb1 : (b : ℝ) = 1 :=
+      (Real.norm_of_nonneg b.property).symm.trans
+        ((Complex.norm_real _).symm.trans ((congrArg norm he).symm.trans (Circle.norm_coe _)))
+    exact hh (he.trans (by exact_mod_cast hb1))
+  apply sLocalZeroMomentTheta_eq_top_of_translate
+    ((sAdelePolarValues_isLinear (F := F) (S := T)).mk' _)
+    (sLocalHomogeneousAdelicThetaLinearMap F T ω)
+    (schwartzBruhatUnitTranslate u) (ω h : ℂ) ((b : ℝ) : ℂ) hh hne
+  · intro f
+    apply Prod.ext
+    · exact congrArg f (congrArg Multiplicative.ofAdd (mul_zero _))
+    · exact hb f
+  · exact sLocalHomogeneousTheta_unitTranslate ω h u hu
+
+
+/-- Fourier inversion gives a continuous inverse on the local test space. -/
+private theorem sLocalAbsolutePW_fourier_inv (f : B(S)) :
+    sAdeleSchwartzFourier (sAdeleSchwartzFourier (sAdeleSchwartzFourier
+      (sAdeleSchwartzFourier f))) = f := by
+  apply Subtype.ext
+  funext x
+  exact (sLocal_fourier_inversion (sAdeleSchwartzFourier (sAdeleSchwartzFourier f))
+    x.toAdd).trans ((sLocal_fourier_inversion f (-x.toAdd)).trans
+      (congrArg (fun y ↦ f (Multiplicative.ofAdd y)) (neg_neg x.toAdd)))
+
+private theorem sLocalAbsolutePW_transition_self (f : B(S)) : sAdeleSchwartzTransition F (le_rfl (a := S)) f = f := by
+  classical
+  apply Subtype.ext
+  funext x
+  rw [← show Multiplicative.ofAdd x.toAdd = x from rfl, sAdeleSchwartzTransition_apply,
+    ite_eq_left (fun w hw ↦ (hw w.property).elim)]
+
+/-- Tests with compact Fourier support approximate every local test. -/
+private theorem sLocalAbsolutePW_fourier_compact_seq (f : B(S)) :
+    ∃ fₙ : ℕ → B(S), (∀ n, HasCompactSupport (sAdeleSchwartzFourier (fₙ n)).val) ∧
+      Tendsto fₙ atTop (𝓝 f) := by
+  obtain ⟨L, hL⟩ := sLocal_fourier_continuousLinear (F := F) (S := S)
+  obtain ⟨u, hu, ht⟩ := exists_sAdeleSchwartz_compact_support_seq (sAdeleSchwartzFourier f)
+  let M := L.comp (L.comp L)
+  have hM (g : B(S)) : M g = sAdeleSchwartzFourier (sAdeleSchwartzFourier (sAdeleSchwartzFourier g)) := by
+    change L (L (L g)) = _
+    rw [hL, hL, hL]
+  refine ⟨M ∘ u, fun n ↦ ?_, ?_⟩
+  · change HasCompactSupport (sAdeleSchwartzFourier (M (u n))).val
+    rw [hM, sLocalAbsolutePW_fourier_inv]
+    exact hu n
+  · have he := M.continuous.continuousAt.tendsto.comp ht
+    rwa [hM, sLocalAbsolutePW_fourier_inv] at he
+
+/-- The two zero moments can be imposed by subtracting fixed tests whose Fourier
+transforms are compactly supported. -/
+private theorem sLocalAbsolutePW_fourier_compact_seq_polar (f : Z₀(S)) :
+    ∃ fₙ : ℕ → B(S), (∀ n, fₙ n ∈ Z₀(S) ∧ HasCompactSupport (sAdeleSchwartzFourier (fₙ n)).val) ∧
+      Tendsto fₙ atTop (𝓝 f.val) := by
+  obtain ⟨L, hL⟩ := sLocal_fourier_continuousLinear (F := F) (S := S)
+  let P (g : B(S)) := g (Multiplicative.ofAdd 0)
+  let Q (g : B(S)) := L g (Multiplicative.ofAdd 0)
+  let K : Set (SAdeleRing F S) := univ
+  obtain ⟨a, haK, haP, haQ⟩ := sLocalPWTests_moments_surjective (F := F) (S := S) (T := S)
+    le_rfl K univ_mem 1 0
+  obtain ⟨b, hbK, hbP, hbQ⟩ := sLocalPWTests_moments_surjective (F := F) (S := S) (T := S)
+    le_rfl K univ_mem 0 1
+  have hc (z : B(S)) (hz : z ∈ sLocalPWTests le_rfl K) :
+      HasCompactSupport (L z).val := by
+    obtain ⟨w, hw, hwc, -⟩ := (mem_sLocalPWTests le_rfl K z).mp hz
+    rw [sLocalAbsolutePW_transition_self] at hw
+    rw [hL, ← hw]
+    exact hwc
+  obtain ⟨u, hu, ht⟩ := sLocalAbsolutePW_fourier_compact_seq f.val
+  let r (g : B(S)) := g - P g • a - Q g • b
+  have hP : Continuous P := continuous_sAdeleSchwartz_eval 0
+  have hQ : Continuous Q := hP.comp L.continuous
+  have hr : Continuous r := (continuous_id.sub (hP.smul continuous_const)).sub (hQ.smul continuous_const)
+  have hf := (mem_sAdelePolarSubspace f.val).mp f.property
+  have hrf : r f.val = f.val := by
+    change f.val - (f.val (Multiplicative.ofAdd 0)) • a - (L f.val (Multiplicative.ofAdd 0)) • b = f.val
+    rw [hL, hf.1, hf.2, zero_smul, zero_smul, sub_zero, sub_zero]
+  refine ⟨r ∘ u, fun n ↦ ?_, ?_⟩
+  · have he : L (r (u n)) = L (u n) - P (u n) • L a - Q (u n) • L b := by
+      change L (u n - P (u n) • a - Q (u n) • b) = _
+      simp only [map_sub, map_smul]
+    change r (u n) ∈ Z₀(S) ∧ HasCompactSupport (sAdeleSchwartzFourier (r (u n))).val
+    constructor
+    · apply (mem_sAdelePolarSubspace _).mpr
+      constructor
+      · change P (u n) - P (u n) * a (Multiplicative.ofAdd 0) -
+          Q (u n) * b (Multiplicative.ofAdd 0) = 0
+        rw [haP, hbP, mul_one, mul_zero, sub_self, sub_zero]
+      · rw [← hL, he]
+        change Q (u n) - P (u n) * L a (Multiplicative.ofAdd 0) -
+          Q (u n) * L b (Multiplicative.ofAdd 0) = 0
+        rw [hL, hL, haQ, hbQ, mul_zero, mul_one, sub_zero, sub_self]
+    · rw [← hL, he]
+      have huc : HasCompactSupport (L (u n)).val := (hL (u n)).symm ▸ hu n
+      exact (huc.sub ((hc a haK).smul_left (f := fun _ ↦ P (u n)))).sub
+        ((hc b hbK).smul_left (f := fun _ ↦ Q (u n)))
+  · have h := hr.continuousAt.tendsto.comp ht
+    rwa [hrf] at h
+
+/-- A compact set is contained in a sufficiently large Fourier box. -/
+private theorem sLocalAbsolutePW_compact_box {K : Set (Multiplicative (SAdeleRing F S))}
+    (hK : IsCompact K) : ∃ X > 0, K ⊆ Multiplicative.toAdd ⁻¹' sLocalPWBox S X := by
+  let N (x : SAdeleRing F S) :=
+    (∑ w : InfinitePlace F, ‖x.1 w‖ ^ w.mult) + ∑ v : S, ‖x.2 v‖
+  have hN : Continuous N := (continuous_finsetSum _ fun w _ ↦
+    ((continuous_apply w).comp continuous_fst).norm.pow w.mult).add
+      (continuous_finsetSum _ fun v _ ↦ ((continuous_apply v).comp continuous_snd).norm)
+  obtain ⟨R, hR⟩ := (hK.image (hN.comp continuous_toAdd)).bddAbove
+  refine ⟨max R 1, zero_lt_one.trans_le (le_max_right _ _), fun x hx ↦ ?_⟩
+  have hxR : N x.toAdd ≤ max R 1 := (hR (mem_image_of_mem _ hx)).trans (le_max_left _ _)
+  refine ⟨fun w ↦ ?_, fun v ↦ ?_⟩
+  · exact (Finset.single_le_sum (fun i _ ↦ by positivity) (Finset.mem_univ w)).trans
+      ((le_add_of_nonneg_right (Finset.sum_nonneg fun _ _ ↦ norm_nonneg _)).trans hxR)
+  · exact (Finset.single_le_sum (fun i _ ↦ norm_nonneg _) (Finset.mem_univ v)).trans
+      ((le_add_of_nonneg_left (Finset.sum_nonneg fun _ _ ↦ by positivity)).trans hxR)
+
+private theorem sLocalAbsolutePW_insert_polar (hST : S ⊆ T) (f : B(S)) :
+    Π(hST) f ∈ Z₀(T) ↔ f ∈ Z₀(S) := by
+  classical
+  obtain ⟨c, hc, hF⟩ := sLocalPWTests_moments_surjective_transition (F := F) hST
+  have h0 : Π(hST) f (Multiplicative.ofAdd 0) = f (Multiplicative.ofAdd 0) := by
+    rw [sAdeleSchwartzTransition_apply, ite_eq_left (fun w _ ↦ (w.val.adicCompletionIntegers F).zero_mem)]
+    rfl
+  rw [mem_sAdelePolarSubspace, mem_sAdelePolarSubspace, h0, hF, mul_eq_zero, or_iff_right hc]
+
+open MeasureTheory in
+/-- On the trivial local component the theta kernel has both moments zero, as
+seen by continuing the class into the global trivial-character residue map. -/
+private theorem sLocalAbsolutePW_trivial_kernel_polar (f : B(T))
+    (hf : f ∈ (sLocalHomogeneousAdelicThetaLinearMap F T 1).ker) :
+    f ∈ Z₀(T) := by
+  let c : unramifiedOutside F T := ⟨1, (mem_unramifiedOutside_iff F T 1).mpr (fun _ _ _ ↦ rfl)⟩
+  have hc : ∀ x : C₁, c.val x.val = ((1 : PontryaginDual C₁) x : ℂ) := fun _ ↦ rfl
+  let hω : NormOneCharacterUnramifiedOutside (F := F) 1 T := ⟨c, hc⟩
+  have htriv : sLocalNormOneCharacter (F := F) T 1 hω = 1 := by
+    apply PontryaginDual.ext
+    intro y
+    apply Subtype.ext
+    have h := sLocalNormOneCharacter_eq_sIdeleRestriction 1 c hc y
+    obtain ⟨g, hg⟩ := QuotientGroup.mk_surjective y.val
+    rw [← hg, sIdeleRestriction_mk] at h
+    exact h
+  have hf' : f ∈ (sLocalHomogeneousAdelicThetaLinearMap F T
+      (sLocalNormOneCharacter (F := F) T 1 hω)).ker := by rw [htriv]; exact hf
+  let G := sAdeleSchwartzToGlobal F T f
+  have hG : G ∈ (homogeneousAdelicThetaLinearMap F 1).ker :=
+    sLocalHomogeneousThetaToGlobal_preserves_kernel hω hf'
+  obtain ⟨R, hR, -, -, -⟩ := globalConverse_normTwist_exact (F := F)
+  have hp := hR G
+  rw [show (LinearMap.ker (homogeneousAdelicThetaLinearMap F 1)).mkQ G = 0 from
+    (Submodule.Quotient.mk_eq_zero (homogeneousAdelicThetaLinearMap F 1).ker).mpr hG, map_zero] at hp
+  let : MeasurableSpace (IdeleClassGroup (𝓞 F) F) := borel _
+  let μ := normOneIdeleClassTamagawaMeasure F
+  let : CompactSpace C₁ := (ideleClassGroup_finiteness F).2.1
+  let : μ.IsHaarMeasure := (multiplicativeTamagawaMeasures_existsUnique F).exists.choose_spec.2.2.2.1
+  have hm : ((μ univ).toReal : ℂ) ≠ 0 := by
+    exact_mod_cast (measureReal_univ_pos (μ := μ)).ne'
+  have hG0 : G (Multiplicative.ofAdd 0) = 0 :=
+    (mul_eq_zero.mp (congrArg Prod.fst hp.symm)).resolve_left (neg_ne_zero.mpr hm)
+  have hGF : adeleSchwartzFourier G (Multiplicative.ofAdd 0) = 0 :=
+    (mul_eq_zero.mp (congrArg Prod.snd hp.symm)).resolve_left hm
+  obtain ⟨m, hm₀, hM⟩ := sAdeleSchwartzToGlobal_fourier_zero_scale (F := F) (S := T)
+  apply (mem_sAdelePolarSubspace f).mpr
+  constructor
+  · change sAdeleSchwartzToGlobal F T f (Multiplicative.ofAdd 0) = 0 at hG0
+    rwa [sAdeleSchwartzToGlobal_apply, ite_eq_left (fun v _ ↦ (v.adicCompletionIntegers F).zero_mem),
+      map_zero] at hG0
+  · change adeleSchwartzFourier (sAdeleSchwartzToGlobal F T f) (Multiplicative.ofAdd 0) = 0 at hGF
+    rw [hM] at hGF
+    exact (mul_eq_zero.mp hGF).resolve_left hm₀
+
+/-- Each larger-stage quotient representative can be replaced by an inserted
+test with the same pole constraint. -/
+private theorem sLocalAbsolutePW_exists_insert_rep
+    (hST : S ⊆ T) (hPic : PicTrivial) (ω : PontryaginDual C₁)
+    (hω : NormOneCharacterUnramifiedOutside ω S) (χ : PontryaginDual J₁(T))
+    (hχ : χ = descend(hST, ω, hω))
+    (f : B(T)) :
+    ∃ g : B(S), q(T, χ) (Π(hST) g) = q(T, χ) f ∧ (f ∈ Z₀(T) → g ∈ Z₀(S)) := by
+  classical
+  rcases eq_or_lt_of_le hST with h | h
+  · subst T
+    exact ⟨f, congrArg (q(S, χ)) (sLocalAbsolutePW_transition_self f), id⟩
+  · have hU : ∀ (x : J₁(T)) (u : relativeIntegralIdeleUnits F S T),
+        x.val = QuotientGroup.mk u.val → χ x = 1 := by
+      rw [hχ]
+      exact sLocalHomogeneousThetaToGlobal_equiv_of_unramified_units hST hω
+    obtain ⟨η, e, hη, he⟩ := sLocalHomogeneousThetaTransition_equiv_of_unramified h hPic χ hU
+    let x := e.symm (q(T, χ) f)
+    have hx (g : B(S)) (hg : q(S, η) g = x) : q(T, χ) (Π(hST) g) = q(T, χ) f :=
+      (he g).symm.trans ((congrArg e hg).trans (e.apply_symm_apply _))
+    by_cases ht : η = 1
+    · obtain ⟨g, hg⟩ := (sLocalHomogeneousAdelicThetaLinearMap F S η).ker.mkQ_surjective x
+      refine ⟨g, hx g hg, fun hf ↦ ?_⟩
+      have ht' : χ = 1 := by
+        apply PontryaginDual.ext
+        intro y
+        have h := hη y
+        rw [ht] at h
+        exact h.symm
+      have hker : Π(hST) g - f ∈ (sLocalHomogeneousAdelicThetaLinearMap F T (1 : PontryaginDual J₁(T))).ker := by
+        rw [← ht']
+        apply (Submodule.Quotient.mk_eq_zero (sLocalHomogeneousAdelicThetaLinearMap F T χ).ker).mp
+        change q(T, χ) (Π(hST) g - f) = 0
+        rw [map_sub, hx g hg, sub_self]
+      have hzero := sLocalAbsolutePW_trivial_kernel_polar (Π(hST) g - f) hker
+      have hsum := (Z₀(T)).add_mem hzero hf
+      rw [sub_add_cancel] at hsum
+      exact (sLocalAbsolutePW_insert_polar hST g).mp hsum
+    · have hy : x ∈ (Z₀(S)).map (q(S, η)) := by
+        rw [sLocalZeroMomentTheta_eq_top η ht]
+        exact Submodule.mem_top
+      obtain ⟨g, hg, hq⟩ := Submodule.mem_map.mp hy
+      exact ⟨g, hx g hq, fun _ ↦ hg⟩
+
+private theorem sLocalAbsolutePW_push_seq (hST : S ⊆ T) (D : Submodule ℂ (B(T)))
+    (χ : PontryaginDual J₁(T)) (g : B(S))
+    (u : ℕ → B(S)) (hu : ∀ n, HasCompactSupport (sAdeleSchwartzFourier (u n)).val)
+    (hD : ∀ n, Π(hST) (u n) ∈ D) (ht : Tendsto u atTop (𝓝 g)) :
+    ∃ v : ℕ → Θ(T, χ), (∀ n, ∃ X > 0, v n ∈ sLocalAbsolutePW hST X D χ) ∧
+      Tendsto v atTop (𝓝 (q(T, χ) (Π(hST) g))) := by
+  refine ⟨fun n ↦ q(T, χ) (Π(hST) (u n)), fun n ↦ ?_, ?_⟩
+  · obtain ⟨X, hX, hbox⟩ := sLocalAbsolutePW_compact_box (hu n)
+    exact ⟨X, hX, sLocalAbsolutePW_mk_mem hST X D χ (u n) ⟨hu n, hbox⟩ (hD n)⟩
+  · exact (((sLocalHomogeneousAdelicThetaLinearMap F T χ).ker.mkQL.continuous).comp
+      (sAdeleSchwartzTransition_isEmbedding F hST).continuous).continuousAt.tendsto.comp ht
+
 /-- Paper: Proposition 7.3.2.2(1), p. 352.
 The union of the absolute PW levels is sequentially dense in the full or zero-moment
 homogeneous theta space, according to the chosen test constraint.
@@ -642,7 +963,18 @@ theorem sLocalAbsolutePW_seqDense {S₀ : Finset (HeightOneSpectrum (𝓞 F))}
     (D : Submodule ℂ (B(T))) (_hD : D = ⊤ ∨ D = Z₀(T)) :
     ∀ (x : Θ(T, χ)), x ∈ D.map (q(T, χ)) → ∃ u : ℕ → Θ(T, χ),
       (∀ n, ∃ X > 0, u n ∈ sLocalAbsolutePW hST X D χ) ∧
-        Tendsto u atTop (𝓝 x) := by sorry
+        Tendsto u atTop (𝓝 x) := by
+  intro x hx
+  obtain ⟨f, hf, rfl⟩ := Submodule.mem_map.mp hx
+  obtain ⟨g, hg, hpol⟩ := sLocalAbsolutePW_exists_insert_rep hST _hPic ω hu χ _hχ f
+  rcases _hD with rfl | rfl
+  · obtain ⟨u, hu, ht⟩ := sLocalAbsolutePW_fourier_compact_seq g
+    rw [← hg]
+    exact sLocalAbsolutePW_push_seq hST ⊤ χ g u hu (fun _ ↦ Submodule.mem_top) ht
+  · obtain ⟨u, hu, ht⟩ := sLocalAbsolutePW_fourier_compact_seq_polar ⟨g, hpol hf⟩
+    rw [← hg]
+    exact sLocalAbsolutePW_push_seq hST (Z₀(T)) χ g u (fun n ↦ (hu n).2)
+      (fun n ↦ (sLocalAbsolutePW_insert_polar hST (u n)).mpr (hu n).1) ht
 
 /-- Paper: Theorem 2.2.3.2, p. 82, and the proof of Proposition 7.3.2.2(2)–(3), p. 353.
 The global Fourier transform of the global insertion of an S-local test vanishes at every
@@ -661,7 +993,21 @@ private theorem sLocalAbsolutePW_globalSupport_fourier {F : Type*} [Field F] [Nu
         adeleSchwartzFourier (sAdeleSchwartzToGlobal F S h) (Multiplicative.ofAdd y) ≠ 0 →
           sAdeleSchwartzFourier h (Multiplicative.ofAdd (adeleProjection F S y)) ≠ 0 ∧
             ∀ v, v ∉ S → ‖y.2 v‖ ≤ D v := by
-  sorry
+  classical
+  let D (v : HeightOneSpectrum (𝓞 F)) :=
+    (v.asIdeal.absNorm : ℝ) ^ multiplicity v.asIdeal (differentIdeal ℤ (𝓞 F))
+  refine ⟨D, fun v ↦ one_le_pow₀ (by exact_mod_cast (HeightOneSpectrum.one_lt_absNorm v).le), ?_, ?_⟩
+  · apply (Ideal.finite_factors (differentIdeal_ne_bot (A := ℤ) (B := 𝓞 F))).subset
+    intro v hv
+    by_contra hn
+    exact hv (by simp [D, multiplicity_eq_zero_of_not_dvd hn])
+  · obtain ⟨c, _, hc⟩ := adeleSchwartzFourier_sAdeleSchwartzToGlobal (F := F) (S := S)
+    intro h y hy
+    rw [hc] at hy
+    split at hy
+    · rename_i htail
+      exact ⟨fun hz ↦ hy (by rw [hz, smul_zero]), htail⟩
+    · exact (hy rfl).elim
 
 /-- An idele whose S-coordinates lie in the S-product region of size `Y` and whose other
 finite coordinates are bounded by `D` has idelic norm at most `Y` times the product of `D`. -/
@@ -893,15 +1239,10 @@ theorem sLocalAbsolutePW_localFourierSupport {S₀ : Finset (HeightOneSpectrum (
       have ha_theta : sLocalAdelicThetaOnClasses F T φ (QuotientGroup.mk a) = 0 := by
         rw [sLocalAdelicThetaOnClasses_mk, sLocalAdelicTheta_apply]
         have hzero : ∀ ξ : (Set.integer (T : Set V) F)ˣ,
-            φ (Multiplicative.ofAdd (Units.val (MonoidHom.comp
-              (Units.map (RingHom.toMonoidHom (RingHom.comp (adeleProjection F T)
-                (Subring.subtype (integralAdelesOutside F T)))))
-              (Units.map (RingHom.toMonoidHom (integralAdeleDiagonal F T))) ξ * a))) = 0 := by
+            φ (Multiplicative.ofAdd (Units.val (sUnitEmbedding F T ξ * a))) = 0 := by
           intro ξ
           let unitAtT : (Set.integer (T : Set V) F)ˣ →* (SAdeleRing F T)ˣ :=
-            MonoidHom.comp (Units.map (RingHom.toMonoidHom (RingHom.comp (adeleProjection F T)
-              (Subring.subtype (integralAdelesOutside F T)))))
-              (Units.map (RingHom.toMonoidHom (integralAdeleDiagonal F T)))
+            sUnitEmbedding F T
           by_contra hnz
           have hle := hbound_adele (unitAtT ξ * a).val hnz
           have hnorm_unit : sIdeleNorm F T (unitAtT ξ) = 1 :=
@@ -1488,6 +1829,794 @@ open Classical
 local notation "absPW(" h ", " b ", " ω ")" => sLocalAbsolutePW h b (Z₀(_)) ω
 local notation "invPW(" h ", " b ", " ω ")" => sLocalInvariantPW h b (Z₀(_)) ω
 
+section SLocalAbsolutePWPrincipalValue
+
+private theorem sLocalAbsolutePW_picTrivial_uniformizer
+    (hPic : PicTrivial) (v : V) (hv : v ∉ S) :
+    ∃ ξ : Fˣ, v.valuation F ξ = WithZero.exp (-1 : ℤ) ∧
+      ∀ w ∉ S, w ≠ v → w.valuation F ξ = 1 := by
+  let O_S := (S : Set V).integer F
+  have : Fact (IsMulTorsion (ClassGroup (𝓞 F))) := ⟨fun x ↦ isOfFinOrder_of_finite x⟩
+  have : Subsingleton (ClassGroup O_S) := (ClassGroup.equivPic O_S).toEquiv.subsingleton
+  let I : Ideal O_S :=
+    { carrier := {x : O_S | v.valuation F (x : F) < 1}
+      zero_mem' := by simp
+      add_mem' := fun {x y} hx hy ↦
+        lt_of_le_of_lt (ValuationClass.map_add_le_max (v.valuation F) (x : F) (y : F)) (max_lt hx hy)
+      smul_mem' := fun c {x} hx ↦ by
+        change v.valuation F ((c : F) * (x : F)) < 1
+        rw [map_mul]
+        calc
+          v.valuation F (c : F) * v.valuation F (x : F)
+              ≤ 1 * v.valuation F (x : F) :=
+            mul_le_mul_of_nonneg_right (Set.integer_valuation_le_one (S : Set V) F c hv) zero_le
+          _ = v.valuation F (x : F) := one_mul _
+          _ < 1 := hx }
+  have hI_prime : I.IsPrime := by
+    refine ⟨?_, fun {x y} hxy ↦ ?_⟩
+    · intro h1
+      have h1' : (1 : O_S) ∈ I := h1.symm ▸ trivial
+      have h1_lt : v.valuation F (1 : F) < 1 := h1'
+      simp at h1_lt
+    · change v.valuation F ((x : F) * (y : F)) < 1 at hxy
+      rw [map_mul] at hxy
+      by_contra hnot
+      rw [not_or] at hnot
+      have hx : (1 : WithZero (Multiplicative ℤ)) ≤ v.valuation F (x : F) :=
+        not_lt.mp hnot.1
+      have hy : (1 : WithZero (Multiplicative ℤ)) ≤ v.valuation F (y : F) :=
+        not_lt.mp hnot.2
+      exact (lt_self_iff_false (1 : WithZero (Multiplicative ℤ))).mp
+        (lt_of_le_of_lt (by simpa using mul_le_mul' hx hy) hxy)
+  obtain ⟨π₀, hπ₀⟩ := v.intValuation_exists_uniformizer
+  have hπ₀_val : v.valuation F (π₀ : F) = WithZero.exp (-1 : ℤ) := by
+    simpa [HeightOneSpectrum.valuation_of_algebraMap] using hπ₀
+  have hπ₀_ne : (π₀ : F) ≠ 0 := by
+    intro h0
+    rw [h0, map_zero] at hπ₀_val
+    exact absurd hπ₀_val WithZero.zero_ne_coe
+  have hπ₀_mem : (π₀ : F) ∈ O_S := fun w _ ↦ HeightOneSpectrum.valuation_le_one w π₀
+  have hI_ne_bot : I ≠ ⊥ := by
+    intro hbot
+    have hmem : (⟨(π₀ : F), hπ₀_mem⟩ : O_S) ∈ I := by
+      change v.valuation F (π₀ : F) < 1
+      rw [hπ₀_val]
+      decide
+    rw [hbot, Ideal.mem_bot] at hmem
+    exact hπ₀_ne (congrArg Subtype.val hmem)
+  have hprinc : Submodule.IsPrincipal (I : Submodule O_S O_S) :=
+    (ClassGroup.mk0_eq_one_iff (mem_nonZeroDivisors_iff_ne_zero.mpr hI_ne_bot)).mp
+      (Subsingleton.elim _ _)
+  obtain ⟨ξ, hξ⟩ := hprinc
+  have hξ_eq : I = Ideal.span ({ξ} : Set O_S) := hξ
+  have hξ_mem : ξ ∈ I := by
+    rw [hξ_eq]
+    exact Ideal.subset_span (Set.mem_singleton ξ)
+  have hπ₀_in_I : (⟨(π₀ : F), hπ₀_mem⟩ : O_S) ∈ I := by
+    change v.valuation F (π₀ : F) < 1
+    rw [hπ₀_val]
+    decide
+  rw [hξ_eq] at hπ₀_in_I
+  obtain ⟨c, hc⟩ := Ideal.mem_span_singleton.mp hπ₀_in_I
+  have hval_v : v.valuation F (ξ : F) = WithZero.exp (-1 : ℤ) := by
+    have hle : v.valuation F (ξ : F) ≤ WithZero.exp (-1 : ℤ) := by
+      have hlt : v.valuation F (ξ : F) < 1 := hξ_mem
+      rcases eq_or_ne (v.valuation F (ξ : F)) 0 with h0 | hne
+      · simp [h0]
+      · obtain ⟨m, hm⟩ := WithZero.ne_zero_iff_exists.mp hne
+        rw [← hm] at hlt ⊢
+        exact WithZero.coe_le_coe.mpr (Int.le_sub_one_of_lt (WithZero.coe_lt_coe.mp hlt))
+    have hge : WithZero.exp (-1 : ℤ) ≤ v.valuation F (ξ : F) := by
+      calc
+        WithZero.exp (-1 : ℤ) = v.valuation F (π₀ : F) := hπ₀_val.symm
+        _ = v.valuation F ((ξ : F) * (c : F)) := congrArg (v.valuation F) (congrArg Subtype.val hc)
+        _ = v.valuation F (ξ : F) * v.valuation F (c : F) := map_mul _ _ _
+        _ ≤ v.valuation F (ξ : F) * 1 :=
+          mul_le_mul_of_nonneg_left (Set.integer_valuation_le_one (S : Set V) F c hv) zero_le
+        _ = v.valuation F (ξ : F) := mul_one _
+    exact le_antisymm hle hge
+  have hξ_ne : (ξ : F) ≠ 0 := by
+    intro h0
+    rw [h0, map_zero] at hval_v
+    exact absurd hval_v WithZero.zero_ne_coe
+  refine ⟨Units.mk0 (ξ : F) hξ_ne, hval_v, fun w hw hwv ↦ ?_⟩
+  refine le_antisymm (Set.integer_valuation_le_one (S : Set V) F ξ hw) ?_
+  by_contra hlt
+  push Not at hlt
+  have hcop : w.asIdeal ⊔ v.asIdeal = ⊤ :=
+    w.isMaximal.coprime_of_ne v.isMaximal (fun hvw ↦ hwv (HeightOneSpectrum.ext hvw))
+  obtain ⟨a, ha, b, hb, hab⟩ :=
+    Submodule.mem_sup.mp (hcop.symm ▸ (Submodule.mem_top : (1 : 𝓞 F) ∈ (⊤ : Ideal (𝓞 F))))
+  have ha_mem : ((a : 𝓞 F) : F) ∈ O_S := fun u _ ↦ HeightOneSpectrum.valuation_le_one u a
+  have hb_mem : ((b : 𝓞 F) : F) ∈ O_S := fun u _ ↦ HeightOneSpectrum.valuation_le_one u b
+  have hb_in_I : (⟨((b : 𝓞 F) : F), hb_mem⟩ : O_S) ∈ I := by
+    change v.valuation F (b : F) < 1
+    simpa [HeightOneSpectrum.valuation_of_algebraMap] using
+      (v.intValuation_lt_one_iff_mem b).mpr hb
+  rw [hξ_eq] at hb_in_I
+  obtain ⟨d, hd⟩ := Ideal.mem_span_singleton.mp hb_in_I
+  have hsum : (1 : F) = (a : F) + (ξ : F) * (d : F) := by
+    have h1 := congrArg (algebraMap (𝓞 F) F) hab
+    have h2 := congrArg Subtype.val hd
+    simpa using h1.symm.trans (congrArg ((a : F) + ·) h2)
+  have ha_lt : w.valuation F (a : F) < 1 := by
+    simpa [HeightOneSpectrum.valuation_of_algebraMap] using
+      (w.intValuation_lt_one_iff_mem a).mpr ha
+  have hxd_lt : w.valuation F ((ξ : F) * (d : F)) < 1 := by
+    rw [map_mul]
+    calc
+      w.valuation F (ξ : F) * w.valuation F (d : F)
+          ≤ w.valuation F (ξ : F) * 1 :=
+        mul_le_mul_of_nonneg_left (Set.integer_valuation_le_one (S : Set V) F d hw) zero_le
+      _ = w.valuation F (ξ : F) := mul_one _
+      _ < 1 := hlt
+  have h1_lt : w.valuation F (1 : F) < 1 := by
+    rw [hsum]
+    exact lt_of_le_of_lt (ValuationClass.map_add_le_max (w.valuation F) _ _) (max_lt ha_lt hxd_lt)
+  simp at h1_lt
+
+private theorem sLocalAbsolutePW_pv_gaussian (v : V) (π : (v.adicCompletion F)ˣ)
+    (hπ : (Valued.v : Valuation (v.adicCompletion F) _).IsUniformizer π.val) :
+    finitePlacePrincipalValue v (finiteStandardGaussian v 1) =
+      finiteStandardGaussian v 1 - schwartzBruhatUnitTranslate π (finiteStandardGaussian v 1) := by
+  let : MeasurableSpace (v.adicCompletion F)ˣ := borel _
+  have : BorelSpace (v.adicCompletion F)ˣ := ⟨rfl⟩
+  ext x
+  rw [finitePlacePrincipalValue_spec v π hπ]
+  change finitePlacePrincipalValueFun v π (finiteStandardGaussian v 1) x =
+    finiteStandardGaussian v 1 x - schwartzBruhatUnitTranslate π (finiteStandardGaussian v 1) x
+  unfold finitePlacePrincipalValueFun
+  have hpos := (finitePlacePrincipalValue_integrable v π (finiteStandardGaussian v 1) x).1
+  have hcongr :
+      ∫ u in (HeightOneSpectrum.adicCompletionIntegers F v).units,
+          finiteStandardGaussian v 1
+            (Multiplicative.ofAdd ((↑u⁻¹ : v.adicCompletion F) * ((↑π⁻¹ : v.adicCompletion F) * x.toAdd)))
+        ∂(finiteLocalMultiplicativeTamagawaMeasure F v) =
+      ∫ _u in (HeightOneSpectrum.adicCompletionIntegers F v).units,
+          finiteStandardGaussian v 1 (Multiplicative.ofAdd ((↑π⁻¹ : v.adicCompletion F) * x.toAdd))
+        ∂(finiteLocalMultiplicativeTamagawaMeasure F v) := by
+    refine MeasureTheory.setIntegral_congr_fun
+      (Submonoid.isOpen_units (Valued.isOpen_valuationSubring _)).measurableSet fun u hu ↦ ?_
+    change finiteStandardGaussianValue v 1 ((↑u⁻¹ : v.adicCompletion F) * ((↑π⁻¹ : v.adicCompletion F) * x.toAdd)) =
+      finiteStandardGaussianValue v 1 ((↑π⁻¹ : v.adicCompletion F) * x.toAdd)
+    unfold finiteStandardGaussianValue
+    have hu_val : Valued.v ((↑u : v.adicCompletion F)⁻¹) = 1 := by
+      have hu1 := HeightOneSpectrum.adicCompletionIntegers.mem_units_iff_valued_eq_one.mp hu
+      rw [map_inv₀, hu1, inv_one]
+    have hmem_iff :
+        ((↑u : v.adicCompletion F)⁻¹ * ((↑π : v.adicCompletion F)⁻¹ * x.toAdd) ∈
+          (HeightOneSpectrum.adicCompletionIntegers F v : Set (v.adicCompletion F))) ↔
+        ((↑π : v.adicCompletion F)⁻¹ * x.toAdd ∈
+          (HeightOneSpectrum.adicCompletionIntegers F v : Set (v.adicCompletion F))) := by
+      simp only [SetLike.mem_coe, HeightOneSpectrum.mem_adicCompletionIntegers,
+        map_mul, hu_val, one_mul]
+    simp [Set.indicator_apply, hmem_iff]
+  rw [hcongr, MeasureTheory.setIntegral_const, Complex.real_smul]
+  have hne : (finiteLocalMultiplicativeTamagawaMeasure F v).real
+      (HeightOneSpectrum.adicCompletionIntegers F v).units ≠ 0 := hpos.ne'
+  have htrans : schwartzBruhatUnitTranslate π (finiteStandardGaussian v 1) x =
+      finiteStandardGaussian v 1 (Multiplicative.ofAdd ((↑π⁻¹ : v.adicCompletion F) * x.toAdd)) := by
+    rw [show x = Multiplicative.ofAdd x.toAdd from rfl, schwartzBruhatUnitTranslate_apply]
+    rfl
+  rw [htrans, ← mul_assoc, inv_mul_cancel₀ (Complex.ofReal_ne_zero.mpr hne), one_mul]
+
+private def singleFinitePlaceIdele (T : Finset V) {v : V} (_hv : v ∈ T)
+    (π : (v.adicCompletion F)ˣ) : (SAdeleRing F T)ˣ where
+  val := (1, fun w : T ↦ if h : w.1 = v then h ▸ (π : v.adicCompletion F) else 1)
+  inv := (1, fun w : T ↦ if h : w.1 = v then h ▸ ((π⁻¹ : (v.adicCompletion F)ˣ) : v.adicCompletion F) else 1)
+  val_inv := Prod.ext (one_mul _) (funext fun w ↦ by
+    rw [Prod.snd_mul, Pi.mul_apply, Prod.snd_one, Pi.one_apply]
+    dsimp only
+    split_ifs with h
+    · subst h; simp
+    · exact mul_one 1)
+  inv_val := Prod.ext (one_mul _) (funext fun w ↦ by
+    rw [Prod.snd_mul, Pi.mul_apply, Prod.snd_one, Pi.one_apply]
+    dsimp only
+    split_ifs with h
+    · subst h; simp
+    · exact mul_one 1)
+
+private theorem sLocalAbsolutePW_tensor_ext {ι : Type*} [Fintype ι] {E X Y : Type*} {W : ι → Type*}
+    [AddCommGroup E] [Module ℂ E] [∀ i, AddCommGroup (W i)] [∀ i, Module ℂ (W i)]
+    [AddCommGroup X] [Module ℂ X] [AddCommGroup Y] [Module ℂ Y]
+    (e : TensorProduct ℂ E (PiTensorProduct ℂ W) →ₗ[ℂ] X) (he : Function.Surjective e)
+    (L₁ L₂ : X →ₗ[ℂ] Y)
+    (h : ∀ a g, L₁ (e (TensorProduct.tmul ℂ a (PiTensorProduct.tprod ℂ g))) =
+      L₂ (e (TensorProduct.tmul ℂ a (PiTensorProduct.tprod ℂ g)))) :
+    L₁ = L₂ := by
+  apply LinearMap.ext
+  intro x
+  obtain ⟨t, rfl⟩ := he x
+  have key : L₁ ∘ₗ e = L₂ ∘ₗ e :=
+    TensorProduct.ext (LinearMap.ext fun a ↦ PiTensorProduct.ext (MultilinearMap.ext fun g ↦ h a g))
+  exact LinearMap.congr_fun key t
+
+private theorem sLocalAbsolutePW_pv_singleton_transition (hST : S ⊆ T) {v : V}
+    (hvS : v ∉ S) (hvT : v ∈ T) (π : (v.adicCompletion F)ˣ)
+    (hπ : (Valued.v : Valuation (v.adicCompletion F) _).IsUniformizer π.val) (f₀ : B(S)) :
+    sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr hvT) (Π(hST) f₀) =
+      Π(hST) f₀ -
+        schwartzBruhatUnitTranslate (singleFinitePlaceIdele T hvT π) (Π(hST) f₀) := by
+  let eS := (sAdeleSchwartz_inductiveTensor_equiv F S).choose
+  have heS := (sAdeleSchwartz_inductiveTensor_equiv F S).choose_spec
+  let eT := (sAdeleSchwartz_inductiveTensor_equiv F T).choose
+  have heT := (sAdeleSchwartz_inductiveTensor_equiv F T).choose_spec
+  let translateLin : B(T) →ₗ[ℂ] B(T) :=
+    { toFun := schwartzBruhatUnitTranslate (singleFinitePlaceIdele T hvT π)
+      map_add' := fun _ _ ↦ by ext x; rfl
+      map_smul' := fun _ _ ↦ by ext x; rfl }
+  let L₁ : B(S) →ₗ[ℂ] B(T) :=
+    (sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr hvT)).comp (Π(hST))
+  let L₂ : B(S) →ₗ[ℂ] B(T) := Π(hST) - translateLin.comp (Π(hST))
+  suffices hL : L₁ = L₂ from DFunLike.congr_fun hL f₀
+  refine sLocalAbsolutePW_tensor_ext eS.toLinearEquiv.toLinearMap eS.surjective L₁ L₂ fun a b ↦ ?_
+  let extend : ∀ w : T, SchwartzBruhat (Multiplicative (w.1.adicCompletion F)) :=
+    fun w ↦ if hw : w.1 ∈ S then b ⟨w.1, hw⟩ else finiteStandardGaussian w.1 1
+  have hExt : ∀ (w : T), w.1 ∉ S → ∀ y : w.1.adicCompletion F,
+      extend w (Multiplicative.ofAdd y) =
+        (HeightOneSpectrum.adicCompletionIntegers F w.1 : Set (w.1.adicCompletion F)).indicator
+          (fun _ ↦ 1) y := by
+    intro w hw y
+    change (dite (w.1 ∈ S) (fun hw' ↦ b ⟨w.1, hw'⟩)
+      (fun _ ↦ finiteStandardGaussian w.1 1)) (Multiplicative.ofAdd y) = _
+    split_ifs
+    change finiteStandardGaussianValue w.1 1 y = _
+    unfold finiteStandardGaussianValue
+    simp
+  have heS_ext : ∀ x : SAdeleRing F S,
+      eS (TensorProduct.tmul ℂ a (PiTensorProduct.tprod ℂ b)) (Multiplicative.ofAdd x) =
+        a (Multiplicative.ofAdd x.1) *
+          ∏ w : S, extend ⟨w.1, hST w.2⟩ (Multiplicative.ofAdd (x.2 w)) := by
+    intro x
+    refine (heS a b x).trans (congrArg _ (Finset.prod_congr rfl fun w _ ↦ ?_))
+    have hbw : extend ⟨w.1, hST w.2⟩ = b w := by
+      change (dite (w.1 ∈ S) (fun hw' ↦ b ⟨w.1, hw'⟩) (fun _ ↦ finiteStandardGaussian w.1 1)) = b w
+      split_ifs with h
+      · rfl
+      · exact False.elim (h w.2)
+    rw [hbw]
+  have hPi : Π(hST) (eS (TensorProduct.tmul ℂ a (PiTensorProduct.tprod ℂ b))) =
+      eT (TensorProduct.tmul ℂ a (PiTensorProduct.tprod ℂ extend)) := by
+    ext x
+    change (Π(hST) (eS (TensorProduct.tmul ℂ a (PiTensorProduct.tprod ℂ b)))) (Multiplicative.ofAdd x.toAdd) =
+      (eT (TensorProduct.tmul ℂ a (PiTensorProduct.tprod ℂ extend))) (Multiplicative.ofAdd x.toAdd)
+    exact (sAdeleSchwartzTransition_pure F hST a extend hExt _ heS_ext x.toAdd).trans
+      (heT a extend x.toAdd).symm
+  refine Eq.trans (congrArg (sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr hvT)) hPi) ?_
+  refine Eq.trans (sAdelePrincipalValue_tmul (Finset.singleton_subset_iff.mpr hvT) a extend) ?_
+  refine Eq.trans ?_ (congrArg (fun z ↦ z - schwartzBruhatUnitTranslate (singleFinitePlaceIdele T hvT π) z) hPi).symm
+  ext x
+  have heL := heT a (fun w : T ↦
+    if w.1 ∈ ({v} : Finset V) then finitePlacePrincipalValue w.1 (extend w) else extend w) x.toAdd
+  have heR := heT a extend x.toAdd
+  have heR_shift := heT a extend
+    ((↑((singleFinitePlaceIdele T hvT π)⁻¹) : SAdeleRing F T) * x.toAdd)
+  change eT (TensorProduct.tmul ℂ a (PiTensorProduct.tprod ℂ fun w ↦
+      if w.1 ∈ ({v} : Finset V) then finitePlacePrincipalValue w.1 (extend w) else extend w))
+      (Multiplicative.ofAdd x.toAdd) =
+    eT (TensorProduct.tmul ℂ a (PiTensorProduct.tprod ℂ extend)) (Multiplicative.ofAdd x.toAdd) -
+      (schwartzBruhatUnitTranslate (singleFinitePlaceIdele T hvT π)
+        (eT (TensorProduct.tmul ℂ a (PiTensorProduct.tprod ℂ extend)))) (Multiplicative.ofAdd x.toAdd)
+  have hshift_eval :
+      (schwartzBruhatUnitTranslate (singleFinitePlaceIdele T hvT π)
+        (eT (TensorProduct.tmul ℂ a (PiTensorProduct.tprod ℂ extend))))
+        (Multiplicative.ofAdd x.toAdd) =
+      a (Multiplicative.ofAdd x.toAdd.1) *
+        ∏ w : T, extend w (Multiplicative.ofAdd
+          (((↑((singleFinitePlaceIdele T hvT π)⁻¹) : SAdeleRing F T) * x.toAdd).2 w)) := by
+    rw [schwartzBruhatUnitTranslate_apply]
+    change eT (TensorProduct.tmul ℂ a (PiTensorProduct.tprod ℂ extend))
+      (Multiplicative.ofAdd ((↑((singleFinitePlaceIdele T hvT π)⁻¹) : SAdeleRing F T) * x.toAdd)) = _
+    refine heR_shift.trans ?_
+    simp [singleFinitePlaceIdele]
+  refine heL.trans (Eq.trans ?_ (congrArg₂ (· - ·) heR hshift_eval).symm)
+  let vT : T := ⟨v, hvT⟩
+  have hv_eq : extend vT = finiteStandardGaussian v 1 := by
+    change (dite (vT.1 ∈ S) (fun hw' ↦ b ⟨vT.1, hw'⟩)
+      (fun _ ↦ finiteStandardGaussian vT.1 1)) = finiteStandardGaussian v 1
+    split_ifs with h
+    · exact False.elim (hvS h)
+    · rfl
+  have hprodL :
+      (∏ w : T, (if w.1 ∈ ({v} : Finset V) then finitePlacePrincipalValue w.1 (extend w) else extend w)
+          (Multiplicative.ofAdd (x.toAdd.2 w))) =
+      (finitePlacePrincipalValue v (finiteStandardGaussian v 1) (Multiplicative.ofAdd (x.toAdd.2 vT))) *
+        ∏ w ∈ Finset.univ.erase vT, extend w (Multiplicative.ofAdd (x.toAdd.2 w)) := by
+    rw [← Finset.mul_prod_erase Finset.univ _ (Finset.mem_univ vT)]
+    refine congrArg₂ (· * ·) ?_ (Finset.prod_congr rfl fun w hw ↦ ?_)
+    · simp [vT, hv_eq]
+    · have hw_ne : w.1 ≠ v := fun h ↦ (Finset.mem_erase.mp hw).1 (Subtype.ext h)
+      simp [hw_ne]
+  have hprodR1 :
+      (∏ w : T, extend w (Multiplicative.ofAdd (x.toAdd.2 w))) =
+      finiteStandardGaussian v 1 (Multiplicative.ofAdd (x.toAdd.2 vT)) *
+        ∏ w ∈ Finset.univ.erase vT, extend w (Multiplicative.ofAdd (x.toAdd.2 w)) := by
+    rw [← Finset.mul_prod_erase Finset.univ _ (Finset.mem_univ vT), hv_eq]
+  have hprodR2 :
+      (∏ w : T, extend w (Multiplicative.ofAdd
+          (((↑((singleFinitePlaceIdele T hvT π)⁻¹) : SAdeleRing F T) * x.toAdd).2 w))) =
+      finiteStandardGaussian v 1 (Multiplicative.ofAdd ((↑π⁻¹ : v.adicCompletion F) * x.toAdd.2 vT)) *
+        ∏ w ∈ Finset.univ.erase vT, extend w (Multiplicative.ofAdd (x.toAdd.2 w)) := by
+    rw [← Finset.mul_prod_erase Finset.univ _ (Finset.mem_univ vT)]
+    refine congrArg₂ (· * ·) ?_ (Finset.prod_congr rfl fun w hw ↦ ?_)
+    · simp [vT, hv_eq, singleFinitePlaceIdele]
+    · have hw_ne : w.1 ≠ v := fun h ↦ (Finset.mem_erase.mp hw).1 (Subtype.ext h)
+      simp [singleFinitePlaceIdele, hw_ne]
+  have hpv := congrArg
+    (fun g : SchwartzBruhat (Multiplicative (v.adicCompletion F)) ↦
+      g (Multiplicative.ofAdd (x.toAdd.2 vT)))
+    (sLocalAbsolutePW_pv_gaussian v π hπ)
+  have hpv_shift :
+      (schwartzBruhatUnitTranslate π (finiteStandardGaussian v 1)) (Multiplicative.ofAdd (x.toAdd.2 vT)) =
+      finiteStandardGaussian v 1 (Multiplicative.ofAdd ((↑π⁻¹ : v.adicCompletion F) * x.toAdd.2 vT)) := by
+    rw [schwartzBruhatUnitTranslate_apply]
+  change finitePlacePrincipalValue v (finiteStandardGaussian v 1) (Multiplicative.ofAdd (x.toAdd.2 vT)) =
+    finiteStandardGaussian v 1 (Multiplicative.ofAdd (x.toAdd.2 vT)) -
+      (schwartzBruhatUnitTranslate π (finiteStandardGaussian v 1)) (Multiplicative.ofAdd (x.toAdd.2 vT)) at hpv
+  rw [hpv_shift] at hpv
+  rw [hprodL, hprodR1, hprodR2]
+  change a (Multiplicative.ofAdd x.toAdd.1) *
+      (finitePlacePrincipalValue v (finiteStandardGaussian v 1) (Multiplicative.ofAdd (x.toAdd.2 vT)) * _) =
+    a (Multiplicative.ofAdd x.toAdd.1) *
+      (finiteStandardGaussian v 1 (Multiplicative.ofAdd (x.toAdd.2 vT)) * _) -
+    a (Multiplicative.ofAdd x.toAdd.1) *
+      (finiteStandardGaussian v 1 (Multiplicative.ofAdd ((↑π⁻¹ : v.adicCompletion F) * x.toAdd.2 vT)) * _)
+  rw [hpv]
+  ring
+
+private theorem sLocalAbsolutePW_pv_empty (h : (∅ : Finset V) ⊆ T) (χ : PontryaginDual J₁(T)) :
+    PV(h, χ) = LinearMap.id := by
+  apply LinearMap.ext
+  intro g
+  obtain ⟨f, rfl⟩ := Submodule.Quotient.mk_surjective _ g
+  change PV(h, χ) (Submodule.Quotient.mk f) = Submodule.Quotient.mk f
+  rw [sLocalHomogeneousThetaPrincipalValue_mk]
+  congr 1
+  suffices hlin : sAdelePrincipalValue F h = LinearMap.id from DFunLike.congr_fun hlin f
+  let eT := (sAdeleSchwartz_inductiveTensor_equiv F T).choose
+  refine sLocalAbsolutePW_tensor_ext eT.toLinearEquiv.toLinearMap eT.surjective
+    (sAdelePrincipalValue F h) LinearMap.id fun a b ↦ ?_
+  refine (sAdelePrincipalValue_tmul h a b).trans ?_
+  simp only [Finset.notMem_empty, ↓reduceIte]
+  rfl
+
+private theorem sLocalAbsolutePW_pv_insert (R' : Finset V) (v : V) (hv : v ∉ R')
+    (hRT : insert v R' ⊆ T) (χ : PontryaginDual J₁(T)) :
+    PV(hRT, χ) =
+      (PV(Finset.singleton_subset_iff.mpr (hRT (Finset.mem_insert_self v R')), χ)).comp
+        (PV((Finset.subset_insert v R').trans hRT, χ)) := by
+  apply LinearMap.ext
+  intro g
+  obtain ⟨f, rfl⟩ := Submodule.Quotient.mk_surjective _ g
+  change PV(hRT, χ) (Submodule.Quotient.mk f) =
+    PV(Finset.singleton_subset_iff.mpr (hRT (Finset.mem_insert_self v R')), χ)
+      (PV((Finset.subset_insert v R').trans hRT, χ) (Submodule.Quotient.mk f))
+  rw [sLocalHomogeneousThetaPrincipalValue_mk, sLocalHomogeneousThetaPrincipalValue_mk,
+    sLocalHomogeneousThetaPrincipalValue_mk]
+  congr 1
+  let hvSub : ({v} : Finset V) ⊆ T := Finset.singleton_subset_iff.mpr (hRT (Finset.mem_insert_self v R'))
+  let hR₀T : R' ⊆ T := (Finset.subset_insert v R').trans hRT
+  suffices hlin : sAdelePrincipalValue F hRT =
+      (sAdelePrincipalValue F hvSub).comp (sAdelePrincipalValue F hR₀T) from
+    DFunLike.congr_fun hlin f
+  let eT := (sAdeleSchwartz_inductiveTensor_equiv F T).choose
+  refine sLocalAbsolutePW_tensor_ext eT.toLinearEquiv.toLinearMap eT.surjective
+    (sAdelePrincipalValue F hRT) ((sAdelePrincipalValue F hvSub).comp (sAdelePrincipalValue F hR₀T))
+    fun a b ↦ ?_
+  refine (sAdelePrincipalValue_tmul hRT a b).trans ?_
+  refine Eq.trans ?_ (congrArg (sAdelePrincipalValue F hvSub) (sAdelePrincipalValue_tmul hR₀T a b)).symm
+  refine Eq.trans ?_ (sAdelePrincipalValue_tmul hvSub a _).symm
+  congr 2
+  refine congrArg (PiTensorProduct.tprod ℂ) (funext fun w ↦ ?_)
+  by_cases hwv : w.1 = v
+  · simp [hwv, hv]
+  · simp [hwv]
+
+private theorem sLocalAbsolutePW_unitTranslate_polar (u : (SAdeleRing F T)ˣ) (g : B(T))
+    (hg : g ∈ Z₀(T)) : schwartzBruhatUnitTranslate u g ∈ Z₀(T) := by
+  obtain ⟨h0, h1⟩ := (mem_sAdelePolarSubspace _).mp hg
+  obtain ⟨b, hb⟩ := sLocalAbsolutePW_translate_fourier (F := F) u
+  refine (mem_sAdelePolarSubspace _).mpr ⟨?_, ?_⟩
+  · change schwartzBruhatUnitTranslate u g (Multiplicative.ofAdd 0) = 0
+    rw [schwartzBruhatUnitTranslate_apply, mul_zero]
+    exact h0
+  · rw [hb g 0, mul_zero]
+    exact mul_eq_zero_of_right _ h1
+
+private theorem sLocalAbsolutePW_quotient_unitTranslate (χ : PontryaginDual J₁(T))
+    (u : (SAdeleRing F T)ˣ) (hu : (QuotientGroup.mk u : J(T)) ∈ J₁(T)) (f : B(T)) :
+    q(T, χ) (schwartzBruhatUnitTranslate u f) =
+      (χ ⟨QuotientGroup.mk u, hu⟩ : ℂ) • q(T, χ) f := by
+  let g₀ : J₁(T) := ⟨QuotientGroup.mk u, hu⟩
+  let c : ℂ := ((χ g₀ : Circle) : ℂ)
+  change (LinearMap.ker (sLocalHomogeneousAdelicThetaLinearMap F T χ)).mkQ
+      (schwartzBruhatUnitTranslate u f) =
+    c • (LinearMap.ker (sLocalHomogeneousAdelicThetaLinearMap F T χ)).mkQ f
+  refine Eq.trans ?_ (Submodule.Quotient.mk_smul (LinearMap.ker (sLocalHomogeneousAdelicThetaLinearMap F T χ)) c f)
+  change Submodule.Quotient.mk (schwartzBruhatUnitTranslate u f) = Submodule.Quotient.mk (c • f)
+  rw [Submodule.Quotient.eq, LinearMap.mem_ker, map_sub, map_smul,
+    sLocalHomogeneousTheta_unitTranslate χ g₀ u rfl f, sub_self]
+
+private theorem sLocalAbsolutePW_principalValue_singleton
+    (hST : S ⊆ T) (hPic : PicTrivial) (v : V) (hvS : v ∉ S) (hvT : v ∈ T)
+    (χ : PontryaginDual J₁(T)) (Y : ℝ) (hY : 0 < Y) :
+    (absPW(hST, Y, χ)).map (PV(Finset.singleton_subset_iff.mpr hvT, χ)) ≤
+      absPW(hST, (v.asIdeal.absNorm : ℝ) * Y, χ) := by
+  have hcl : IsClosed (absPW(hST, (v.asIdeal.absNorm : ℝ) * Y, χ) : Set Θ(T, χ)) := by
+    unfold sLocalAbsolutePW
+    exact Submodule.isClosed_topologicalClosure _
+  refine Submodule.map_le_iff_le_comap.mpr (Submodule.topologicalClosure_minimal _ ?_
+    (hcl.preimage (sLocalHomogeneousThetaPrincipalValue_isClosedEmbedding _ χ).continuous))
+  rintro _ ⟨f, ⟨hf_test, hf_Z⟩, rfl⟩
+  obtain ⟨f₀, rfl, hf₀⟩ := (mem_sLocalPWTests hST (sLocalPWBox S Y) f).mp hf_test
+  change PV(Finset.singleton_subset_iff.mpr hvT, χ) (Submodule.Quotient.mk (Π(hST) f₀)) ∈
+    absPW(hST, (v.asIdeal.absNorm : ℝ) * Y, χ)
+  rw [sLocalHomogeneousThetaPrincipalValue_mk]
+  obtain ⟨ξ, hξ_v, hξ_other⟩ := sLocalAbsolutePW_picTrivial_uniformizer hPic v hvS
+  let πv : (v.adicCompletion F)ˣ := Units.map (algebraMap F (v.adicCompletion F)).toMonoidHom ξ
+  have hπv : (Valued.v : Valuation (v.adicCompletion F) _).IsUniformizer πv.val := by
+    rw [Valuation.IsUniformizer.iff,
+      congrArg Units.val (Valuation.IsRankOneDiscrete.generator_eq_exp_neg_one_of_surjective
+        (v.valuedAdicCompletion_surjective F))]
+    exact (HeightOneSpectrum.valuedAdicCompletion_eq_valuation' v (ξ : F)).trans hξ_v
+  let πT := singleFinitePlaceIdele T hvT πv
+  rw [sLocalAbsolutePW_pv_singleton_transition hST hvS hvT πv hπv f₀]
+  change q(T, χ) (Π(hST) f₀ - schwartzBruhatUnitTranslate πT (Π(hST) f₀)) ∈
+    absPW(hST, (v.asIdeal.absNorm : ℝ) * Y, χ)
+  rw [map_sub]
+  refine Submodule.sub_mem _ ?_ ?_
+  · have h1le : (1 : ℝ) ≤ (v.asIdeal.absNorm : ℝ) := by
+      exact_mod_cast Nat.pos_of_ne_zero (mt Ideal.absNorm_eq_zero_iff.mp v.ne_bot)
+    have hY_le : Y ≤ (v.asIdeal.absNorm : ℝ) * Y := le_mul_of_one_le_left hY.le h1le
+    exact sLocalAbsolutePW_mono hST hY_le _ _ (sLocalAbsolutePW_mk_mem hST Y _ χ f₀ hf₀ hf_Z)
+  · have hξ_memT : (ξ : F) ∈ (T : Set V).integer F := by
+      intro w hw
+      have hwS : w ∉ S := fun h ↦ hw (hST h)
+      have hwv : w ≠ v := fun h ↦ hw (h ▸ hvT)
+      rw [hξ_other w hwS hwv]
+    have hξinv_memT : (ξ⁻¹ : F) ∈ (T : Set V).integer F := by
+      intro w hw
+      have hwS : w ∉ S := fun h ↦ hw (hST h)
+      have hwv : w ≠ v := fun h ↦ hw (h ▸ hvT)
+      change w.valuation F (ξ : F)⁻¹ ≤ 1
+      rw [map_inv₀, hξ_other w hwS hwv, inv_one]
+    let u₀ : ((T : Set V).integer F)ˣ :=
+      { val := ⟨ξ, hξ_memT⟩
+        inv := ⟨ξ⁻¹, hξinv_memT⟩
+        val_inv := Subtype.ext (mul_inv_cancel₀ ξ.ne_zero)
+        inv_val := Subtype.ext (inv_mul_cancel₀ ξ.ne_zero) }
+    let ξ₀_T : (SAdeleRing F T)ˣ :=
+      Units.map ((adeleProjection F T).comp (integralAdelesOutside F T).subtype).toMonoidHom
+        (Units.map (integralAdeleDiagonal F T).toMonoidHom u₀)
+    have hξ₀_norm : sIdeleNorm F T ξ₀_T = 1 :=
+      (sIdeleNorm_spec (F := F) (S := T)).2 ⟨u₀, rfl⟩
+    have hξ₀_quot : (QuotientGroup.mk ξ₀_T : J(T)) = 1 :=
+      (sIdeleQuotient_mk_eq_one (F := F) (S := T) ξ₀_T).mpr ⟨u₀, rfl⟩
+    let w₀ : InfinitePlace F := Classical.arbitrary (InfinitePlace F)
+    have hq_pos : 0 < v.asIdeal.absNorm :=
+      Nat.pos_of_ne_zero (mt Ideal.absNorm_eq_zero_iff.mp v.ne_bot)
+    let qNN : ℝ≥0ˣ := Units.mk0 (v.asIdeal.absNorm : ℝ≥0) (Nat.cast_ne_zero.mpr hq_pos.ne')
+    let x₀ : w₀.Completionˣ := infinitePlaceRealPower F w₀ (w₀.mult : ℝ)⁻¹ qNN
+    have hx₀_norm : ‖(x₀ : w₀.Completion)‖ ^ w₀.mult = (v.asIdeal.absNorm : ℝ) := by
+      have hx : ‖(x₀ : w₀.Completion)‖ = (v.asIdeal.absNorm : ℝ) ^ (w₀.mult : ℝ)⁻¹ := by
+        rw [← (InfinitePlace.Completion.isometry_extensionEmbedding w₀).norm_map_of_map_zero
+          (map_zero _) (x₀ : w₀.Completion)]
+        change ‖InfinitePlace.Completion.extensionEmbedding w₀
+          (infinitePlaceRealPower F w₀ (w₀.mult : ℝ)⁻¹ qNN).val‖ = _
+        rw [infinitePlaceRealPower_apply, Complex.norm_real,
+          Real.norm_of_nonneg (Real.rpow_nonneg qNN.val.coe_nonneg _)]
+        simp [qNN]
+      rw [hx, ← Real.rpow_mul_natCast (Nat.cast_nonneg _), inv_mul_cancel₀ w₀.mult_coe_ne_zero,
+        Real.rpow_one]
+    let tInf : (InfiniteAdeleRing F)ˣ :=
+      { val := fun w ↦ if h : w = w₀ then h ▸ (x₀ : w₀.Completion) else 1
+        inv := fun w ↦ if h : w = w₀ then h ▸ ((x₀⁻¹ : w₀.Completionˣ) : w₀.Completion) else 1
+        val_inv := funext fun w ↦ by
+          rw [Pi.mul_apply, Pi.one_apply]
+          split_ifs with h
+          · subst h; simp
+          · exact mul_one 1
+        inv_val := funext fun w ↦ by
+          rw [Pi.mul_apply, Pi.one_apply]
+          split_ifs with h
+          · subst h; simp
+          · exact mul_one 1 }
+    let tS : (SAdeleRing F S)ˣ :=
+      { val := (tInf.val, 1)
+        inv := (tInf.inv, 1)
+        val_inv := Prod.ext tInf.val_inv (one_mul _)
+        inv_val := Prod.ext tInf.inv_val (one_mul _) }
+    let tT : (SAdeleRing F T)ˣ :=
+      { val := (tInf.val, 1)
+        inv := (tInf.inv, 1)
+        val_inv := Prod.ext tInf.val_inv (one_mul _)
+        inv_val := Prod.ext tInf.inv_val (one_mul _) }
+    let f₂ : B(S) := schwartzBruhatUnitTranslate (tS⁻¹) f₀
+    have hf₂_band : inBand(sLocalPWBox S ((v.asIdeal.absNorm : ℝ) * Y), f₂) := by
+      obtain ⟨b, hb⟩ := sLocalAbsolutePW_translate_fourier (F := F) (tS⁻¹)
+      let e : Multiplicative (SAdeleRing F S) ≃ₜ Multiplicative (SAdeleRing F S) :=
+        { toFun := fun z ↦ Multiplicative.ofAdd ((↑(tS⁻¹) : SAdeleRing F S) * z.toAdd)
+          invFun := fun z ↦ Multiplicative.ofAdd ((↑tS : SAdeleRing F S) * z.toAdd)
+          left_inv := fun z ↦ by
+            change Multiplicative.ofAdd ((↑tS : SAdeleRing F S) * ((↑(tS⁻¹) : SAdeleRing F S) * z.toAdd)) = z
+            rw [← mul_assoc, ← Units.val_mul, mul_inv_cancel, Units.val_one, one_mul]
+            rfl
+          right_inv := fun z ↦ by
+            change Multiplicative.ofAdd ((↑(tS⁻¹) : SAdeleRing F S) * ((↑tS : SAdeleRing F S) * z.toAdd)) = z
+            rw [← mul_assoc, ← Units.val_mul, inv_mul_cancel, Units.val_one, one_mul]
+            rfl
+          continuous_toFun := continuous_const_mul (M := SAdeleRing F S) _
+          continuous_invFun := continuous_const_mul (M := SAdeleRing F S) _ }
+      let ψ : Multiplicative (SAdeleRing F S) → ℂ := sAdeleSchwartzFourier f₂
+      let φ : Multiplicative (SAdeleRing F S) → ℂ := sAdeleSchwartzFourier f₀
+      have hψ : ∀ x, ψ x = ((b : ℝ) : ℂ) * φ (e x) := fun x ↦ by
+        change sAdeleSchwartzFourier (schwartzBruhatUnitTranslate (tS⁻¹) f₀)
+          (Multiplicative.ofAdd x.toAdd) = _
+        rw [hb f₀ x.toAdd]
+        rfl
+      have htsup : tsupport ψ ⊆ e ⁻¹' tsupport φ := by
+        refine closure_minimal (fun x hx ↦ subset_tsupport φ ?_)
+          ((isClosed_tsupport φ).preimage e.continuous)
+        intro h0
+        apply hx
+        rw [hψ x, h0, mul_zero]
+      have hcomp_pre : IsCompact (e ⁻¹' tsupport φ) := by
+        have himg : e ⁻¹' tsupport φ = e.symm '' tsupport φ := by
+          ext z
+          simp [e.symm_apply_eq]
+        rw [himg]
+        exact hf₀.1.isCompact.image e.symm.continuous
+      have hcomp_ψ : HasCompactSupport ψ :=
+        hcomp_pre.of_isClosed_subset (isClosed_tsupport ψ) htsup
+      refine ⟨hcomp_ψ, htsup.trans ?_⟩
+      intro x hx
+      have hy : (e x).toAdd ∈ sLocalPWBox S Y := hf₀.2 hx
+      have hx_eq : x.toAdd = (↑tS : SAdeleRing F S) * (e x).toAdd := by
+        change x.toAdd = (↑tS : SAdeleRing F S) * ((↑(tS⁻¹) : SAdeleRing F S) * x.toAdd)
+        rw [← mul_assoc, ← Units.val_mul, mul_inv_cancel, Units.val_one, one_mul]
+      rw [Set.mem_preimage, hx_eq]
+      refine ⟨fun w ↦ ?_, fun u ↦ ?_⟩
+      · change ‖tS.val.1 w * (e x).toAdd.1 w‖ ^ w.mult ≤ (v.asIdeal.absNorm : ℝ) * Y
+        rw [norm_mul, mul_pow]
+        by_cases hw : w = w₀
+        · subst hw
+          have ht_w : ‖tS.val.1 w₀‖ ^ w₀.mult = (v.asIdeal.absNorm : ℝ) := by
+            have heq : tInf.val w₀ = (x₀ : w₀.Completion) := by
+              change (if h : w₀ = w₀ then _ else 1) = _
+              simp
+            change ‖tInf.val w₀‖ ^ w₀.mult = _
+            rw [heq]
+            exact hx₀_norm
+          rw [ht_w]
+          exact mul_le_mul_of_nonneg_left (hy.1 w₀) (Nat.cast_nonneg _)
+        · have ht_w : ‖tS.val.1 w‖ ^ w.mult = 1 := by
+            have heq : tInf.val w = 1 := by
+              change (if h : w = w₀ then _ else 1) = 1
+              simp [hw]
+            change ‖tInf.val w‖ ^ w.mult = 1
+            rw [heq, norm_one, one_pow]
+          rw [ht_w, one_mul]
+          have h1le : (1 : ℝ) ≤ (v.asIdeal.absNorm : ℝ) := by exact_mod_cast hq_pos
+          exact (hy.1 w).trans (le_mul_of_one_le_left hY.le h1le)
+      · change ‖(tS.val.2 u) * (e x).toAdd.2 u‖ ≤ (v.asIdeal.absNorm : ℝ) * Y
+        have ht_u : tS.val.2 u = 1 := rfl
+        rw [ht_u, one_mul]
+        have h1le : (1 : ℝ) ≤ (v.asIdeal.absNorm : ℝ) := by exact_mod_cast hq_pos
+        exact (hy.2 u).trans (le_mul_of_one_le_left hY.le h1le)
+    have hPi_f₂ : Π(hST) f₂ = schwartzBruhatUnitTranslate (tT⁻¹) (Π(hST) f₀) := by
+      ext x
+      rw [show x = Multiplicative.ofAdd x.toAdd from rfl, sAdeleSchwartzTransition_apply,
+        schwartzBruhatUnitTranslate_apply]
+      change (if ∀ w : T, w.1 ∉ S → x.toAdd.2 w ∈ w.1.adicCompletionIntegers F then
+          f₂ (Multiplicative.ofAdd (x.toAdd.1, fun w : S ↦ x.toAdd.2 ⟨w.1, hST w.2⟩)) else 0) =
+        (Π(hST) f₀) (Multiplicative.ofAdd ((↑(tT⁻¹)⁻¹ : SAdeleRing F T) * x.toAdd))
+      rw [inv_inv, sAdeleSchwartzTransition_apply]
+      have hfin : ((↑tT : SAdeleRing F T) * x.toAdd).2 = x.toAdd.2 := by
+        ext w
+        simp [tT]
+      have hmem_iff :
+          (∀ w : T, w.1 ∉ S → x.toAdd.2 w ∈ w.1.adicCompletionIntegers F) ↔
+          (∀ w : T, w.1 ∉ S → ((↑tT : SAdeleRing F T) * x.toAdd).2 w ∈ w.1.adicCompletionIntegers F) := by
+        simp [hfin]
+      by_cases hcond : ∀ w : T, w.1 ∉ S → x.toAdd.2 w ∈ w.1.adicCompletionIntegers F
+      · rw [ite_eq_left hcond, ite_eq_left (hmem_iff.mp hcond), schwartzBruhatUnitTranslate_apply]
+        change f₀ (Multiplicative.ofAdd ((↑(tS⁻¹)⁻¹ : SAdeleRing F S) * (x.toAdd.1, fun w : S ↦ x.toAdd.2 ⟨w.1, hST w.2⟩))) =
+          f₀ (Multiplicative.ofAdd (((↑tT : SAdeleRing F T) * x.toAdd).1, fun w : S ↦ ((↑tT : SAdeleRing F T) * x.toAdd).2 ⟨w.1, hST w.2⟩))
+        rw [inv_inv]
+        congr 2
+      · rw [ite_eq_right hcond, ite_eq_right (mt hmem_iff.mpr hcond)]
+    have hf₂_Z : Π(hST) f₂ ∈ Z₀(T) := by
+      rw [hPi_f₂]
+      exact sLocalAbsolutePW_unitTranslate_polar (tT⁻¹) (Π(hST) f₀) hf_Z
+    let aT : (SAdeleRing F T)ˣ :=
+      { val := (tInf.inv * ξ₀_T.val.1,
+          fun w : T ↦ if w.1 = v then 1 else ξ₀_T.val.2 w)
+        inv := (tInf.val * ξ₀_T.inv.1,
+          fun w : T ↦ if w.1 = v then 1 else ξ₀_T.inv.2 w)
+        val_inv := Prod.ext (funext fun w ↦ by
+          have hξ := congrFun (Prod.ext_iff.mp ξ₀_T.val_inv).1 w
+          have ht := congrFun tInf.inv_val w
+          rw [Prod.fst_mul, Pi.mul_apply, Prod.fst_one, Pi.one_apply] at hξ
+          rw [Pi.mul_apply, Pi.one_apply] at ht
+          change (tInf.inv w * ξ₀_T.val.1 w) * (tInf.val w * ξ₀_T.inv.1 w) = 1
+          calc
+            tInf.inv w * ξ₀_T.val.1 w * (tInf.val w * ξ₀_T.inv.1 w)
+                = (tInf.inv w * tInf.val w) * (ξ₀_T.val.1 w * ξ₀_T.inv.1 w) := by ring
+            _ = 1 * 1 := by rw [ht, hξ]
+            _ = 1 := one_mul 1) (funext fun w ↦ by
+          have hξ := congrFun (Prod.ext_iff.mp ξ₀_T.val_inv).2 w
+          rw [Prod.snd_mul, Pi.mul_apply, Prod.snd_one, Pi.one_apply] at hξ ⊢
+          change (if w.1 = v then 1 else ξ₀_T.val.2 w) *
+              (if w.1 = v then 1 else ξ₀_T.inv.2 w) = 1
+          split_ifs
+          · exact one_mul 1
+          · exact hξ)
+        inv_val := Prod.ext (funext fun w ↦ by
+          have hξ := congrFun (Prod.ext_iff.mp ξ₀_T.inv_val).1 w
+          have ht := congrFun tInf.val_inv w
+          rw [Prod.fst_mul, Pi.mul_apply, Prod.fst_one, Pi.one_apply] at hξ
+          rw [Pi.mul_apply, Pi.one_apply] at ht
+          change (tInf.val w * ξ₀_T.inv.1 w) * (tInf.inv w * ξ₀_T.val.1 w) = 1
+          calc
+            tInf.val w * ξ₀_T.inv.1 w * (tInf.inv w * ξ₀_T.val.1 w)
+                = (tInf.val w * tInf.inv w) * (ξ₀_T.inv.1 w * ξ₀_T.val.1 w) := by ring
+            _ = 1 * 1 := by rw [ht, hξ]
+            _ = 1 := one_mul 1) (funext fun w ↦ by
+          have hξ := congrFun (Prod.ext_iff.mp ξ₀_T.inv_val).2 w
+          rw [Prod.snd_mul, Pi.mul_apply, Prod.snd_one, Pi.one_apply] at hξ ⊢
+          change (if w.1 = v then 1 else ξ₀_T.inv.2 w) *
+              (if w.1 = v then 1 else ξ₀_T.val.2 w) = 1
+          split_ifs
+          · exact one_mul 1
+          · exact hξ) }
+    have haT_mul : aT * πT = ξ₀_T * tT⁻¹ := by
+      apply Units.ext
+      apply Prod.ext
+      · funext w
+        change tInf.inv w * ξ₀_T.val.1 w * 1 = ξ₀_T.val.1 w * tInf.inv w
+        ring
+      · funext w
+        change (if w.1 = v then 1 else ξ₀_T.val.2 w) *
+            (if h : w.1 = v then h ▸ (πv : v.adicCompletion F) else 1) =
+          ξ₀_T.val.2 w * 1
+        by_cases hwv : w.1 = v
+        · simp only [hwv, ↓reduceIte, one_mul, mul_one]
+          rcases w with ⟨wval, hwT⟩
+          dsimp at hwv
+          subst hwv
+          rfl
+        · simp [hwv]
+    have haT_norm : sIdeleNorm F T aT = 1 := by
+      apply Units.ext
+      apply NNReal.eq
+      have hξ_eq : (sIdeleNorm F T ξ₀_T : ℝ) = 1 := by
+        rw [hξ₀_norm]
+        rfl
+      have hnorm_formula (u : (SAdeleRing F T)ˣ) :
+          ((sIdeleNorm F T u : ℝ≥0) : ℝ) =
+            (∏ w : InfinitePlace F, ‖u.val.1 w‖ ^ w.mult) * ∏ w : T, ‖u.val.2 w‖ := by
+        simp [sIdeleNorm]
+      have hprod_inf :
+          (∏ w : InfinitePlace F, ‖aT.val.1 w‖ ^ w.mult) =
+            (v.asIdeal.absNorm : ℝ)⁻¹ * ∏ w : InfinitePlace F, ‖ξ₀_T.val.1 w‖ ^ w.mult := by
+        have heq : (∏ w : InfinitePlace F, ‖aT.val.1 w‖ ^ w.mult) =
+            ∏ w : InfinitePlace F, (‖tInf.inv w‖ ^ w.mult * ‖ξ₀_T.val.1 w‖ ^ w.mult) := by
+          refine Finset.prod_congr rfl fun w _ ↦ ?_
+          change ‖tInf.inv w * ξ₀_T.val.1 w‖ ^ w.mult = _
+          rw [norm_mul, mul_pow]
+        rw [heq, Finset.prod_mul_distrib]
+        congr 1
+        rw [Finset.prod_eq_single_of_mem w₀ (Finset.mem_univ _)]
+        · have hxinv : ‖tInf.inv w₀‖ ^ w₀.mult = (v.asIdeal.absNorm : ℝ)⁻¹ := by
+            have hmul : ‖tInf.val w₀‖ ^ w₀.mult * ‖tInf.inv w₀‖ ^ w₀.mult = 1 := by
+              rw [← mul_pow, ← norm_mul]
+              have hv := congrFun tInf.val_inv w₀
+              rw [Pi.mul_apply, Pi.one_apply] at hv
+              rw [hv, norm_one, one_pow]
+            have hval : ‖tInf.val w₀‖ ^ w₀.mult = (v.asIdeal.absNorm : ℝ) := by
+              have heq : tInf.val w₀ = (x₀ : w₀.Completion) := by
+                change (if h : w₀ = w₀ then _ else 1) = _
+                simp
+              change ‖tInf.val w₀‖ ^ w₀.mult = _
+              rw [heq]
+              exact hx₀_norm
+            rw [hval] at hmul
+            exact eq_inv_of_mul_eq_one_right hmul
+          exact hxinv
+        · intro w _ hw
+          have heq : tInf.inv w = 1 := by
+            change (if h : w = w₀ then _ else 1) = 1
+            split_ifs with h
+            · exact absurd h hw
+            · rfl
+          change ‖tInf.inv w‖ ^ w.mult = 1
+          rw [heq, norm_one, one_pow]
+      have hprod_fin :
+          (∏ w : T, ‖aT.val.2 w‖) * (v.asIdeal.absNorm : ℝ)⁻¹ = ∏ w : T, ‖ξ₀_T.val.2 w‖ := by
+        let vT : T := ⟨v, hvT⟩
+        rw [← Finset.mul_prod_erase Finset.univ (fun w : T ↦ ‖aT.val.2 w‖) (Finset.mem_univ vT),
+          ← Finset.mul_prod_erase Finset.univ (fun w : T ↦ ‖ξ₀_T.val.2 w‖) (Finset.mem_univ vT)]
+        have ha_v : ‖aT.val.2 vT‖ = 1 := by simp [aT, vT]
+        have hξ_vnorm : ‖ξ₀_T.val.2 vT‖ = (v.asIdeal.absNorm : ℝ)⁻¹ := by
+          change ‖(πv : v.adicCompletion F)‖ = _
+          exact norm_uniformizer_adicCompletion v πv.val hπv
+        have hrest : (∏ w ∈ Finset.univ.erase vT, ‖aT.val.2 w‖) =
+            ∏ w ∈ Finset.univ.erase vT, ‖ξ₀_T.val.2 w‖ := by
+          refine Finset.prod_congr rfl fun w hw ↦ ?_
+          have hwv : w.1 ≠ v := fun h ↦ (Finset.mem_erase.mp hw).1 (Subtype.ext h)
+          simp [aT, hwv]
+        rw [ha_v, one_mul, hξ_vnorm, hrest, mul_comm]
+      rw [hnorm_formula aT, hprod_inf]
+      calc
+        ((v.asIdeal.absNorm : ℝ)⁻¹ * ∏ w : InfinitePlace F, ‖ξ₀_T.val.1 w‖ ^ w.mult) *
+            ∏ w : T, ‖aT.val.2 w‖
+            = (∏ w : InfinitePlace F, ‖ξ₀_T.val.1 w‖ ^ w.mult) *
+              ((∏ w : T, ‖aT.val.2 w‖) * (v.asIdeal.absNorm : ℝ)⁻¹) := by ring
+        _ = (∏ w : InfinitePlace F, ‖ξ₀_T.val.1 w‖ ^ w.mult) * ∏ w : T, ‖ξ₀_T.val.2 w‖ := by
+          rw [hprod_fin]
+        _ = ((sIdeleNorm F T ξ₀_T : ℝ≥0) : ℝ) := (hnorm_formula ξ₀_T).symm
+        _ = 1 := hξ_eq
+    have hshift_eq :
+        schwartzBruhatUnitTranslate πT (Π(hST) f₀) =
+          schwartzBruhatUnitTranslate (aT⁻¹) (schwartzBruhatUnitTranslate ξ₀_T (Π(hST) f₂)) := by
+      ext x
+      rw [show x = Multiplicative.ofAdd x.toAdd from rfl, schwartzBruhatUnitTranslate_apply,
+        schwartzBruhatUnitTranslate_apply, schwartzBruhatUnitTranslate_apply, hPi_f₂,
+        schwartzBruhatUnitTranslate_apply]
+      refine congrArg (fun z ↦ (Π(hST) f₀) (Multiplicative.ofAdd z)) ?_
+      have hunit_eq : πT⁻¹ = tT * ξ₀_T⁻¹ * aT := by
+        refine inv_eq_iff_mul_eq_one.mpr ?_
+        calc
+          πT * (tT * ξ₀_T⁻¹ * aT) = (aT * πT) * (tT * ξ₀_T⁻¹) := by ac_rfl
+          _ = (ξ₀_T * tT⁻¹) * (tT * ξ₀_T⁻¹) := by rw [haT_mul]
+          _ = (ξ₀_T * ξ₀_T⁻¹) * (tT⁻¹ * tT) := by ac_rfl
+          _ = 1 := by simp
+      calc
+        (↑(πT⁻¹) : SAdeleRing F T) * x.toAdd
+            = (↑(tT * ξ₀_T⁻¹ * aT) : SAdeleRing F T) * x.toAdd := by rw [hunit_eq]
+        _ = (↑(tT⁻¹)⁻¹ : SAdeleRing F T) *
+              ((↑(ξ₀_T⁻¹) : SAdeleRing F T) * ((↑(aT⁻¹)⁻¹ : SAdeleRing F T) * x.toAdd)) := by
+          simp only [inv_inv, Units.val_mul, mul_assoc]
+    rw [hshift_eq]
+    have haTinv_mem : (QuotientGroup.mk (aT⁻¹) : J(T)) ∈ J₁(T) := by
+      change sIdeleQuotientNorm F T (QuotientGroup.mk (aT⁻¹)) = 1
+      rw [sIdeleQuotientNorm_mk, map_inv, haT_norm, inv_one]
+    have hξ₀_mem : (QuotientGroup.mk ξ₀_T : J(T)) ∈ J₁(T) := by
+      change sIdeleQuotientNorm F T (QuotientGroup.mk ξ₀_T) = 1
+      rw [sIdeleQuotientNorm_mk, hξ₀_norm]
+    rw [sLocalAbsolutePW_quotient_unitTranslate χ (aT⁻¹) haTinv_mem,
+      sLocalAbsolutePW_quotient_unitTranslate χ ξ₀_T hξ₀_mem]
+    have hξ₁ : (⟨QuotientGroup.mk ξ₀_T, hξ₀_mem⟩ : J₁(T)) = 1 := Subtype.ext hξ₀_quot
+    rw [hξ₁, map_one]
+    simp only [Circle.coe_one, one_smul]
+    exact Submodule.smul_mem _ _
+      (sLocalAbsolutePW_mk_mem hST ((v.asIdeal.absNorm : ℝ) * Y) _ χ f₂ hf₂_band hf₂_Z)
+
+private theorem sLocalAbsolutePW_principalValue_aux
+    (hST : S ⊆ T) (hPic : PicTrivial) (R' : Finset V) :
+    ∀ (hRT : R' ⊆ T), Disjoint S R' → ∀ (χ : PontryaginDual J₁(T)) (Y : ℝ), 0 < Y →
+      (absPW(hST, Y, χ)).map (PV(hRT, χ)) ≤ absPW(hST, size(R') * Y, χ) := by
+  induction R' using Finset.induction_on with
+  | empty =>
+    intro hRT _ χ Y _
+    rw [sLocalAbsolutePW_pv_empty hRT χ, Submodule.map_id, Finset.prod_empty, one_mul]
+  | @insert v R₀ hv ih =>
+    intro hRT hRdis χ Y hY
+    have hR₀T : R₀ ⊆ T := (Finset.subset_insert v R₀).trans hRT
+    have hvT : v ∈ T := hRT (Finset.mem_insert_self v R₀)
+    have hvS : v ∉ S := Finset.disjoint_right.mp hRdis (Finset.mem_insert_self v R₀)
+    have hR₀dis : Disjoint S R₀ := hRdis.mono_right (Finset.subset_insert v R₀)
+    have hR₀pos : 0 < size(R₀) := Finset.prod_pos fun w _ ↦ Nat.cast_pos.mpr
+      (Nat.pos_of_ne_zero (mt Ideal.absNorm_eq_zero_iff.mp w.ne_bot))
+    rw [sLocalAbsolutePW_pv_insert R₀ v hv hRT χ, Submodule.map_comp]
+    refine (Submodule.map_mono (ih hR₀T hR₀dis χ Y hY)).trans ?_
+    rw [Finset.prod_insert hv, mul_assoc]
+    exact sLocalAbsolutePW_principalValue_singleton hST hPic v hvS hvT χ
+      (size(R₀) * Y) (mul_pos hR₀pos hY)
+
+end SLocalAbsolutePWPrincipalValue
+
 /-- Paper: Proposition 7.3.3.2, p. 357–358.
 The finite principal value maps the zero-moment absolute level at X into the
 absolute level at the product of the residue sizes times X. -/
@@ -1498,7 +2627,8 @@ theorem sLocalAbsolutePW_principalValue {S₀ : Finset (HeightOneSpectrum (𝓞 
     (ω : PontryaginDual C₁) (hu : NormOneCharacterUnramifiedOutside ω S)
     (χ : PontryaginDual J₁(T)) (_hχ : χ = descend(hST, ω, hu))
     (X : ℝ) (_hX : 0 < X) :
-    (absPW(hST, X, χ)).map (PV(hRT, χ)) ≤ absPW(hST, size(R) * X, χ) := by sorry
+    (absPW(hST, X, χ)).map (PV(hRT, χ)) ≤ absPW(hST, size(R) * X, χ) :=
+  sLocalAbsolutePW_principalValue_aux hST _hPic R hRT (_hdis.mono_right _hR) χ X _hX
 
 local notation "B∞" => SchwartzBruhat (Multiplicative (InfiniteAdeleRing F))
 local notation "Bᵥ[" v "]" => SchwartzBruhat (Multiplicative (HeightOneSpectrum.adicCompletion F v))
@@ -2043,6 +3173,116 @@ local notation "invPW(" h ", " b ", " ω ")" => sLocalInvariantPW h b (Z₀(_)) 
 -- The basis and growth statements in §7.3.1 assume saturation of the whole target T.
 -- To use them for an unsaturated base S, their proofs must be localized to the fiber over p.
 
+/-- Paper: Theorem 7.3.3.4, equations (7.3.3.18)–(7.3.3.19), p. 361.
+The first of the two level conditions of the theorem: for large enough absolute or
+invariant Paley–Wiener levels, the level meets the primary principal-value image exactly
+in the principal-value image of the zero-moment classes. This is the statement that the
+denominators displayed in (7.3.3.18)–(7.3.3.19) agree inside the level.
+It is one of the two inputs of `sLocalPWOrbital_eventually_equiv_quotient`. -/
+private theorem sLocalPWOrbital_eventually_equiv_inf {S₀ : Finset V} (hST : S ⊆ T)
+    (_hT : T = S ∪ S₀) (_hdis : Disjoint S S₀) (_hsat : IsSaturatedPlaceSet (F := F) S₀)
+    (_hPic : PicTrivial) (p : Vℚ) (_hp : (sLocalPrimaryPlaces (F := F) T p).Nonempty)
+    (_hp₀ : sLocalPrimaryPlaces (F := F) T p ⊆ S₀)
+    (ω : PontryaginDual C₁) (hu : NormOneCharacterUnramifiedOutside ω S)
+    (χ : PontryaginDual J₁(T)) (_hχ : χ = descend(hST, ω, hu)) (_hω : ω ≠ 1) :
+    ∃ B : ℝ, 0 < B ∧ ∀ X Y : ℝ, B ≤ X → B ≤ Y → X ^ count(S) ≤ Y →
+      ∀ (W : Submodule ℂ (Θ(T, χ))), (W = absPW(hST, X, χ) ∨ W = invPW(hST, Y, χ)) →
+        W ⊓ Rₚ(p, χ) = W ⊓ Rₚ₀(p, χ) := by sorry
+
+/-- Paper: Theorem 7.3.3.4, arrow (4) of diagram (7.3.3.15), pp. 361–362.
+The second of the two level conditions of the theorem: for large enough absolute or
+invariant Paley–Wiener levels, the level and the primary principal-value image together
+fill the homogeneous theta space, so that every class of the primary orbital quotient has
+a representative in the level.
+It is one of the two inputs of `sLocalPWOrbital_eventually_equiv_quotient`. -/
+private theorem sLocalPWOrbital_eventually_equiv_sup {S₀ : Finset V} (hST : S ⊆ T)
+    (_hT : T = S ∪ S₀) (_hdis : Disjoint S S₀) (_hsat : IsSaturatedPlaceSet (F := F) S₀)
+    (_hPic : PicTrivial) (p : Vℚ) (_hp : (sLocalPrimaryPlaces (F := F) T p).Nonempty)
+    (_hp₀ : sLocalPrimaryPlaces (F := F) T p ⊆ S₀)
+    (ω : PontryaginDual C₁) (hu : NormOneCharacterUnramifiedOutside ω S)
+    (χ : PontryaginDual J₁(T)) (_hχ : χ = descend(hST, ω, hu)) (_hω : ω ≠ 1) :
+    ∃ B : ℝ, 0 < B ∧ ∀ X Y : ℝ, B ≤ X → B ≤ Y → X ^ count(S) ≤ Y →
+      ∀ (W : Submodule ℂ (Θ(T, χ))), (W = absPW(hST, X, χ) ∨ W = invPW(hST, Y, χ)) →
+        W ⊔ Rₚ(p, χ) = ⊤ := by sorry
+
+/-- Paper: Theorem 7.3.3.4, p. 360, and diagram (7.3.3.15), p. 361.
+The quotient transfer: if a closed level `W` meets the primary principal-value image in
+the principal-value image of the zero-moment classes and, together with that image, fills
+the theta space, then the map induced by `W ⊆ Θ(T, χ)` on the quotients is a topological
+linear isomorphism onto the primary orbital quotient.
+This is the linear-algebra and topology part of the theorem; it carries no arithmetic. -/
+private theorem sLocalPWOrbital_eventually_equiv_quotient (p : Vℚ)
+    (χ : PontryaginDual J₁(T)) (W : Submodule ℂ (Θ(T, χ)))
+    (hW : IsClosed (W : Set (Θ(T, χ))))
+    (hinf : W ⊓ Rₚ(p, χ) = W ⊓ Rₚ₀(p, χ)) (hsup : W ⊔ Rₚ(p, χ) = ⊤) :
+    ∃ e : SLocalPWOrbitalQuotient χ p W ≃L[ℂ] Qₚ(p, χ),
+      ∀ x : W, e (((Rₚ₀(p, χ)).comap W.subtype).mkQ x) = (Rₚ(p, χ)).mkQ x.val := by
+  classical
+  -- the inclusion of the level, followed by the quotient map
+  let A : W →L[ℂ] Qₚ(p, χ) := (Rₚ(p, χ)).mkQL.comp W.subtypeL
+  have hA (x : W) : A x = (Rₚ(p, χ)).mkQ x.val := rfl
+  -- inside the level the two principal-value images agree
+  have hmem (x : W) : (x : Θ(T, χ)) ∈ Rₚ(p, χ) ↔ (x : Θ(T, χ)) ∈ Rₚ₀(p, χ) := by
+    have h := SetLike.ext_iff.mp hinf (x : Θ(T, χ))
+    simp only [Submodule.mem_inf, x.property, true_and] at h
+    exact h
+  -- the kernel of `A` is the zero-moment part of the level
+  have hker : A.ker = (Rₚ₀(p, χ)).comap W.subtype := by
+    ext x
+    show A x = 0 ↔ (W.subtype x : Θ(T, χ)) ∈ Rₚ₀(p, χ)
+    have h1 : A x = 0 ↔ (W.subtype x : Θ(T, χ)) ∈ Rₚ(p, χ) := by
+      rw [hA]
+      exact Submodule.Quotient.mk_eq_zero _
+    exact h1.trans (hmem x)
+  -- and `A` is surjective because the level and the principal-value image fill the space
+  have hsurj : Function.Surjective A := by
+    intro y
+    obtain ⟨z, rfl⟩ := (Rₚ(p, χ)).mkQ_surjective y
+    have hz : z ∈ W ⊔ Rₚ(p, χ) := by rw [hsup]; exact Submodule.mem_top
+    obtain ⟨w, hw, r, hr, hwr⟩ := Submodule.mem_sup.mp hz
+    refine ⟨⟨w, hw⟩, ?_⟩
+    show (Rₚ(p, χ)).mkQ w = (Rₚ(p, χ)).mkQ z
+    rw [← hwr, map_add,
+      show (Rₚ(p, χ)).mkQ r = 0 from (Submodule.Quotient.mk_eq_zero _).mpr hr, add_zero]
+  -- the open mapping theorem for Fréchet spaces, which is what makes the inverse continuous
+  have hopen : IsOpenMap A := by
+    have hR : IsClosed (Rₚ(p, χ) : Set (Θ(T, χ))) :=
+      (sLocalHomogeneousThetaPrincipalValue_isClosedEmbedding (F := F) (S := T)
+        (sLocalPrimaryPlaces_subset (F := F) T p) χ).isClosed_range
+    have hFΘ : IsFrechetTVS (Θ(T, χ)) :=
+      sLocalHomogeneousThetaSpace_frechet (F := F) (S := T) χ
+    have hFW : IsFrechetTVS W :=
+      frechet_of_closed_embedding W.subtypeL (W.isClosedEmbedding_subtypeL hW) hFΘ
+    have hFQ : IsFrechetTVS (Qₚ(p, χ)) := isFrechetTVS_quotient hFΘ (Rₚ(p, χ)) hR
+    obtain ⟨hTΘ, hPΘ, hMΘ, hCΘ⟩ := hFΘ
+    obtain ⟨hTW, hP0W, hMW, hCW⟩ := hFW
+    obtain ⟨hTQ, hPQ, hMQ, hCQ⟩ := hFQ
+    let : UniformSpace (Θ(T, χ)) := IsTopologicalAddGroup.rightUniformSpace (Θ(T, χ))
+    let : UniformSpace (Qₚ(p, χ)) := IsTopologicalAddGroup.rightUniformSpace (Qₚ(p, χ))
+    have : IsUniformAddGroup (Θ(T, χ)) := isUniformAddGroup_of_addCommGroup
+    have : IsUniformAddGroup W := W.toAddSubgroup.isUniformAddGroup
+    have : IsUniformAddGroup (Qₚ(p, χ)) := isUniformAddGroup_of_addCommGroup
+    have : TopologicalSpace.MetrizableSpace (Θ(T, χ)) := hMΘ
+    have : TopologicalSpace.MetrizableSpace W := hMW
+    have : TopologicalSpace.MetrizableSpace (Qₚ(p, χ)) := hMQ
+    have : CompleteSpace (Θ(T, χ)) := hCΘ
+    have : CompleteSpace W := completeSpace_coe_iff_isComplete.mpr hW.isComplete
+    have : CompleteSpace (Qₚ(p, χ)) := hCQ
+    let : ContinuousSMul ℂ W := PolynormableSpace.continuousSMul ℂ W
+    have : (uniformity (Θ(T, χ))).IsCountablyGenerated := by
+      rw [uniformity_eq_comap_nhds_zero (Θ(T, χ))]
+      infer_instance
+    have : (uniformity (Qₚ(p, χ))).IsCountablyGenerated := by
+      rw [uniformity_eq_comap_nhds_zero (Qₚ(p, χ))]
+      infer_instance
+    have : BaireSpace (Qₚ(p, χ)) := by
+      let := UniformSpace.metricSpace (Qₚ(p, χ))
+      infer_instance
+    refine isOpenMap_of_not_isMeagre_range A ?_
+    rw [hsurj.range_eq]
+    exact not_isMeagre_of_isOpen isOpen_univ univ_nonempty
+  exact exists_quotient_equiv_of_kernel A (hopen.isQuotientMap A.continuous hsurj) _ hker
+
 /-- Paper: Theorem 7.3.3.4 and its proof, pp. 360–363.
 For sufficiently large levels the inclusion induces the isomorphism used to transfer
 the two bases and the Fourier seminorm bounds.
@@ -2056,7 +3296,22 @@ theorem sLocalPWOrbital_eventually_equiv {S₀ : Finset V} (hST : S ⊆ T) (_hT 
     ∃ B : ℝ, 0 < B ∧ ∀ X Y : ℝ, B ≤ X → B ≤ Y → X ^ count(S) ≤ Y →
       ∀ (W : Submodule ℂ (Θ(T, χ))), (W = absPW(hST, X, χ) ∨ W = invPW(hST, Y, χ)) →
         ∃ e : SLocalPWOrbitalQuotient χ p W ≃L[ℂ] Qₚ(p, χ),
-          ∀ x : W, e (((Rₚ₀(p, χ)).comap W.subtype).mkQ x) = (Rₚ(p, χ)).mkQ x.val := by sorry
+          ∀ x : W, e (((Rₚ₀(p, χ)).comap W.subtype).mkQ x) = (Rₚ(p, χ)).mkQ x.val := by
+  obtain ⟨B₁, hB₁, hlev₁⟩ := sLocalPWOrbital_eventually_equiv_inf (S := S) (T := T)
+    (S₀ := S₀) hST _hT _hdis _hsat _hPic p _hp _hp₀ ω hu χ _hχ _hω
+  obtain ⟨B₂, hB₂, hlev₂⟩ := sLocalPWOrbital_eventually_equiv_sup (S := S) (T := T)
+    (S₀ := S₀) hST _hT _hdis _hsat _hPic p _hp _hp₀ ω hu χ _hχ _hω
+  refine ⟨max B₁ B₂, lt_max_of_lt_left hB₁, ?_⟩
+  intro X Y hX hY hXY W hW
+  have hclosed : IsClosed (W : Set (Θ(T, χ))) := by
+    rcases hW with rfl | rfl
+    · change IsClosed ((Submodule.topologicalClosure _ : Submodule ℂ (Θ(T, χ))) : Set (Θ(T, χ)))
+      exact Submodule.isClosed_topologicalClosure _
+    · change IsClosed ((Submodule.topologicalClosure _ : Submodule ℂ (Θ(T, χ))) : Set (Θ(T, χ)))
+      exact Submodule.isClosed_topologicalClosure _
+  exact sLocalPWOrbital_eventually_equiv_quotient (T := T) p χ W hclosed
+    (hlev₁ X Y ((le_max_left B₁ B₂).trans hX) ((le_max_left B₁ B₂).trans hY) hXY W hW)
+    (hlev₂ X Y ((le_max_right B₁ B₂).trans hX) ((le_max_right B₁ B₂).trans hY) hXY W hW)
 
 /-- Paper: Theorem 7.3.3.4(1)–(2), pp. 360–361.
 For sufficiently large absolute or invariant levels, with the same enumeration
@@ -2090,6 +3345,26 @@ theorem sLocalPWOrbital_bases {S₀ : Finset V} (hST : S ⊆ T) (_hT : T = S ∪
             IsSchauderBasis dW ev ∧ SchauderBasis.IsUnconditional dW ev ∧
             IsSchauderBasis eW dW ∧ SchauderBasis.IsAbsolute eW dW := by sorry
 
+/-- Paper: Theorem 7.3.1.6(4), p. 345, as used on p. 361. The ambient orbital
+quotient needs the polynomial seminorm estimate when all places above the
+chosen prime are present. The base set may be unsaturated at other primes.
+The lattice is indexed from a contributing pole. -/
+private theorem sLocalPWOrbital_biorthogonal_growth_primary (hST : S ⊆ T) (_hPic : PicTrivial)
+    (p : Vℚ) (_hfull : ∀ w : V, w.under (𝓞 ℚ) = p → w ∈ T) (χ : PontryaginDual J₁(T))
+    (ψ : Iₚ(p, χ) → Qₚ(p, χ))
+    (_hψ : ∀ (i j : Iₚ(p, χ)) (x : Θ(T, χ)), (Rₚ(p, χ)).mkQ x = ψ j →
+      sLocalOrbitalFourierJet (F := F) (S := T) i x = if i = j then 1 else 0) :
+    ∀ (v : T), v.val ∈ sLocalPrimaryPlaces (F := F) T p →
+    ∀ (c₀ : QuasiCharacter J(T)),
+      (∃ j : Iₚ(p, χ), j.val.1 = c₀ ∧ v ∈ sLocalFinitePolePlaces (F := F) (S := T) c₀) →
+    ∀ q : Seminorm ℂ Qₚ(p, χ), Continuous q →
+      ∃ d : ℕ, ∃ C > (0 : ℝ), ∀ (n : ℤ) (j : Iₚ(p, χ)),
+        j.val.1 = quasiCharacterNormTwist (G := J(T)) (m(T))
+          (isProperMap_sIdeleQuotientNorm F T).continuous c₀
+          (((n : ℝ) * (2 * Real.pi / Real.log (v.val.asIdeal.absNorm : ℝ)) : ℝ) * Complex.I) →
+        q (ψ j) ≤ C * (1 + |(n : ℝ)|) ^ d := by
+  sorry
+
 /-- Paper: Theorem 7.3.3.4(3), p. 361.
 Fourier-biorthogonal vectors of either sufficiently large level satisfy a polynomial
 bound for each continuous seminorm along each pole lattice, uniformly in the jet order.
@@ -2113,7 +3388,173 @@ theorem sLocalPWOrbital_biorthogonal_growth {S₀ : Finset V} (hST : S ⊆ T) (_
               j.val.1 = quasiCharacterNormTwist (m(T))
                 (isProperMap_sIdeleQuotientNorm F T).continuous c₀
                 (((n : ℝ) * (2 * Real.pi / Real.log (v.val.asIdeal.absNorm : ℝ)) : ℝ) * Complex.I) →
-              q (ψ j) ≤ C * (1 + |(n : ℝ)|) ^ d := by sorry
+              q (ψ j) ≤ C * (1 + |(n : ℝ)|) ^ d := by
+  obtain ⟨B, hB, hlevel⟩ := sLocalPWOrbital_eventually_equiv hST _hT _hdis _hsat _hPic
+    p _hp _hp₀ ω hu χ _hχ _hω
+  refine ⟨B, hB, ?_⟩
+  intro X Y hX hY hXY W hW ψ hψ v hv c₀ hc₀ q hq
+  obtain ⟨e, he⟩ := hlevel X Y hX hY hXY W hW
+  have hfull (w : V) (hw : w.under (𝓞 ℚ) = p) : w ∈ T := by
+    have hvp := ((mem_sLocalPrimaryPlaces (F := F) (S := T) p v.val).mp hv).2
+    have hw₀ := _hsat (_hp₀ hv) (hw.trans hvp.symm)
+    rw [_hT]
+    exact Finset.mem_union_right _ hw₀
+  have hamb (i j : Iₚ(p, χ)) (x : Θ(T, χ)) (hx : (Rₚ(p, χ)).mkQ x = e (ψ j)) :
+      sLocalOrbitalFourierJet (F := F) (S := T) i x = if i = j then 1 else 0 := by
+    obtain ⟨u, hu⟩ := ((Rₚ₀(p, χ)).comap W.subtype).mkQ_surjective (ψ j)
+    have heq : (Rₚ(p, χ)).mkQ x = (Rₚ(p, χ)).mkQ u.val :=
+      hx.trans ((congrArg e hu.symm).trans (he u))
+    let D := (Rₚ(p, χ)).liftQ (sLocalOrbitalFourierJet (F := F) (S := T) i).toLinearMap
+      (sLocalOrbitalFourierJet_range_le_ker p χ i)
+    exact (congrArg D heq).trans (hψ i j u hu)
+  obtain ⟨d, C, hC, hbound⟩ := sLocalPWOrbital_biorthogonal_growth_primary hST _hPic p hfull χ
+    (fun j ↦ e (ψ j)) hamb v hv c₀ hc₀ (q.comp e.symm.toLinearMap) (hq.comp e.symm.continuous)
+  refine ⟨d, C, hC, fun n j hj ↦ ?_⟩
+  have hb := hbound n j hj
+  change q (e.symm (e (ψ j))) ≤ _ at hb
+  simpa only [e.symm_apply_apply] using hb
+
+section
+
+open scoped ENNReal
+
+/-- Sampling a vertically Schwartz function on an affine lattice preserves rapid decay. -/
+private theorem rapidLatticeSamples (G : ℂ → ℂ) (hG : UniformlySchwartzOnStrip G (1/2) (3/2))
+    (t d : ℝ) (hd : 0 < d) (N : ℕ) :
+    ∃ C > (0 : ℝ), ∀ n : ℤ, ‖G (1 + ((t - n * d : ℝ) : ℂ) * Complex.I)‖ ≤
+      C / (1 + |(n : ℝ)|) ^ N := by
+  obtain ⟨C, hC, ht⟩ := hG.2.2 (1/4) (by norm_num) (by norm_num) (N+1) (by omega)
+  obtain ⟨T, hT⟩ := eventually_atTop.mp (eventually_comap.mp ht)
+  let A := max 1 T
+  let g (y : ℝ) := G (1 + (y : ℂ) * Complex.I)
+  have hg : Continuous g := by
+    apply hG.2.1.continuousOn.comp_continuous (by fun_prop)
+    intro y
+    change 1 / 2 < (1 + (y : ℂ) * Complex.I).re ∧ (1 + (y : ℂ) * Complex.I).re < 3 / 2
+    norm_num
+  obtain ⟨B, hB⟩ := (isCompact_Icc (a := -A) (b := A)).bddAbove_image
+    (f := fun y : ℝ ↦ (1 + |y|)^N * ‖g y‖) (by fun_prop)
+  let K := max (max B (2 ^ N * C)) 1
+  have hK : 0 < K := zero_lt_one.trans_le (le_max_right _ _)
+  have bound (y : ℝ) : (1 + |y|)^N * ‖g y‖ ≤ K := by
+    by_cases hy : |y| ≤ A
+    · exact (hB ⟨y, abs_le.mp hy, rfl⟩).trans ((le_max_left _ _).trans (le_max_left _ _))
+    have h1 : 1 ≤ |y| := (le_max_left _ _).trans (le_of_not_ge hy)
+    have hp : 0 < |y| := zero_lt_one.trans_le h1
+    have hh := hT |y| ((le_max_right _ _).trans (le_of_not_ge hy)) y rfl 1 (by norm_num)
+    change ‖g y‖ ≤ C / |y| ^ (N+1) at hh
+    have hm := (le_div_iff₀ (pow_pos hp _)).mp hh
+    have hn : |y| ^ N ≤ |y| ^ (N+1) := pow_le_pow_right₀ h1 (by omega)
+    calc
+      (1 + |y|)^N * ‖g y‖ ≤ (2 * |y|)^N * ‖g y‖ :=
+        mul_le_mul_of_nonneg_right (pow_le_pow_left₀ (by positivity) (by linarith) _) (norm_nonneg _)
+      _ = 2^N * (|y| ^ N * ‖g y‖) := by rw [mul_pow]; ring
+      _ ≤ 2^N * C := by
+        apply mul_le_mul_of_nonneg_left _ (by positivity)
+        exact (mul_le_mul_of_nonneg_right hn (norm_nonneg _)).trans (by simpa only [mul_comm ‖g y‖] using hm)
+      _ ≤ K := (le_max_right _ _).trans (le_max_left _ _)
+  let M := (1 + |t| + d) / d
+  have hM : 0 < M := by dsimp [M]; positivity
+  refine ⟨M^N * K, mul_pos (pow_pos hM _) hK, fun n ↦ ?_⟩
+  let y := t - (n : ℝ) * d
+  have htri : |(n : ℝ)| * d ≤ |t| + |y| := by
+    rw [← abs_of_pos hd, ← abs_mul]
+    simpa [y] using (abs_sub t y)
+  have hscale : 1 + |(n : ℝ)| ≤ M * (1 + |y|) := by
+    dsimp [M]
+    rw [div_mul_eq_mul_div, le_div_iff₀ hd]
+    nlinarith [abs_nonneg t, abs_nonneg y, mul_nonneg (abs_nonneg t) (abs_nonneg y),
+      mul_nonneg hd.le (abs_nonneg y)]
+  apply (le_div_iff₀ (by positivity)).2
+  change ‖g y‖ * (1 + |(n : ℝ)|)^N ≤ _
+  calc
+    _ ≤ ‖g y‖ * (M * (1 + |y|))^N :=
+      mul_le_mul_of_nonneg_left (pow_le_pow_left₀ (by positivity) hscale _) (norm_nonneg _)
+    _ = M^N * ((1 + |y|)^N * ‖g y‖) := by rw [mul_pow]; ring
+    _ ≤ _ := mul_le_mul_of_nonneg_left (bound y) (pow_pos hM _).le
+
+/-- A sequence with all inverse-power bounds defines an elementary Schwartz test on the integer lattice. -/
+private theorem orbitalIntegerRapid (g : ℤ → ℂ)
+    (hg : ∀ N : ℕ, ∃ C > (0 : ℝ), ∀ n : ℤ, ‖g n‖ ≤ C / (1 + |(n : ℝ)|)^N) :
+    ∃ s : RapidDecaySequence 1, ∀ n : ℤ, s (fun _ ↦ n) = g n := by
+  let e := (Equiv.funUnique (Fin 1) ℤ).symm
+  have hbase : Summable (fun n : ℤ ↦ 1 / (1 + |(n : ℝ)|)^2) := by
+    have hn := (summable_nat_add_iff 1).mpr (Real.summable_one_div_nat_pow.mpr (by decide : 1 < 2))
+    apply Summable.of_nat_of_neg
+    · simpa [abs_of_nonneg, add_comm] using hn
+    · simpa [abs_of_nonneg, add_comm] using hn
+  let f (a : Fin 1 → ℤ) := g (a 0)
+  have hs (j : ℕ) : Summable (fun n : ℤ ↦ (1 + |(n : ℝ)|)^j * ‖g n‖) := by
+    obtain ⟨C, hC, hb⟩ := hg (j+2)
+    apply (hbase.mul_left C).of_nonneg_of_le (fun _ ↦ by positivity)
+    intro n
+    have hn : 0 < 1 + |(n : ℝ)| := by positivity
+    calc
+      _ ≤ (1 + |(n : ℝ)|)^j * (C / (1 + |(n : ℝ)|)^(j+2)) :=
+        mul_le_mul_of_nonneg_left (hb _) (pow_pos hn _).le
+      _ = _ := by rw [pow_add]; field_simp
+  refine ⟨⟨f, fun j ↦ ?_⟩, fun _ ↦ rfl⟩
+  rw [rapidDecaySequenceBound, ← e.tsum_eq]
+  have he (n : ℤ) : ‖(WithLp.toLp 2 (fun i ↦ ((e n i : ℤ) : ℝ)) : EuclideanSpace ℝ (Fin 1))‖ =
+      |(n : ℝ)| := by simp [e, EuclideanSpace.norm_eq, Real.norm_eq_abs, Real.sqrt_sq_eq_abs]
+  calc
+    _ = ∑' n : ℤ, ENNReal.ofReal ((1 + |(n : ℝ)|)^j * ‖g n‖) := by
+      apply tsum_congr
+      intro n
+      rw [ENNReal.ofReal_mul (by positivity), ENNReal.ofReal_pow (by positivity),
+        ENNReal.ofReal_add zero_le_one (abs_nonneg _), ENNReal.ofReal_one, ofReal_norm]
+      congr 2
+      apply congrArg (fun q : ℝ≥0∞ ↦ 1 + q)
+      exact (ofReal_norm _).symm.trans (congrArg ENNReal.ofReal (he n))
+    _ < ⊤ := by
+      rw [← ENNReal.ofReal_tsum_of_nonneg (fun _ ↦ by positivity) (hs j)]
+      exact ENNReal.ofReal_lt_top
+
+/-- The maximal elementary stage of the discrete group ℤ realizes its rapidly decreasing sequences. -/
+private theorem orbitalIntegerSchwartz (g : ℤ → ℂ)
+    (hg : ∀ N : ℕ, ∃ C > (0 : ℝ), ∀ n : ℤ, ‖g n‖ ≤ C / (1 + |(n : ℝ)|)^N) :
+    ∃ a : SchwartzBruhat (Multiplicative ℤ), ∀ n : ℤ, a (Multiplicative.ofAdd n) = g n := by
+  obtain ⟨s, hs⟩ := orbitalIntegerRapid g hg
+
+  let H := Multiplicative ℤ
+  let E₀ := ElementaryLieGroup 0 0 1 PUnit
+  let c : H ≃ₜ* Multiplicative E₀ :=
+    { toFun := fun n ↦ Multiplicative.ofAdd (0, 0, fun _ ↦ n.toAdd, 0)
+      invFun := fun x ↦ Multiplicative.ofAdd (x.toAdd.2.2.1 0)
+      left_inv := fun _ ↦ rfl
+      right_inv := fun x ↦ by
+        apply Multiplicative.toAdd.injective
+        apply Prod.ext (Subsingleton.elim _ _)
+        apply Prod.ext (Subsingleton.elim _ _)
+        apply Prod.ext _ (Subsingleton.elim _ _)
+        exact funext fun i ↦ congrArg x.toAdd.2.2.1 (Subsingleton.elim 0 i)
+      map_mul' := fun _ _ ↦ by
+        apply Multiplicative.toAdd.injective
+        apply Prod.ext (Subsingleton.elim _ _)
+        apply Prod.ext (Subsingleton.elim _ _)
+        exact Prod.ext rfl (Subsingleton.elim _ _)
+      continuous_toFun := continuous_of_discreteTopology
+      continuous_invFun := continuous_of_discreteTopology }
+  let p : ElementaryLCAPresentation H := ⟨0, 0, 1, PUnit, c⟩
+  have hG := (lca_elementary_iff (G := H)).mpr ⟨p⟩
+  let top : (⊤ : Subgroup H) ≃ₜ* H := ⟨Subgroup.topEquiv, continuous_subtype_val, continuous_id.subtype_mk _⟩
+  let a : BruhatStructuralPair H := ⟨(⊤, OrderDual.toDual ⊥), isOpen_univ,
+    isCompactlyGeneratedGroup_of_continuousMulEquiv top.symm hG.1,
+    isBruhatGoodSubgroup_bot_iff.mpr hG.2, bot_le⟩
+  let q : a.quotient ≃* H :=
+    QuotientGroup.quotientKerEquivOfRightInverse a.val.1.subtype top.symm (fun _ ↦ rfl)
+  let q' : a.quotient ≃ₜ* H :=
+    { q with
+      continuous_toFun := (QuotientGroup.isQuotientMap_mk _).continuous_iff.mpr continuous_subtype_val
+      continuous_invFun := QuotientGroup.continuous_mk.comp top.symm.continuous }
+  let e : ElementaryLCAPresentation a.quotient := ⟨0, 0, 1, PUnit, q'.trans c⟩
+  obtain ⟨E, hE⟩ := rapidDecaySequence_equiv_elementarySchwartz (r := 1)
+  refine ⟨schwartzBruhatStageInclusion a e (E s), fun n ↦ ?_⟩
+  change schwartzBruhatStageRealization a e (E s) (Multiplicative.ofAdd n) = _
+  rw [schwartzBruhatStageRealization_apply, dite_eq_left (Subgroup.mem_top _)]
+  exact (hE s _).trans (hs n)
+
+end
 
 open Classical in
 /-- Paper: Theorem 7.3.3.4(3), p. 361.
@@ -2135,109 +3576,69 @@ theorem sLocalPWOrbital_fourier_decay (p : Vℚ) (ω : PontryaginDual J₁(T))
       (((n : ℝ) * (2 * Real.pi / Real.log (v.val.asIdeal.absNorm : ℝ)) : ℝ) * Complex.I)
     ∃ a : SchwartzBruhat (Multiplicative ℤ), ∀ n : ℤ,
       (∀ j : Iₚ(p, ω), j.val = (c n, k) → a (Multiplicative.ofAdd n) = d j x) ∧
-      ((¬ ∃ j : Iₚ(p, ω), j.val = (c n, k)) → a (Multiplicative.ofAdd n) = 0) := by sorry
+      ((¬ ∃ j : Iₚ(p, ω), j.val = (c n, k)) → a (Multiplicative.ofAdd n) = 0) := by
+  classical
+  let period := 2 * Real.pi / Real.log (v.val.asIdeal.absNorm : ℝ)
+  have hperiod : 0 < period := div_pos (by positivity) (Real.log_pos (by
+    exact_mod_cast HeightOneSpectrum.one_lt_absNorm v.val))
+  let twist := quasiCharacterNormTwist (m(T)) (isProperMap_sIdeleQuotientNorm F T).continuous
+  let unitary (χ : PontryaginDual J(T)) :=
+    (⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp χ
+  let dual := dualQuasiCharacter (m(T)) (isProperMap_sIdeleQuotientNorm F T).continuous
+  let c (n : ℤ) := twist c₀ (((n : ℝ) * period : ℝ) * Complex.I)
+  obtain ⟨χ, s, hs⟩ := exists_sLocalNormTwist (F := F) (S := T) c₀
+  obtain ⟨π, hπ⟩ := (Valued.v : Valuation (v.val.adicCompletion F)
+    (WithZero (Multiplicative ℤ))).exists_isUniformizer_of_isCyclic_of_nontrivial
+  let u : (v.val.adicCompletion F)ˣ := Units.mk0 (π : v.val.adicCompletion F) hπ.ne_zero
+  have hu := norm_uniformizer_adicCompletion v.val (π : v.val.adicCompletion F) hπ
+  obtain ⟨t, ht⟩ := (existsUnique_sLocalOrbitalPhase χ v u hu).exists
+  obtain ⟨m, hm⟩ := (existsUnique_sLocalOrbitalLatticeIndex χ v u hu t ht c₀
+    ⟨s, hs.symm⟩ _hc₀.choose_spec.2).exists
+  let b := (m : ℝ) * period - t
+  have hbase : c₀ = twist (unitary χ) ((b : ℂ) * Complex.I) := hm
+  obtain ⟨w, rfl⟩ := ((Rₚ₀(p, ω)).comap W.subtype).mkQ_surjective x
+  obtain ⟨f, hf⟩ := (LinearMap.ker (sLocalHomogeneousAdelicThetaLinearMap F T ω)).mkQ_surjective w.val
+  let jet (n : ℤ) := iteratedDeriv k
+    (fun z : ℂ ↦ sLocalIdelicZFunction (sAdeleSchwartzFourier f) (dual (twist (c n) z))) 0
+  let g (n : ℤ) := if ∃ j : Iₚ(p, ω), j.val = (c n, k) then jet n else 0
+  let Z (s : ℂ) := sLocalIdelicZFunction (sAdeleSchwartzFourier f) (twist (unitary χ⁻¹) s)
+  have hZ : UniformlySchwartzOnStrip (iteratedDeriv k Z) (1/2) (3/2) :=
+    sLocalIdelicZFunction_schwartzOnStrip (sAdeleSchwartzFourier f) χ⁻¹ _ _
+      (by norm_num) (by norm_num) k
+  have hg (N : ℕ) : ∃ C > (0 : ℝ), ∀ n : ℤ, ‖g n‖ ≤ C / (1 + |(n : ℝ)|)^N := by
+    obtain ⟨C, hC, h⟩ := rapidLatticeSamples (iteratedDeriv k Z) hZ (-b) period hperiod N
+    refine ⟨C, hC, fun n ↦ ?_⟩
+    dsimp only [g]
+    split_ifs
+    · let a : ℂ := ((b + (n : ℝ) * period : ℝ) : ℂ) * Complex.I
+      have he : (fun z : ℂ ↦ sLocalIdelicZFunction (sAdeleSchwartzFourier f) (dual (twist (c n) z))) =
+          fun z ↦ Z ((1 - a) - z) := by
+        funext z
+        dsimp only [Z, dual, c, twist, unitary]
+        rw [hbase]
+        dsimp only [twist, unitary]
+        simp only [normTwist_normTwist, sLocal_dual_normTwist]
+        dsimp only [a]
+        congr 2
+        push_cast
+        ring
+      simp only [jet, he, iteratedDeriv_comp_const_sub, sub_zero, norm_smul, norm_pow, norm_neg,
+        norm_one, one_pow, one_mul]
+      convert h n using 3
+      dsimp only [a]
+      push_cast
+      ring
+    · simp only [norm_zero]
+      positivity
+  obtain ⟨a, ha⟩ := orbitalIntegerSchwartz g hg
+  refine ⟨a, fun n ↦ ⟨fun j hj ↦ ?_, fun hn ↦ ?_⟩⟩
+  · rw [ha, show g n = jet n from if_pos ⟨j, hj⟩, _hd, ← hf]
+    change jet n = sLocalOrbitalFourierJet j ((LinearMap.ker
+      (sLocalHomogeneousAdelicThetaLinearMap F T ω)).mkQL f)
+    rw [sLocalOrbitalFourierJet_mk, show j.val.1 = c n from congrArg Prod.fst hj,
+      show j.val.2 = k from congrArg Prod.snd hj]
+  · exact (ha n).trans (if_neg hn)
 
-private theorem sLocalZeroMomentTheta_eq_top_of_translate
-    {E W : Type*} [AddCommGroup E] [Module ℂ E] [AddCommGroup W] [Module ℂ W]
-    (p : E →ₗ[ℂ] ℂ × ℂ) (θ : E →ₗ[ℂ] W) (t : E → E)
-    (a b : ℂ) (ha : a ≠ 1) (hab : a ≠ b)
-    (hp : ∀ f, p (t f) = ((p f).1, b * (p f).2)) (hθ : ∀ f, θ (t f) = a • θ f) :
-    p.ker.map θ.ker.mkQ = ⊤ := by
-  apply top_unique
-  rintro x -
-  obtain ⟨f, rfl⟩ := θ.ker.mkQ_surjective x
-  -- The first difference kills evaluation at zero. The second kills the Fourier value at zero.
-  let k := t f - f
-  let h := t k - b • k
-  have hk : (p k).1 = 0 := by simp [k, hp]
-  have hh : h ∈ p.ker := by
-    change p (t k - b • k) = 0
-    rw [map_sub, map_smul, hp, sub_eq_zero]
-    exact Prod.ext (by simp [hk]) (by simp)
-  have hθk : θ k = (a - 1) • θ f := by simp [k, hθ, sub_smul]
-  have hθh : θ h = ((a - b) * (a - 1)) • θ f := by
-    change θ (t k - b • k) = _
-    rw [map_sub, map_smul, hθ, ← sub_smul, hθk, smul_smul]
-  let c := (a - b) * (a - 1)
-  have hc : c ≠ 0 := mul_ne_zero (sub_ne_zero.mpr hab) (sub_ne_zero.mpr ha)
-  refine ⟨c⁻¹ • h, p.ker.smul_mem _ hh, ?_⟩
-  simp only [Submodule.mkQ_apply, Submodule.Quotient.eq]
-  change θ (c⁻¹ • h - f) = 0
-  rw [map_sub, map_smul, hθh]
-  change c⁻¹ • (c • θ f) - θ f = 0
-  rw [inv_smul_smul₀ hc, sub_self]
-
-open MeasureTheory in
-private theorem sLocalZeroMomentTheta_eq_top_fourier {F : Type*} [Field F] [NumberField F]
-    {T : Finset (HeightOneSpectrum (𝓞 F))} (u : (SAdeleRing F T)ˣ) :
-    ∃ b : ℝ≥0, ∀ f : SchwartzBruhat (Multiplicative (SAdeleRing F T)),
-      sAdeleSchwartzFourier (schwartzBruhatUnitTranslate u f) (Multiplicative.ofAdd 0) =
-        ((b : ℝ) : ℂ) * sAdeleSchwartzFourier f (Multiplicative.ofAdd 0) := by
-  let A := SAdeleRing F T
-  let G := Multiplicative A
-  let (w : InfinitePlace F) : MeasurableSpace w.Completion := borel _
-  let (v : HeightOneSpectrum (𝓞 F)) : MeasurableSpace (v.adicCompletion F) := borel _
-  let : MeasurableSpace (InfiniteAdeleRing F) :=
-    inferInstanceAs (MeasurableSpace ((w : InfinitePlace F) → w.Completion))
-  let : MeasurableSpace A :=
-    inferInstanceAs (MeasurableSpace (InfiniteAdeleRing F × ((v : T) → v.val.adicCompletion F)))
-  let μ : Measure G := sAdditiveTamagawaMeasure F T
-  obtain ⟨hT₂, hLC, hBor, hHaar, hReg⟩ := sAdele_fourierMeasure (F := F) (S := T)
-  let : T2Space G := hT₂
-  let : LocallyCompactSpace G := hLC
-  let : BorelSpace G := hBor
-  let : μ.IsHaarMeasure := hHaar
-  let : μ.Regular := hReg
-  let d : G ≃ₜ* G :=
-    { toFun := fun x ↦ Multiplicative.ofAdd ((↑u⁻¹ : A) * x.toAdd)
-      invFun := fun x ↦ Multiplicative.ofAdd ((u : A) * x.toAdd)
-      left_inv := fun x ↦ Multiplicative.ext (by simp [← mul_assoc])
-      right_inv := fun x ↦ Multiplicative.ext (by simp [← mul_assoc])
-      map_mul' := fun x y ↦ Multiplicative.ext (mul_add _ _ _)
-      continuous_toFun := continuous_ofAdd.comp (continuous_const.mul continuous_toAdd)
-      continuous_invFun := continuous_ofAdd.comp (continuous_const.mul continuous_toAdd) }
-  -- Dilation sends additive Haar measure to a nonnegative multiple of itself.
-  let ν := μ.map d
-  let : ν.IsHaarMeasure := d.isHaarMeasure_map μ
-  let : ν.Regular := Measure.Regular.map d.toHomeomorph
-  refine ⟨ν.haarScalarFactor μ, fun f ↦ ?_⟩
-  rw [sAdeleSchwartzFourier_apply_zero, sAdeleSchwartzFourier_apply_zero]
-  change (∫ x : G, f (d.toHomeomorph.toMeasurableEquiv x) ∂μ) = _ * ∫ x : G, f x ∂μ
-  rw [← integral_map_equiv d.toHomeomorph.toMeasurableEquiv (fun x ↦ f x)]
-  change (∫ x : G, f x ∂ν) = _
-  calc
-    _ = ∫ x : G, f x ∂(ν.haarScalarFactor μ • μ) :=
-      congrArg (fun m : Measure G ↦ ∫ x : G, f x ∂m)
-        (Measure.isMulLeftInvariant_eq_smul_of_regular ν μ)
-    _ = _ := by
-      rw [integral_smul_nnreal_measure]
-      rfl
-
-/-- Paper: Equation (7.3.3.25), p. 363.
-For a nontrivial norm-one character the tests with both zero moments
-have the same homogeneous theta image as the unrestricted tests. -/
-theorem sLocalZeroMomentTheta_eq_top (ω : PontryaginDual J₁(T)) (_hω : ω ≠ 1) :
-    (Z₀(T)).map (q(T, ω)) = ⊤ := by
-  have hex : ∃ h : J₁(T), (ω h : ℂ) ≠ 1 :=
-    not_forall.mp fun hall ↦ _hω (PontryaginDual.ext fun x ↦ Subtype.ext (hall x))
-  obtain ⟨h, hh⟩ := hex
-  obtain ⟨u, hu⟩ := QuotientGroup.mk_surjective h.val
-  obtain ⟨b, hb⟩ := sLocalZeroMomentTheta_eq_top_fourier u
-  have hne : (ω h : ℂ) ≠ ((b : ℝ) : ℂ) := by
-    intro he
-    have hb1 : (b : ℝ) = 1 :=
-      (Real.norm_of_nonneg b.property).symm.trans
-        ((Complex.norm_real _).symm.trans ((congrArg norm he).symm.trans (Circle.norm_coe _)))
-    exact hh (he.trans (by exact_mod_cast hb1))
-  apply sLocalZeroMomentTheta_eq_top_of_translate
-    ((sAdelePolarValues_isLinear (F := F) (S := T)).mk' _)
-    (sLocalHomogeneousAdelicThetaLinearMap F T ω)
-    (schwartzBruhatUnitTranslate u) (ω h : ℂ) ((b : ℝ) : ℂ) hh hne
-  · intro f
-    apply Prod.ext
-    · exact congrArg f (congrArg Multiplicative.ofAdd (mul_zero _))
-    · exact hb f
-  · exact sLocalHomogeneousTheta_unitTranslate ω h u hu
 
 end PWOrbitalQuotients
 
@@ -2639,83 +4040,6 @@ theorem sLocalGammaFiltration_isClosed (ω : PontryaginDual J₁(S)) (N : depths
   exact isClosed_iInf_ker
     (fun j : ΓIndex(ω, sLocalGammaPoleCutoff (F := F) (S := S) ω N) ↦ ΓCoeff(ω, j))
 
--- TODO(paper-gap): The test list (7.3.4.9) does not separate the two coefficients
--- of a double real pole at cutoff (0,0). See ERRATA I169. Finite interpolation can
--- use translations of a test attaining the full pole order.
-
-/-- Paper: Theorem 7.3.4.1(2), pp. 364–365.
-The Laurent coefficients at the selected centers form a finite linearly independent family. -/
-theorem sLocalGammaFiltration_coeff_independent (ω : PontryaginDual J₁(S)) (N : depths) :
-    let U := sLocalGammaPoleCutoff (F := F) (S := S) ω N
-    Finite (ΓIndex(ω, U)) ∧ LinearIndependent ℂ (fun j : ΓIndex(ω, U) ↦ ΓCoeff(ω, j)) := by sorry
-
-private theorem dual_range_mkQL_eq_span_of_finite {E ι : Type*}
-    [AddCommGroup E] [Module ℂ E] [TopologicalSpace E] [IsTopologicalAddGroup E]
-    [ContinuousSMul ℂ E] [Finite ι] (φ : ι → StrongDual ℂ E) :
-    let stage : Submodule ℂ E := ⨅ j : ι, (φ j).ker
-    Set.range (fun ℓ : StrongDual ℂ (E ⧸ stage) ↦ ℓ.comp stage.mkQL) =
-      (Submodule.span ℂ (Set.range φ) : Set (StrongDual ℂ E)) := by
-  intro stage
-  classical
-  let : Fintype ι := Fintype.ofFinite ι
-  ext ψ
-  constructor
-  · rintro ⟨ℓ, rfl⟩
-    let T : E →ₗ[ℂ] (ι → ℂ) := LinearMap.pi (fun j ↦ (φ j).toLinearMap)
-    have hker : T.ker ≤ (ℓ.comp stage.mkQL).toLinearMap.ker := by
-      intro x hx
-      have hx' : x ∈ stage := by
-        rw [Submodule.mem_iInf]
-        intro j
-        exact congrFun hx j
-      change ℓ (stage.mkQ x) = 0
-      rw [stage.mkQ_apply, (Submodule.Quotient.mk_eq_zero stage).mpr hx', map_zero]
-    let f₀ : T.range →ₗ[ℂ] ℂ :=
-      (Submodule.liftQ T.ker (ℓ.comp stage.mkQL).toLinearMap hker).comp
-        T.quotKerEquivRange.symm.toLinearMap
-    obtain ⟨g, hg⟩ := LinearMap.exists_extend f₀
-    have hsum : ℓ.comp stage.mkQL = ∑ j : ι, g (Pi.single j 1) • φ j := by
-      ext x
-      have hTx : T x = ∑ j : ι, (φ j x) • Pi.single j (1 : ℂ) := by
-        ext k
-        simp [T, Finset.sum_apply, Pi.single_apply]
-      have h1 : (ℓ.comp stage.mkQL) x = g (T x) := by
-        have := congrArg (fun h : T.range →ₗ[ℂ] ℂ ↦ h ⟨T x, LinearMap.mem_range_self T x⟩) hg
-        simpa [f₀, LinearEquiv.symm_apply_apply] using this.symm
-      rw [h1, hTx, map_sum]
-      simp [smul_eq_mul, mul_comm]
-    change ℓ.comp stage.mkQL ∈ Submodule.span ℂ (Set.range φ)
-    rw [hsum]
-    exact Submodule.sum_mem _ fun j _ ↦
-      Submodule.smul_mem _ _ (Submodule.subset_span ⟨j, rfl⟩)
-  · intro hψ
-    have hker : stage ≤ ψ.toLinearMap.ker := by
-      refine Submodule.span_induction
-        (p := fun (ψ' : StrongDual ℂ E) _ ↦ stage ≤ ψ'.toLinearMap.ker)
-        ?_ ?_ ?_ ?_ hψ
-      · rintro _ ⟨j, rfl⟩ x hx
-        rw [Submodule.mem_iInf] at hx
-        exact hx j
-      · intro x _; simp
-      · intro a b _ _ ha hb x hx
-        have ha' : a x = 0 := ha hx
-        have hb' : b x = 0 := hb hx
-        change a x + b x = 0
-        rw [ha', hb', add_zero]
-      · intro c a _ ha x hx
-        have ha' : a x = 0 := ha hx
-        change c * a x = 0
-        rw [ha', mul_zero]
-    let ℓ_lin : (E ⧸ stage) →ₗ[ℂ] ℂ := stage.liftQ ψ.toLinearMap hker
-    have hcont : Continuous ℓ_lin := by
-      have hq : Topology.IsQuotientMap (stage.mkQ : E → E ⧸ stage) :=
-        QuotientAddGroup.isQuotientMap_mk _
-      rw [hq.continuous_iff]
-      exact ψ.continuous
-    refine ⟨⟨ℓ_lin, hcont⟩, ?_⟩
-    ext x
-    rfl
-
 private theorem meromorphicOrderAt_gamma_lt_zero_iff (u : ℂ) :
     meromorphicOrderAt (fun z : ℂ ↦ Complex.Gamma (z + u)) 0 < 0 ↔ ∃ m : ℕ, u = -(m : ℂ) := by
   have hg : ∀ y, AnalyticAt ℂ (fun x : ℂ ↦ (Complex.Gamma x)⁻¹) y := fun y ↦
@@ -2855,15 +4179,12 @@ private theorem meromorphicOrderAt_gammaC_div_two_lt_zero_iff (u : ℂ) :
   rw [heq, meromorphicOrderAt_mul he_an.meromorphicAt hG_mer, he_ord, zero_add,
     meromorphicOrderAt_gamma_lt_zero_iff]
 
-/-- Paper: Theorem 7.3.4.1(2), p. 365.
-The transposes of the linear functionals on the filtered quotient are precisely the
-span of the selected Laurent coefficients on the principal-value space.
-Deviation: The displayed positive order k in (7.3.4.4) selects Laurent exponent −k. -/
-theorem sLocalGammaFiltration_dual_span (ω : PontryaginDual J₁(S)) (N : depths) :
-    let stage := sLocalGammaFiltration (F := F) (S := S) ω N
-    Set.range (fun ℓ : StrongDual ℂ ((fullPV(ω)) ⧸ stage) ↦ ℓ.comp stage.mkQL) =
-      (Submodule.span ℂ (Set.range (fun j : ΓIndex(ω, sLocalGammaPoleCutoff (F := F) (S := S) ω N) ↦
-        ΓCoeff(ω, j))) : Set (StrongDual ℂ (fullPV(ω)))) := by
+/-- The selected centers and orders form a finite index set. Along the norm-twist line of a
+component each archimedean place has its poles in an arithmetic progression running to the
+left, and a cutoff keeps finitely many of them. -/
+private theorem sLocalGammaFiltration_coeff_independent_finite (ω : PontryaginDual J₁(S))
+    (N : depths) :
+    Finite (ΓIndex(ω, sLocalGammaPoleCutoff (F := F) (S := S) ω N)) := by
   let U := sLocalGammaPoleCutoff (F := F) (S := S) ω N
   have hU_fin : U.Finite := by
     by_cases hUne : U.Nonempty
@@ -3050,6 +4371,334 @@ theorem sLocalGammaFiltration_dual_span (ω : PontryaginDual J₁(S)) (N : depth
       have h2 : j₁.val.2 = j₂.val.2 := congrArg (fun p ↦ p.2.val) h
       exact Subtype.ext (Prod.ext h1 h2)
     exact Finite.of_injective f hf
+  exact hι_fin
+
+/-- Paper: Theorem 7.3.4.1(2), pp. 364–365.
+On each component some principal value attains the full archimedean pole order at every
+center: its Laurent coefficient of the top admissible order does not vanish there.
+This follows from `exists_sLocalIdelicZFunction_principalValue_attaining_poles` for one unitary
+character on the component. Every center of the component is a norm twist of it, the pole
+multiplicity at a twist is the number of archimedean pole places (the computation in
+`gammaFiltration_principalValue_bound`), and `mem_sLocalThetaPoleBound_iff_leading` gives the
+leading coefficient. -/
+private theorem sLocalGammaFiltration_coeff_independent_attaining (ω : PontryaginDual J₁(S)) :
+    ∃ g : B(S), ∀ c : Xₛ, onComponent(c, ω) → 0 < (arch(c)).card →
+      sLocalPrincipalPartCoeff c (arch(c)).card
+        (sAdelePrincipalValue F (Finset.Subset.refl S) g) ≠ 0 := by
+  classical
+  by_cases hne : ∃ c₀ : Xₛ, onComponent(c₀, ω)
+  swap
+  · exact ⟨0, fun c hc ↦ (hne ⟨c, hc⟩).elim⟩
+  obtain ⟨c₀, hc₀⟩ := hne
+  obtain ⟨χ, a, ha⟩ := exists_sLocalNormTwist (F := F) (S := S) c₀
+  let d : Xₛ := (⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp χ
+  obtain ⟨f, hf⟩ := exists_sLocalIdelicZFunction_principalValue_attaining_poles (F := F) (S := S) χ
+  refine ⟨f, fun c hc hpos ↦ ?_⟩
+  have htw (b : Xₛ) (a z : ℂ) : shift(shift(b, a), z) = shift(b, z + a) := by
+    ext1 g
+    change b g * _ ^ a * _ ^ z = b g * _ ^ (z + a)
+    rw [add_comm, Complex.cpow_add _ _ (Complex.ofReal_ne_zero.mpr
+      (NNReal.coe_ne_zero.mpr (m(S) g).ne_zero)), mul_assoc]
+  -- Every quasi-character of the component is a norm twist of `c₀`.
+  obtain ⟨s, hs⟩ : ∃ s : ℂ, c = shift(c₀, s) := by
+    obtain ⟨σ, hσ⟩ := sIdeleQuotientNorm_exists_section (F := F) (S := S)
+    let c₀inv := c₀.comp (ContinuousMonoidHom.inv J(S))
+    let P : QuasiCharacter ℝ≥0ˣ := (c * c₀inv).comp σ
+    obtain ⟨s, hs⟩ := (existsUnique_complexPower P).exists
+    refine ⟨s, ?_⟩
+    ext1 g
+    let u : J(S) := g * (σ (m(S) g))⁻¹
+    have hu_mem : u ∈ J₁(S) := by
+      change m(S) (g * (σ (m(S) g))⁻¹) = 1
+      rw [map_mul, map_inv, hσ, mul_inv_cancel]
+    have hu_eq : c u = c₀ u := DFunLike.congr_fun (hc.trans hc₀.symm) ⟨u, hu_mem⟩
+    have hdecomp : g = u * σ (m(S) g) := by simp [u]
+    have hcg : c g = c u * c (σ (m(S) g)) := by
+      conv_lhs => rw [hdecomp]
+      exact map_mul c _ _
+    have hc₀g : c₀ g = c₀ u * c₀ (σ (m(S) g)) := by
+      conv_lhs => rw [hdecomp]
+      exact map_mul c₀ _ _
+    have hP : c (σ (m(S) g)) * (c₀ (σ (m(S) g)))⁻¹ = (((m(S) g : ℝ≥0) : ℝ) : ℂ) ^ s := by
+      have h1 := hs (m(S) g)
+      change c (σ (m(S) g)) * c₀ (σ (m(S) g))⁻¹ = _ at h1
+      rwa [map_inv] at h1
+    have hc₀σ_ne : c₀ (σ (m(S) g)) ≠ 0 := ((Group.isUnit _).map c₀).ne_zero
+    change c g = c₀ g * (((m(S) g : ℝ≥0) : ℝ) : ℂ) ^ s
+    rw [hcg, hc₀g, hu_eq, ← hP]
+    field_simp [hc₀σ_ne]
+  have hct : c = shift(d, s + a) := by rw [hs, ← ha, htw]
+  subst hct
+  have translate (H : Xₛ → ℂ) :
+      meromorphicOrderAt (fun z : ℂ ↦ H (shift(shift(d, s + a), z))) 0 =
+        meromorphicOrderAt (fun z : ℂ ↦ H (shift(d, z))) (s + a) := by
+    have e : (fun z : ℂ ↦ H (shift(shift(d, s + a), z))) =
+        (fun z : ℂ ↦ H (shift(d, z))) ∘ (· + (s + a)) := by
+      funext z
+      rw [htw]
+      rfl
+    rw [e, meromorphicOrderAt_comp_add_const_eq_meromorphicOrderAt, zero_add]
+  have places : (arch(shift(d, s + a))).card = sLocalArchimedeanPoleMultiplicity χ (s + a) := by
+    unfold sLocalArchPolePlaces sLocalArchimedeanPoleMultiplicity
+    apply congrArg Finset.card
+    apply Finset.filter_congr
+    intro w _
+    rw [translate (fun b ↦ infiniteLocalEulerFactor w (sLocalInfiniteRestriction w b))]
+  let p := sAdelePrincipalValue F (Finset.Subset.refl S) f
+  have hord : meromorphicOrderAt (fun z ↦ sLocalIdelicZFunction p (shift(shift(d, s + a), z))) 0 =
+      ((-((arch(shift(d, s + a))).card : ℤ) : ℤ) : WithTop ℤ) := by
+    rw [translate (sLocalIdelicZFunction p), places]
+    exact hf (s + a)
+  have hZ := sLocalZ_centered p (shift(d, s + a))
+  rw [sLocalPrincipalPartCoeff_apply]
+  refine mem_sLocalThetaPoleBound_iff_leading hZ.1 hpos ?_
+  change (-(meromorphicOrderAt (fun z ↦ sLocalIdelicZFunction p
+    (shift(shift(d, s + a), z))) 0).untop₀).toNat = _
+  rw [hord]
+  simp
+
+/-- Paper: Theorem 7.3.4.1(2), pp. 364–365, and Theorem 7.2.1.1(2), p. 334.
+The Laurent coefficients of the principal value of a translated test are an upper triangular
+combination of those of the principal value of the test, with powers of the logarithm of the
+norm of the translating idele.
+This follows as `sLocalPrincipalPartCoeff_translate` does. By
+`sLocalIdelicZFunction_principalValue`, applied to the test and to its translate, and
+`sLocalPrincipalPartCoeff_translate_zeta`, the zeta function of the principal value of the
+translate is the character value times that of the principal value, off a discrete set of each
+norm-twist line. Residues only see such germs (`sLocalPrincipalPartCoeff_translate_congr`), and
+`sLocalPrincipalPartCoeff_translate_laurent` applies with the pole bound of
+`gammaFiltration_principalValue_bound`. -/
+private theorem sLocalGammaFiltration_coeff_independent_translate (g : B(S))
+    (u : (SAdeleRing F S)ˣ) (c : Xₛ) (k : ℕ) (hk : 0 < k) (hkc : k ≤ (arch(c)).card) :
+    sLocalPrincipalPartCoeff c k (sAdelePrincipalValue F (Finset.Subset.refl S)
+        (schwartzBruhatUnitTranslate u g)) =
+      c (QuotientGroup.mk u : J(S)) * ∑ i ∈ Finset.range ((arch(c)).card - k + 1),
+        sLocalPrincipalPartCoeff c (k + i) (sAdelePrincipalValue F (Finset.Subset.refl S) g) *
+          ((Real.log (((m(S) (QuotientGroup.mk u : J(S)) : ℝ≥0) : ℝ)) : ℝ) : ℂ) ^ i /
+            (i.factorial : ℂ) := by
+  classical
+  let P := sAdelePrincipalValue F (Finset.Subset.refl S)
+  let gu : J(S) := QuotientGroup.mk u
+  let L : ℂ := ((Real.log (((m(S) gu : ℝ≥0) : ℝ)) : ℝ) : ℂ)
+  have hZ := sLocalZ_centered (P g) c
+  have hbound := gammaFiltration_principalValue_bound g c
+  have hord : ((-((arch(c)).card : ℤ) : ℤ) : WithTop ℤ) ≤
+      meromorphicOrderAt (fun z ↦ sLocalIdelicZFunction (P g) (shift(c, z))) 0 := by
+    change (-(meromorphicOrderAt (fun z ↦ sLocalIdelicZFunction (P g) (shift(c, z))) 0).untop₀).toNat
+      ≤ _ at hbound
+    generalize meromorphicOrderAt (fun z ↦ sLocalIdelicZFunction (P g) (shift(c, z))) 0 = o
+      at hbound ⊢
+    induction o using WithTop.recTopCoe with
+    | top => exact le_top
+    | coe n =>
+      simp only [WithTop.untop₀_coe] at hbound
+      exact WithTop.coe_le_coe.mpr (by omega)
+  have hM : (((m(S) gu : ℝ≥0) : ℝ) : ℂ) ≠ 0 :=
+    Complex.ofReal_ne_zero.mpr (NNReal.coe_ne_zero.mpr (Units.ne_zero _))
+  have hval (b : Xₛ) (z : ℂ) : (shift(b, z)) gu = b gu * Complex.exp (L * z) := by
+    change b gu * (((m(S) gu : ℝ≥0) : ℝ) : ℂ) ^ z = _
+    rw [Complex.cpow_def_of_ne_zero hM, ← Complex.ofReal_log (NNReal.coe_nonneg _)]
+  -- The zeta functions of the two principal values differ by the character value at `u`.
+  have hgerm : (fun z ↦ sLocalIdelicZFunction (P (schwartzBruhatUnitTranslate u g)) (shift(c, z)))
+      =ᶠ[𝓝[≠] (0 : ℂ)]
+      fun z ↦ (shift(c, z)) gu * sLocalIdelicZFunction (P g) (shift(c, z)) := by
+    obtain ⟨χ, a, hc⟩ := exists_sLocalNormTwist (F := F) (S := S) c
+    let d : Xₛ := (⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp χ
+    have e (H : Xₛ → ℂ) (z : ℂ) : H (shift(c, z)) = H (shift(d, z + a)) := by
+      rw [← hc, normTwist_normTwist]
+    have hPV (h : B(S)) := sLocalIdelicZFunction_principalValue (F := F) (S := S) S
+      (Finset.Subset.refl S) h χ
+    have hcod : (fun s ↦ sLocalIdelicZFunction (P (schwartzBruhatUnitTranslate u g)) (shift(d, s)))
+        =ᶠ[codiscrete ℂ] fun s ↦ (shift(d, s)) gu * sLocalIdelicZFunction (P g) (shift(d, s)) := by
+      filter_upwards [hPV (schwartzBruhatUnitTranslate u g), hPV g] with s h1 h2
+      dsimp only at h1 h2
+      change sLocalIdelicZFunction (P (schwartzBruhatUnitTranslate u g)) (shift(d, s)) = _
+      erw [h1, h2, sLocalPrincipalPartCoeff_translate_zeta, mul_div_assoc]
+    have hT : Tendsto (fun z : ℂ ↦ z + a) (𝓝[≠] 0) (𝓝[≠] a) := by
+      refine tendsto_nhdsWithin_iff.mpr ⟨tendsto_nhdsWithin_of_tendsto_nhds ?_, ?_⟩
+      · simpa using (Continuous.tendsto (f := fun z : ℂ ↦ z + a) (by fun_prop) 0)
+      · filter_upwards [self_mem_nhdsWithin] with z hz
+        simpa using hz
+    filter_upwards [(eventuallyEq_codiscrete_iff_forall_eventuallyEq_nhdsNE.mp hcod a).comp_tendsto hT]
+      with z hz
+    simp only [Function.comp_apply] at hz
+    rw [e (sLocalIdelicZFunction (P (schwartzBruhatUnitTranslate u g))) z,
+      e (sLocalIdelicZFunction (P g)) z, e (fun b ↦ b gu) z, hz]
+  rw [sLocalPrincipalPartCoeff_apply]
+  change complexResidue (fun z ↦ sLocalIdelicZFunction (P (schwartzBruhatUnitTranslate u g))
+    (shift(c, z)) / z ^ (-(k : ℤ) + 1)) 0 = _
+  rw [sLocalPrincipalPartCoeff_translate_congr (h := fun z ↦ c gu * (Complex.exp (L * z) *
+    sLocalIdelicZFunction (P g) (shift(c, z)) / z ^ (-(k : ℤ) + 1))) ?_]
+  · rw [sLocalPrincipalPartCoeff_translate_laurent hZ.1 hkc hord]
+    rfl
+  · filter_upwards [hgerm] with z hz
+    rw [hz, hval]
+    ring
+
+/-- Paper: Theorem 7.3.4.1(2), pp. 364–365.
+There is a family of S-ideles indexed by the logarithm of their norm on which every
+quasi-character is an exponential, and the exponents separate the quasi-characters of one
+component.
+This follows from a continuous section of the norm (`sIdeleQuotientNorm_exists_section`),
+lifted to S-ideles at the points `exp t`: a quasi-character composed with the section is a
+complex power (`existsUnique_complexPower`), and two quasi-characters of one component which
+agree on the section agree everywhere, since every class is a norm-one class times a value of
+the section. -/
+private theorem sLocalGammaFiltration_coeff_independent_section :
+    ∃ (u : ℝ → (SAdeleRing F S)ˣ) (s : Xₛ → ℂ),
+      (∀ t : ℝ, Real.log (((m(S) (QuotientGroup.mk (u t) : J(S)) : ℝ≥0) : ℝ)) = t) ∧
+      (∀ (c : Xₛ) (t : ℝ), c (QuotientGroup.mk (u t) : J(S)) = Complex.exp (s c * t)) ∧
+      ∀ (ω : PontryaginDual J₁(S)) (c c' : Xₛ), onComponent(c, ω) → onComponent(c', ω) →
+        s c = s c' → c = c' := by
+  classical
+  obtain ⟨σ, hσ⟩ := sIdeleQuotientNorm_exists_section (F := F) (S := S)
+  let E (t : ℝ) : ℝ≥0ˣ := Units.mk0 (Real.exp t).toNNReal (Real.toNNReal_pos.mpr (Real.exp_pos t)).ne'
+  have hE (t : ℝ) : (((E t : ℝ≥0ˣ) : ℝ≥0) : ℝ) = Real.exp t := Real.coe_toNNReal _ (Real.exp_pos t).le
+  choose u hu using fun t ↦ QuotientGroup.mk_surjective (σ (E t))
+  let s (c : Xₛ) : ℂ := (existsUnique_complexPower (c.comp σ)).exists.choose
+  have hs (c : Xₛ) (x : ℝ≥0ˣ) : c (σ x) = (((x : ℝ≥0) : ℝ) : ℂ) ^ s c :=
+    (existsUnique_complexPower (c.comp σ)).exists.choose_spec x
+  refine ⟨u, s, fun t ↦ ?_, fun c t ↦ ?_, fun ω c c' hc hc' hcc ↦ ?_⟩
+  · rw [hu, hσ (E t), hE, Real.log_exp]
+  · rw [hu, hs, hE, Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr (Real.exp_pos t).ne'),
+      ← Complex.ofReal_log (Real.exp_pos t).le, Real.log_exp, mul_comm]
+  · have hk (k : J(S)) (hk : k ∈ J₁(S)) : c k = c' k :=
+      DFunLike.congr_fun (hc.trans hc'.symm) ⟨k, hk⟩
+    have hsec (x : ℝ≥0ˣ) : c (σ x) = c' (σ x) := by rw [hs, hs, hcc]
+    ext g
+    have hg : g * (σ (m(S) g))⁻¹ ∈ J₁(S) := by
+      rw [MonoidHom.mem_ker, map_mul, map_inv, hσ, mul_inv_cancel]
+    have hsplit : g = g * (σ (m(S) g))⁻¹ * σ (m(S) g) := by group
+    calc c g = c (g * (σ (m(S) g))⁻¹) * c (σ (m(S) g)) := by rw [← map_mul, ← hsplit]
+      _ = c' (g * (σ (m(S) g))⁻¹) * c' (σ (m(S) g)) := by rw [hk _ hg, hsec]
+      _ = c' g := by rw [← map_mul, ← hsplit]
+
+-- TODO(paper-gap): The test list (7.3.4.9) does not separate the two coefficients
+-- of a double real pole at cutoff (0,0). See ERRATA I169. Finite interpolation can
+-- use translations of a test attaining the full pole order.
+
+/-- Paper: Theorem 7.3.4.1(2), pp. 364–365.
+The Laurent coefficients at the selected centers form a finite linearly independent family. -/
+theorem sLocalGammaFiltration_coeff_independent (ω : PontryaginDual J₁(S)) (N : depths) :
+    let U := sLocalGammaPoleCutoff (F := F) (S := S) ω N
+    Finite (ΓIndex(ω, U)) ∧ LinearIndependent ℂ (fun j : ΓIndex(ω, U) ↦ ΓCoeff(ω, j)) := by
+  intro U
+  have hfin : Finite (ΓIndex(ω, U)) := sLocalGammaFiltration_coeff_independent_finite ω N
+  refine ⟨hfin, ?_⟩
+  classical
+  let := Fintype.ofFinite (ΓIndex(ω, U))
+  obtain ⟨g₀, hg₀⟩ := sLocalGammaFiltration_coeff_independent_attaining (F := F) (S := S) ω
+  obtain ⟨u, s, hnorm, hchar, hsinj⟩ :=
+    sLocalGammaFiltration_coeff_independent_section (F := F) (S := S)
+  rw [Fintype.linearIndependent_iff]
+  intro a ha j₀
+  let x (t : ℝ) : fullPV(ω) :=
+    ⟨PV((Finset.Subset.refl S), ω) (q(S, ω) (schwartzBruhatUnitTranslate (u t) g₀)),
+      LinearMap.mem_range_self _ _⟩
+  refine expPolynomial_translate_coeff_eq_zero (Finset.univ : Finset (ΓIndex(ω, U)))
+    (fun j ↦ j.val.1) (fun j ↦ j.val.2) s (fun c ↦ (arch(c)).card)
+    (fun c m ↦ sLocalPrincipalPartCoeff c m (sAdelePrincipalValue F (Finset.Subset.refl S) g₀))
+    a ?_ ?_ ?_ ?_ ?_ ?_ j₀ (Finset.mem_univ _)
+  · intro j _ j' _ h1 h2
+    exact Subtype.ext (Prod.ext h1 h2)
+  · intro j _ j' _ h
+    exact hsinj ω _ _ j.property.1 j'.property.1 h
+  · intro j _
+    exact j.property.2.2.2
+  · intro j _
+    exact hg₀ j.val.1 j.property.1 (lt_of_lt_of_le j.property.2.2.1 j.property.2.2.2)
+  · intro c m hm
+    by_contra hne
+    have hle := (sLocalPrincipalPartCoeff_ne_zero_imp_pole c m (Nat.zero_lt_of_lt hm) _ hne).2
+    exact absurd (hle.trans (gammaFiltration_principalValue_bound g₀ c)) (not_le.mpr hm)
+  · intro t
+    have hat := congrArg (fun φ : StrongDual ℂ (fullPV(ω)) ↦ φ (x t)) ha
+    simp only [ContinuousLinearMap.sum_apply, ContinuousLinearMap.smul_apply, smul_eq_mul,
+      ContinuousLinearMap.zero_apply] at hat
+    refine Eq.trans (Finset.sum_congr rfl fun j _ ↦ congrArg (a j * ·) ?_) hat
+    have h2 := sLocalGammaFiltration_coeff_independent_translate (F := F) (S := S) g₀ (u t)
+      j.val.1 j.val.2 j.property.2.2.1 j.property.2.2.2
+    rw [hchar, hnorm] at h2
+    exact h2.symm
+
+private theorem dual_range_mkQL_eq_span_of_finite {E ι : Type*}
+    [AddCommGroup E] [Module ℂ E] [TopologicalSpace E] [IsTopologicalAddGroup E]
+    [ContinuousSMul ℂ E] [Finite ι] (φ : ι → StrongDual ℂ E) :
+    let stage : Submodule ℂ E := ⨅ j : ι, (φ j).ker
+    Set.range (fun ℓ : StrongDual ℂ (E ⧸ stage) ↦ ℓ.comp stage.mkQL) =
+      (Submodule.span ℂ (Set.range φ) : Set (StrongDual ℂ E)) := by
+  intro stage
+  classical
+  let : Fintype ι := Fintype.ofFinite ι
+  ext ψ
+  constructor
+  · rintro ⟨ℓ, rfl⟩
+    let T : E →ₗ[ℂ] (ι → ℂ) := LinearMap.pi (fun j ↦ (φ j).toLinearMap)
+    have hker : T.ker ≤ (ℓ.comp stage.mkQL).toLinearMap.ker := by
+      intro x hx
+      have hx' : x ∈ stage := by
+        rw [Submodule.mem_iInf]
+        intro j
+        exact congrFun hx j
+      change ℓ (stage.mkQ x) = 0
+      rw [stage.mkQ_apply, (Submodule.Quotient.mk_eq_zero stage).mpr hx', map_zero]
+    let f₀ : T.range →ₗ[ℂ] ℂ :=
+      (Submodule.liftQ T.ker (ℓ.comp stage.mkQL).toLinearMap hker).comp
+        T.quotKerEquivRange.symm.toLinearMap
+    obtain ⟨g, hg⟩ := LinearMap.exists_extend f₀
+    have hsum : ℓ.comp stage.mkQL = ∑ j : ι, g (Pi.single j 1) • φ j := by
+      ext x
+      have hTx : T x = ∑ j : ι, (φ j x) • Pi.single j (1 : ℂ) := by
+        ext k
+        simp [T, Finset.sum_apply, Pi.single_apply]
+      have h1 : (ℓ.comp stage.mkQL) x = g (T x) := by
+        have := congrArg (fun h : T.range →ₗ[ℂ] ℂ ↦ h ⟨T x, LinearMap.mem_range_self T x⟩) hg
+        simpa [f₀, LinearEquiv.symm_apply_apply] using this.symm
+      rw [h1, hTx, map_sum]
+      simp [smul_eq_mul, mul_comm]
+    change ℓ.comp stage.mkQL ∈ Submodule.span ℂ (Set.range φ)
+    rw [hsum]
+    exact Submodule.sum_mem _ fun j _ ↦
+      Submodule.smul_mem _ _ (Submodule.subset_span ⟨j, rfl⟩)
+  · intro hψ
+    have hker : stage ≤ ψ.toLinearMap.ker := by
+      refine Submodule.span_induction
+        (p := fun (ψ' : StrongDual ℂ E) _ ↦ stage ≤ ψ'.toLinearMap.ker)
+        ?_ ?_ ?_ ?_ hψ
+      · rintro _ ⟨j, rfl⟩ x hx
+        rw [Submodule.mem_iInf] at hx
+        exact hx j
+      · intro x _; simp
+      · intro a b _ _ ha hb x hx
+        have ha' : a x = 0 := ha hx
+        have hb' : b x = 0 := hb hx
+        change a x + b x = 0
+        rw [ha', hb', add_zero]
+      · intro c a _ ha x hx
+        have ha' : a x = 0 := ha hx
+        change c * a x = 0
+        rw [ha', mul_zero]
+    let ℓ_lin : (E ⧸ stage) →ₗ[ℂ] ℂ := stage.liftQ ψ.toLinearMap hker
+    have hcont : Continuous ℓ_lin := by
+      have hq : Topology.IsQuotientMap (stage.mkQ : E → E ⧸ stage) :=
+        QuotientAddGroup.isQuotientMap_mk _
+      rw [hq.continuous_iff]
+      exact ψ.continuous
+    refine ⟨⟨ℓ_lin, hcont⟩, ?_⟩
+    ext x
+    rfl
+
+/-- Paper: Theorem 7.3.4.1(2), p. 365.
+The transposes of the linear functionals on the filtered quotient are precisely the
+span of the selected Laurent coefficients on the principal-value space.
+Deviation: The displayed positive order k in (7.3.4.4) selects Laurent exponent −k. -/
+theorem sLocalGammaFiltration_dual_span (ω : PontryaginDual J₁(S)) (N : depths) :
+    let stage := sLocalGammaFiltration (F := F) (S := S) ω N
+    Set.range (fun ℓ : StrongDual ℂ ((fullPV(ω)) ⧸ stage) ↦ ℓ.comp stage.mkQL) =
+      (Submodule.span ℂ (Set.range (fun j : ΓIndex(ω, sLocalGammaPoleCutoff (F := F) (S := S) ω N) ↦
+        ΓCoeff(ω, j))) : Set (StrongDual ℂ (fullPV(ω)))) := by
+  let U := sLocalGammaPoleCutoff (F := F) (S := S) ω N
+  have hι_fin : Finite (ΓIndex(ω, U)) := sLocalGammaFiltration_coeff_independent_finite ω N
   exact @dual_range_mkQL_eq_span_of_finite _ _ _ _ _ _ _ hι_fin
     (fun j : ΓIndex(ω, U) ↦ ΓCoeff(ω, j))
 
@@ -3262,18 +4911,6 @@ theorem sLocalGammaFiltration_iInf (ω : PontryaginDual J₁(S)) :
     rw [mem_sLocalThetaPoleBound_iff_residue_congr he, complexResidue_div_sub hg]
     simp [zero_pow j.property.2.2.1.ne']
 
--- TODO(paper-gap): ERRATA I168 applies to the appeal to §5.4 on p. 365.
--- Finite interpolation only gives a dense coefficient image in the product topology.
--- Simultaneous realization in the original space is a separate proof obligation.
-
-/-- Paper: Theorem 7.3.4.1(4), p. 365.
-Every array of archimedean principal parts on the component is realized by one
-class in the full finite principal-value range.
-Deviation: States explicitly the interpolation needed for the canonical product model. -/
-theorem sLocalGamma_all_coeff_surjective (ω : PontryaginDual J₁(S)) :
-    Function.Surjective (fun (x : fullPV(ω)) (j : ΓIndex(ω, (Set.univ : Set Xₛ))) ↦
-      ΓCoeff(ω, j) x) := by sorry
-
 /-- Every unitary character of the norm-one group is the restriction of a quasi-character. -/
 private theorem sLocalGammaOrbitalQuotient_coeff_exists (ω : PontryaginDual J₁(S)) :
     ∃ c₀ : Xₛ, onComponent(c₀, ω) := by
@@ -3398,6 +5035,818 @@ private theorem sLocalGammaOrbitalQuotient_coeff_ker (ω : PontryaginDual J₁(S
   · intro h N
     exact (Submodule.mem_iInf _).mpr fun j ↦
       h ⟨j.val, j.property.1, Set.mem_univ _, j.property.2.2⟩
+
+-- Repair the open-mapping gap (ERRATA I168) by a Borel–Mittag-Leffler lift.
+-- Norm translations give exponentially small finite interpolants at far-left poles;
+-- the closed full principal-value range is Fréchet, so the corrections converge.
+section GammaInterpolationHelpers
+
+private theorem finite_interpolant_small
+    (E ι : Type*) [AddCommGroup E] [Module ℂ E] [Fintype ι]
+    (q : Seminorm ℂ E) (v : ι → ℝ → E) (a : ι → ℝ → ℂ) (b : ι → ℝ → ℝ)
+    (hv : ∀ i, ∀ᶠ t in atTop, q (v i t) ≤ b i t)
+    (ha : ∀ i, Tendsto (fun t ↦ ‖a i t‖ * b i t) atTop (𝓝 0)) :
+    Tendsto (fun t ↦ q (∑ i, a i t • v i t)) atTop (𝓝 0) := by
+  apply squeeze_zero' (Eventually.of_forall fun _ ↦ apply_nonneg _ _)
+    (g := fun t ↦ ∑ i, ‖a i t‖ * b i t)
+  · have hall : ∀ᶠ t in atTop, ∀ i, q (v i t) ≤ b i t :=
+      Filter.eventually_all.mpr hv
+    filter_upwards [hall] with t ht
+    refine (Finset.le_sum_of_subadditive q (map_zero q).le (map_add_le_add q) _ _).trans ?_
+    apply Finset.sum_le_sum
+    intro i hi
+    rw [map_smul_eq_mul]
+    exact mul_le_mul_of_nonneg_left (ht i) (norm_nonneg _)
+  · simpa only [Finset.sum_const_zero] using tendsto_finsetSum Finset.univ (fun i _ ↦ ha i)
+open Classical in
+private theorem finite_level_small
+    (E ι : Type*) [AddCommGroup E] [Module ℂ E] [Fintype ι]
+    (P : Submodule ℂ E) (L : ι → E →ₗ[ℂ] ℂ)
+    (ρ : ℝ → E →ₗ[ℂ] E)
+    (hinv : ∀ t x, ρ t (ρ (-t) x) = x)
+    (hP : ∀ t x, x ∈ P → ρ t x ∈ P)
+    (hK : ∀ t x, x ∈ P → (∀ i, L i x = 0) → ∀ i, L i (ρ t x) = 0)
+    (v : ι → E) (hvP : ∀ i, v i ∈ P)
+    (hvL : ∀ i j, L i (v j) = if i = j then 1 else 0)
+    (q q' : Seminorm ℂ E) (a : ℝ)
+    (hbound : ∀ x, ∀ᶠ t in atTop, q (ρ t x) ≤ Real.exp (-a*t) * q' x)
+    (hdecay : ∀ y ∈ P, ∀ i,
+      Tendsto (fun t ↦ Real.exp (-a*t) * ‖L i (ρ (-t) y)‖) atTop (𝓝 0))
+    (c : ι → ℂ) (ε : ℝ) (hε : 0 < ε) :
+    ∃ x ∈ P, (∀ i, L i x = c i) ∧ q x < ε := by
+  classical
+  let y := ∑ i, c i • v i
+  have hyP : y ∈ P := P.sum_mem fun i _ ↦ P.smul_mem _ (hvP i)
+  have hyL (i) : L i y = c i := by simp [y, map_sum, map_smul, hvL]
+  let z (t : ℝ) := ∑ i, L i (ρ (-t) y) • v i
+  have hzP (t) : z t ∈ P := P.sum_mem fun i _ ↦ P.smul_mem _ (hvP i)
+  have hzL (t) (i) : L i (z t) = L i (ρ (-t) y) := by simp [z, map_sum, map_smul, hvL]
+  have hcoef (t) (i) : L i (ρ t (z t)) = c i := by
+    have hzero (j) : L j (z t - ρ (-t) y) = 0 := by rw [map_sub, hzL]; exact sub_self _
+    have hh := hK t (z t - ρ (-t) y) (P.sub_mem (hzP t) (hP _ _ hyP)) hzero i
+    rw [map_sub, hinv, map_sub, sub_eq_zero, hyL] at hh
+    exact hh
+  have hsmall : Tendsto (fun t ↦ q (ρ t (z t))) atTop (𝓝 0) := by
+    have h := finite_interpolant_small E ι q (fun i t ↦ ρ t (v i))
+      (fun i t ↦ L i (ρ (-t) y)) (fun i t ↦ Real.exp (-a*t) * q' (v i))
+      (fun i ↦ hbound (v i)) (fun i ↦ ?_)
+    · simpa only [z, map_sum, map_smul] using h
+    · have hh := (hdecay y hyP i).mul_const (q' (v i))
+      convert hh using 1 <;> try { simp }
+      funext t
+      ring
+  obtain ⟨t,ht⟩ := (hsmall.eventually (gt_mem_nhds hε)).exists
+  exact ⟨ρ t (z t), hP _ _ (hzP t), hcoef t, ht⟩
+private theorem image_action_bound
+    (E κ U : Type*) [AddCommGroup E] [Module ℂ E] [TopologicalSpace E]
+    (p : SeminormFamily ℂ E κ) (hp : WithSeminorms p) (r : κ → ℝ)
+    (ρ : ℝ → U → U) (J : U → E)
+    (he : ∀ i t x, p i (J (ρ t x)) = Real.exp (-r i*t) * p i (J x))
+    (q : Seminorm ℂ E) (hq : Continuous q) :
+    ∃ a : ℝ, ∃ q' : Seminorm ℂ E,
+      ∀ x, ∀ᶠ t in atTop, q (J (ρ t x)) ≤ Real.exp (-a*t) * q' (J x) := by
+  classical
+  obtain ⟨s,C,hC,hb⟩ := Seminorm.bound_sum_of_continuous hp q hq
+  let a := -∑ i ∈ s, |r i|
+  let q' : Seminorm ℂ E := C • ∑ i ∈ s, p i
+  refine ⟨a,q',fun x ↦ ?_⟩
+  filter_upwards [eventually_ge_atTop (0 : ℝ)] with t ht
+  have hr (i) (hi : i ∈ s) : a ≤ r i := by
+    have h := Finset.single_le_sum (fun i _ ↦ abs_nonneg (r i)) hi
+    have h' := neg_abs_le (r i)
+    dsimp [a]
+    linarith
+  have hsum : (∑ i ∈ s, p i (J (ρ t x))) ≤ Real.exp (-a*t) * ∑ i ∈ s, p i (J x) := by
+    rw [Finset.mul_sum]
+    apply Finset.sum_le_sum
+    intro i hi
+    rw [he]
+    exact mul_le_mul_of_nonneg_right (Real.exp_le_exp.mpr (by nlinarith [hr i hi])) (apply_nonneg _ _)
+  have hh := hb (J (ρ t x))
+  simp only [smul_apply, sum_apply, NNReal.smul_def, smul_eq_mul] at hh
+  change q (J (ρ t x)) ≤ _ at hh
+  calc
+    q (J (ρ t x)) ≤ (C : ℝ) * ∑ i ∈ s, p i (J (ρ t x)) := hh
+    _ ≤ (C : ℝ) * (Real.exp (-a*t) * ∑ i ∈ s, p i (J x)) := mul_le_mul_of_nonneg_left hsum C.coe_nonneg
+    _ = Real.exp (-a*t) * q' (J x) := by
+      simp only [q', smul_apply, sum_apply, NNReal.smul_def, smul_eq_mul]
+      ring
+private theorem exponential_polynomial_decay (s : ℂ) (a : ℝ) (hsa : s.re < a)
+    (n : ℕ) (b : ℕ → ℂ) :
+    Tendsto (fun t : ℝ ↦ Real.exp (-a*t) *
+      ‖Complex.exp (s*(t : ℂ)) * ∑ k ∈ Finset.range n, b k * (t : ℂ)^k‖) atTop (𝓝 0) := by
+  have hlim (k : ℕ) : Tendsto (fun t : ℝ ↦ t^k * Real.exp (-(a-s.re)*t)) atTop (𝓝 0) := by
+    simpa only [Real.rpow_natCast] using
+      tendsto_rpow_mul_exp_neg_mul_atTop_nhds_zero (k : ℝ) (a-s.re) (sub_pos.mpr hsa)
+  apply squeeze_zero' (Eventually.of_forall fun _ ↦ mul_nonneg (Real.exp_pos _).le (norm_nonneg _))
+    (g := fun t : ℝ ↦ ∑ k ∈ Finset.range n, ‖b k‖ * (t^k * Real.exp (-(a-s.re)*t)))
+  · filter_upwards [eventually_ge_atTop (0 : ℝ)] with t ht
+    have hS : ‖∑ k ∈ Finset.range n, b k * (t : ℂ)^k‖ ≤ ∑ k ∈ Finset.range n, ‖b k‖ * t^k := by
+      simpa only [norm_mul, norm_pow, Complex.norm_real, Real.norm_of_nonneg ht] using
+        norm_sum_le (Finset.range n) (fun k ↦ b k * (t : ℂ)^k)
+    have he : Real.exp (-a*t) * ‖Complex.exp (s*(t : ℂ))‖ = Real.exp (-(a-s.re)*t) := by
+      rw [Complex.norm_exp, ← Real.exp_add]
+      congr 1
+      simp only [Complex.mul_re, Complex.ofReal_re, Complex.ofReal_im, mul_zero, sub_zero]
+      ring
+    rw [norm_mul, ← mul_assoc, he]
+    calc
+      _ ≤ Real.exp (-(a-s.re)*t) * ∑ k ∈ Finset.range n, ‖b k‖ * t^k :=
+        mul_le_mul_of_nonneg_left hS (Real.exp_pos _).le
+      _ = _ := by
+        rw [Finset.mul_sum]
+        apply Finset.sum_congr rfl
+        intro k hk
+        ring
+  · have h := tendsto_finsetSum (Finset.range n) (fun k _ ↦ (hlim k).const_mul ‖b k‖)
+    simpa only [mul_zero, Finset.sum_const_zero] using h
+open MeasureTheory in
+private theorem bergman_trace_multiplier_norm
+    (I : Set ℝ) (a : I) (N : ℕ) (f g : schwartzBergmanSubmodule I) (t : ℝ)
+    (he : ∀ z ∈ Complex.re ⁻¹' I, g.val z = Complex.exp (-(t : ℂ)*z) * f.val z) :
+    lpNorm (weightedVerticalTrace a N g.val) 2 volume =
+      Real.exp (-t*(a : ℝ)) * lpNorm (weightedVerticalTrace a N f.val) 2 volume := by
+  have hg := schwartzBergman_trace_memLp I a 2 (by norm_num) (by norm_num) N g
+  have hf := schwartzBergman_trace_memLp I a 2 (by norm_num) (by norm_num) N f
+  have hn (y : ℝ) : ‖weightedVerticalTrace a N g.val y‖ =
+      ‖((Real.exp (-t*(a : ℝ))) • weightedVerticalTrace a N f.val) y‖ := by
+    have hz : (a : ℂ) + (y : ℂ)*Complex.I ∈ Complex.re ⁻¹' I := by
+      change ((a : ℂ) + (y : ℂ)*Complex.I).re ∈ I
+      simpa using a.property
+    simp only [weightedVerticalTrace]
+    rw [he _ hz]
+    simp only [weightedVerticalTrace, norm_mul, Complex.norm_exp, Pi.smul_apply, norm_smul,
+      Real.norm_of_nonneg (Real.exp_pos _).le, Complex.mul_re, Complex.neg_re,
+      Complex.neg_im, Complex.ofReal_re, Complex.ofReal_im, Complex.add_re,
+      Complex.add_im, Complex.I_re, Complex.I_im, mul_zero, zero_mul, neg_zero,
+      add_zero, zero_add, sub_zero, mul_one]
+    ring
+  unfold lpNorm
+  rw [eLpNorm_congr_norm_ae hg.aestronglyMeasurable
+    (hf.const_smul (Real.exp (-t*(a : ℝ)))).aestronglyMeasurable (Eventually.of_forall hn)]
+  change lpNorm ((Real.exp (-t*(a : ℝ))) • weightedVerticalTrace a N f.val) 2 volume = _
+  rw [lpNorm_const_smul]
+  change |Real.exp (-t*(a : ℝ))| * lpNorm (weightedVerticalTrace a N f.val) 2 volume = _
+  rw [abs_of_pos (Real.exp_pos _)]
+  rfl
+private theorem finite_interpolation
+    (E ι : Type*) [AddCommGroup E] [Module ℂ E] [TopologicalSpace E] [Fintype ι]
+    (L : ι → E →L[ℂ] ℂ) (hL : LinearIndependent ℂ L) :
+    Surjective (fun x : E ↦ fun i ↦ L i x) := by
+  classical
+  let T : E →ₗ[ℂ] (ι → ℂ) := LinearMap.pi (fun i ↦ (L i).toLinearMap)
+  change Surjective T
+  apply LinearMap.dualMap_injective_iff.mp
+  apply (injective_iff_map_eq_zero _).mpr
+  intro f hf
+  have hsum : ∑ i, f (Pi.single i 1) • L i = 0 := by
+    ext x
+    have hTx : T x = ∑ i, L i x • Pi.single i (1 : ℂ) := by
+      ext j
+      simp [T, Pi.single_apply]
+    have hh := congrArg (fun ℓ : Module.Dual ℂ E ↦ ℓ x) hf
+    change f (T x) = 0 at hh
+    rw [hTx, map_sum] at hh
+    simpa only [sum_apply, smul_apply, map_smul, smul_eq_mul, mul_comm, zero_apply] using hh
+  have hc := (Fintype.linearIndependent_iff.mp hL) (fun i ↦ f (Pi.single i 1)) hsum
+  apply LinearMap.ext
+  intro u
+  have hu : u = ∑ i, u i • Pi.single i (1 : ℂ) := by
+    ext j
+    simp [Pi.single_apply]
+  change f u = 0
+  rw [hu,map_sum]
+  simp only [map_smul, hc, smul_zero, Finset.sum_const_zero]
+private theorem gamma_frechet_embed
+    {X Y : Type*} [AddCommGroup X] [Module ℂ X] [TopologicalSpace X]
+    [IsTopologicalAddGroup X] [AddCommGroup Y] [Module ℂ Y] [TopologicalSpace Y]
+    (i : X →L[ℂ] Y) (hi : IsClosedEmbedding i) (hY : IsFrechetTVS Y) : IsFrechetTVS X := by
+  obtain ⟨hadd,hpoly,hmet,hcomplete⟩ := hY
+  let : UniformSpace Y := IsTopologicalAddGroup.rightUniformSpace Y
+  let : IsUniformAddGroup Y := isUniformAddGroup_of_addCommGroup
+  let : CompleteSpace Y := hcomplete
+  let : UniformSpace X := IsTopologicalAddGroup.rightUniformSpace X
+  let : IsUniformAddGroup X := isUniformAddGroup_of_addCommGroup
+  have hu := AddMonoidHom.isUniformInducing_of_isInducing (f := i.toLinearMap.toAddMonoidHom) hi.isInducing
+  exact ⟨inferInstance, hi.eq_induced ▸ PolynormableSpace.induced i.toLinearMap,
+    hi.isEmbedding.metrizableSpace, hu.completeSpace hi.isClosed_range.isComplete⟩
+private theorem gamma_range_frechet (F : Type*) [Field F] [NumberField F]
+    (S : Finset (HeightOneSpectrum (𝓞 F)))
+    (ω : PontryaginDual (sIdeleQuotientNorm F S).ker) :
+    IsFrechetTVS ↥((sLocalHomogeneousThetaPrincipalValue (F := F) (Finset.Subset.refl S) ω).range) := by
+  let D := (sLocalHomogeneousThetaPrincipalValue (F := F) (Finset.Subset.refl S) ω).range
+  have hD : IsClosed (D : Set (SLocalHomogeneousThetaSpace F S ω)) :=
+    (sLocalHomogeneousThetaPrincipalValue_isClosedEmbedding (F := F) (Finset.Subset.refl S) ω).isClosed_range
+  exact gamma_frechet_embed D.subtypeL (D.isClosedEmbedding_subtypeL hD)
+    (sLocalHomogeneousThetaSpace_frechet (F := F) (S := S) ω)
+private theorem action_on_range
+    (G E : Type*) [Monoid G] [AddCommGroup E] [Module ℂ E] [TopologicalSpace E]
+    (A : G →* (E →L[ℂ] E)) (P : E →ₗ[ℂ] E)
+    (hcomm : ∀ g x, A g (P x) = P (A g x)) :
+    ∃ ρ : G →* (P.range →L[ℂ] P.range), ∀ g x, (ρ g x).val = A g x.val := by
+  have hpres (g) : ∀ x ∈ P.range, A g x ∈ P.range := by
+    rintro x ⟨y,rfl⟩
+    exact ⟨A g y,(hcomm g y).symm⟩
+  let ρ (g : G) : P.range →L[ℂ] P.range := (A g).restrict (hpres g)
+  refine ⟨{ toFun := ρ, map_one' := ?_, map_mul' := ?_ },fun g x ↦ rfl⟩
+  · ext x
+    change A 1 x.val = x.val
+    rw [A.map_one]
+    rfl
+  · intro g h
+    ext x
+    change A (g*h) x.val = A g (A h x.val)
+    rw [A.map_mul]
+    rfl
+private theorem product_action_bound
+    (E X Y κ ιY : Type*) [AddCommGroup E] [Module ℂ E] [TopologicalSpace E]
+    [AddCommGroup X] [Module ℂ X] [TopologicalSpace X]
+    [AddCommGroup Y] [Module ℂ Y] [TopologicalSpace Y]
+    (p : SeminormFamily ℂ X κ) (hp : WithSeminorms p)
+    (q : SeminormFamily ℂ Y ιY) (hq : WithSeminorms q)
+    (r : κ → ℝ) (s : ιY → ℝ)
+    (ρ : ℝ → E →ₗ[ℂ] E) (J : E →ₗ[ℂ] X × Y) (hJ : IsInducing J)
+    (hx : ∀ i t x, p i (J (ρ t x)).1 = Real.exp (-r i*t) * p i (J x).1)
+    (hy : ∀ i t x, q i (J (ρ t x)).2 = Real.exp (-s i*t) * q i (J x).2)
+    (Q : Seminorm ℂ E) (hQ : Continuous Q) :
+    ∃ a : ℝ, ∃ Q' : Seminorm ℂ E,
+      ∀ x, ∀ᶠ t in atTop, Q (ρ t x) ≤ Real.exp (-a*t) * Q' x := by
+  let : PolynormableSpace ℂ X := hp.toPolynormableSpace
+  let : PolynormableSpace ℂ Y := hq.toPolynormableSpace
+  obtain ⟨B,hB,hQB⟩ := Seminorm.exists_le_comp_of_isInducing hQ hJ
+  let Bx := B.comp (LinearMap.inl ℂ X Y)
+  let By := B.comp (LinearMap.inr ℂ X Y)
+  have hBx : Continuous Bx := hB.comp (continuous_id.prodMk continuous_const)
+  have hBy : Continuous By := hB.comp (continuous_const.prodMk continuous_id)
+  obtain ⟨ax,Bx',hx'⟩ := image_action_bound X κ E p hp r (fun t ↦ ρ t) (fun x ↦ (J x).1) hx Bx hBx
+  obtain ⟨ay,By',hy'⟩ := image_action_bound Y ιY E q hq s (fun t ↦ ρ t) (fun x ↦ (J x).2) hy By hBy
+  let a := min ax ay
+  let Q' := (Bx'.comp ((LinearMap.fst ℂ X Y).comp J)) + (By'.comp ((LinearMap.snd ℂ X Y).comp J))
+  refine ⟨a,Q',fun x ↦ ?_⟩
+  filter_upwards [hx' x,hy' x,eventually_ge_atTop (0 : ℝ)] with t htX htY ht
+  have heX : Real.exp (-ax*t) ≤ Real.exp (-a*t) := Real.exp_le_exp.mpr (by have := min_le_left ax ay; dsimp [a]; nlinarith)
+  have heY : Real.exp (-ay*t) ≤ Real.exp (-a*t) := Real.exp_le_exp.mpr (by have := min_le_right ax ay; dsimp [a]; nlinarith)
+  calc
+    Q (ρ t x) ≤ B (J (ρ t x)) := hQB _
+    _ ≤ Bx (J (ρ t x)).1 + By (J (ρ t x)).2 := by
+      have hb := map_add_le_add B ((J (ρ t x)).1,0) (0,(J (ρ t x)).2)
+      change B ((J (ρ t x)).1,(J (ρ t x)).2) ≤
+        B ((J (ρ t x)).1,0) + B (0,(J (ρ t x)).2)
+      simpa only [Prod.mk_add_mk,add_zero,zero_add] using hb
+    _ ≤ Real.exp (-ax*t) * Bx' (J x).1 + Real.exp (-ay*t) * By' (J x).2 := add_le_add htX htY
+    _ ≤ Real.exp (-a*t) * (Bx' (J x).1 + By' (J x).2) := by
+      rw [mul_add]
+      exact add_le_add (mul_le_mul_of_nonneg_right heX (apply_nonneg _ _))
+        (mul_le_mul_of_nonneg_right heY (apply_nonneg _ _))
+    _ = Real.exp (-a*t) * Q' x := rfl
+private theorem finite_code_prefix (ι : Type*) (code : ι → ℕ)
+    (hf : ∀ n, Finite {i : ι // code i = n}) (k : ℕ) :
+    Finite {i : ι // code i ≤ k} := by
+  letI (n : Fin (k+1)) : Finite {i : ι // code i = n.val} := hf n.val
+  let f : {i : ι // code i ≤ k} → (n : Fin (k+1)) × {i : ι // code i = n.val} :=
+    fun i ↦ ⟨⟨code i.val,Nat.lt_succ_of_le i.property⟩,⟨i.val,rfl⟩⟩
+  apply Finite.of_injective f
+  intro i j h
+  apply Subtype.ext
+  exact congrArg (fun x : (n : Fin (k+1)) × {i : ι // code i = n.val} ↦ x.2.val) h
+open Classical in
+private theorem surjective_of_translated_coefficients
+    (E ι : Type*) [AddCommGroup E] [Module ℂ E] [TopologicalSpace E]
+    (hE : IsFrechetTVS E) (L : ι → E →L[ℂ] ℂ) (code : ι → ℕ)
+    (hf : ∀ k, Finite {i : ι // code i = k})
+    (hv : ∀ k, ∃ v : {i : ι // code i = k} → E,
+      (∀ i j, code j < k → L j (v i) = 0) ∧
+      ∀ i j, (i = j → L j.val (v i) = 1) ∧ (i ≠ j → L j.val (v i) = 0))
+    (ρ : ℝ → E →ₗ[ℂ] E) (hinv : ∀ t x, ρ t (ρ (-t) x) = x)
+    (hker : ∀ (p : ℕ → Prop) t x, (∀ i, p (code i) → L i x = 0) →
+      ∀ i, p (code i) → L i (ρ t x) = 0)
+    (hbound : ∀ q : Seminorm ℂ E, Continuous q → ∃ a : ℝ, ∃ q' : Seminorm ℂ E,
+      ∀ x, ∀ᶠ t in atTop, q (ρ t x) ≤ Real.exp (-a*t) * q' x)
+    (htail : ∀ a : ℝ, ∃ K : ℕ, ∀ i, K ≤ code i → ∀ y,
+      Tendsto (fun t ↦ Real.exp (-a*t) * ‖L i (ρ (-t) y)‖) atTop (𝓝 0)) :
+    Surjective (fun x : E ↦ fun i ↦ L i x) := by
+  obtain ⟨hadd,hpoly,hmet,hcomplete⟩ := hE
+  let : UniformSpace E := IsTopologicalAddGroup.rightUniformSpace E
+  let : IsUniformAddGroup E := isUniformAddGroup_of_addCommGroup
+  let : CompleteSpace E := hcomplete
+  letI (k : ℕ) : Fintype {i : ι // code i = k} := Fintype.ofFinite _
+  have hs : Surjective (fun x : E ↦ fun k (i : {i : ι // code i = k}) ↦ L i.val x) := by
+    apply surjective_coeff_of_eventually_small
+    · intro k c
+      obtain ⟨v,hv0,hvraw⟩ := hv k
+      have hv1 (i j) : L j.val (v i) = if i = j then 1 else 0 := by
+        by_cases h : i = j
+        · rw [if_pos h]; exact (hvraw i j).1 h
+        · rw [if_neg h]; exact (hvraw i j).2 h
+      let y := ∑ i, c i • v i
+      refine ⟨y,?_,?_⟩
+      · intro j hj i
+        simp [y,map_sum,map_smul,hv0 _ _ (by rw [i.property]; exact hj)]
+      · intro i
+        simp [y,map_sum,map_smul,hv1,eq_comm]
+    · intro q hq
+      obtain ⟨a,q',hb⟩ := hbound q hq
+      obtain ⟨K,hK⟩ := htail a
+      refine ⟨K,fun k hk c ε hε ↦ ?_⟩
+      let P : Submodule ℂ E := ⨅ i : {i : ι // code i < k}, (L i.val).ker
+      have hP (x : E) : x ∈ P ↔ ∀ i, code i < k → L i x = 0 := by simp [P]
+      obtain ⟨v,hv0,hv1⟩ := hv k
+      obtain ⟨x,hx,hL,hsmall⟩ := finite_level_small E {i : ι // code i = k} P
+        (fun i ↦ (L i.val).toLinearMap) ρ hinv
+        (fun t x hx ↦ (hP _).mpr (hker (fun n ↦ n < k) t x ((hP _).mp hx)))
+        (fun t x hx hz i ↦ hker (fun n ↦ n ≤ k) t x (fun j hj ↦ by
+          rcases lt_or_eq_of_le hj with hj | hj
+          · exact (hP _).mp hx j hj
+          · exact hz ⟨j,hj⟩) i.val (by rw [i.property]))
+        v (fun i ↦ (hP _).mpr (hv0 i)) (fun i j ↦ by
+          by_cases h : i = j
+          · subst j
+            rw [if_pos rfl]
+            exact (hv1 i i).1 rfl
+          · rw [if_neg h]
+            exact (hv1 j i).2 (Ne.symm h)) q q' a hb
+        (fun y hy i ↦ hK i.val (by rw [i.property]; exact hk) y) c ε hε
+      · refine ⟨x,fun j hj i ↦ (hP x).mp hx i.val ?_,hL,hsmall⟩
+        rw [i.property]
+        exact hj
+  intro c
+  obtain ⟨x,hx⟩ := hs (fun k i ↦ c i.val)
+  refine ⟨x,funext fun i ↦ ?_⟩
+  exact congrFun (congrFun hx (code i)) ⟨i,rfl⟩
+private theorem real_action_inverse (E : Type*) [AddCommGroup E] [Module ℂ E] [TopologicalSpace E]
+    (B : Multiplicative ℝ →* (E →L[ℂ] E)) (t : ℝ) (x : E) :
+    B (Multiplicative.ofAdd (-t)) (B (Multiplicative.ofAdd (-(-t))) x) = x := by
+  have hh : (Multiplicative.ofAdd (-t) : Multiplicative ℝ) * Multiplicative.ofAdd (-(-t)) = 1 := by
+    change -t + -(-t) = 0
+    ring
+  have hB : B (Multiplicative.ofAdd (-t)) * B (Multiplicative.ofAdd (-(-t))) = 1 := by
+    rw [← B.map_mul,hh,B.map_one]
+  exact congrArg (fun f : E →L[ℂ] E ↦ f x) hB
+
+private theorem gamma_full_action (ω : PontryaginDual J₁(S)) :
+    ∃ ρ : J(S) →* (fullPV(ω) →L[ℂ] fullPV(ω)),
+      ∀ g x, (ρ g x).val = A(S, ω) g x.val := by
+  exact action_on_range J(S) Θ(S, ω) A(S, ω) PV((Finset.Subset.refl S), ω)
+    (fun g x ↦ (sLocalPW_principalValue_diagram_comm (F := F) (Finset.Subset.refl S) ω g x).symm)
+
+private theorem gamma_action_laurent (ω : PontryaginDual J₁(S)) (x : Θ(S, ω))
+    (c : Xₛ) (hc : onComponent(c, ω)) (k : ℕ) (hk : k ≤ sLocalRhoPoleOrder c)
+    (u : (SAdeleRing F S)ˣ) :
+    sLocalThetaPrincipalPartCoeff ω c hc k (A(S, ω) (QuotientGroup.mk u) x) =
+      c (QuotientGroup.mk u) * ∑ j ∈ Finset.range (sLocalRhoPoleOrder c-k+1),
+        sLocalThetaPrincipalPartCoeff ω c hc (k+j) x *
+          (Real.log (((m(S) (QuotientGroup.mk u)).val : ℝ)) : ℂ)^j / (j.factorial : ℂ) := by
+  obtain ⟨f,rfl⟩ := Submodule.mkQ_surjective (LinearMap.ker (sLocalHomogeneousAdelicThetaLinearMap F S ω)) x
+  rw [(existsUnique_sLocalHomogeneousThetaAction (F := F) (S := S) ω).exists.choose_spec.2 u f]
+  change sLocalPrincipalPartCoeff c k (schwartzBruhatUnitTranslate u f) =
+    c (QuotientGroup.mk u) * ∑ j ∈ Finset.range (sLocalRhoPoleOrder c-k+1),
+      sLocalPrincipalPartCoeff c (k+j) f *
+        (Real.log (((m(S) (QuotientGroup.mk u)).val : ℝ)) : ℂ)^j / (j.factorial : ℂ)
+  exact sLocalPrincipalPartCoeff_translate c k hk u f
+
+private theorem gamma_high_coeff_zero (ω : PontryaginDual J₁(S)) (x : fullPV(ω))
+    (c : Xₛ) (hc : onComponent(c, ω)) (k : ℕ) (hk : (arch(c)).card < k) :
+    sLocalThetaPrincipalPartCoeff ω c hc k x.val = 0 := by
+  obtain ⟨y,hy⟩ := x.property
+  obtain ⟨f,rfl⟩ := Submodule.mkQ_surjective (LinearMap.ker (sLocalHomogeneousAdelicThetaLinearMap F S ω)) y
+  let g := sAdelePrincipalValue F (Finset.Subset.refl S) f
+  have hg : q(S, ω) g = x.val := hy
+  rw [← hg]
+  change sLocalPrincipalPartCoeff c k g = 0
+  by_contra hne
+  have hpos : 0 < k := lt_of_le_of_lt (Nat.zero_le _) hk
+  have hpole := (sLocalPrincipalPartCoeff_ne_zero_imp_pole c k hpos g hne).2
+  have hb := gammaFiltration_principalValue_bound f c
+  dsimp [g] at hpole
+  omega
+
+private theorem gamma_zeta_translate (χ : PontryaginDual J(S)) (g : J(S)) :
+    let ω := χ.comp (⟨(m(S)).ker.subtype, continuous_subtype_val⟩ : J₁(S) →ₜ* J(S))
+    let Z := sLocalZetaPair (F := F) (S := S) χ
+    ∀ x : Θ(S, ω),
+      EqOn (Z (A(S, ω) g x)).1.val
+        (fun z ↦ shift((⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp χ, z) g * (Z x).1.val z)
+        (Complex.re ⁻¹' Ioi (0 : ℝ)) ∧
+      EqOn (Z (A(S, ω) g x)).2.val
+        (fun z ↦ shift((⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp χ, z) g * (Z x).2.val z)
+        (Complex.re ⁻¹' Iio (1 : ℝ)) := by
+  intro ω Z x
+  obtain ⟨u,rfl⟩ := QuotientGroup.mk_surjective g
+  refine Quotient.inductionOn' x ?_
+  intro f
+  have ha := (existsUnique_sLocalHomogeneousThetaAction (F := F) (S := S) ω).exists.choose_spec.2 u f
+  have ht := sLocalZetaPair_translate (F := F) (S := S) χ u f
+  constructor
+  · intro z hz
+    have he := congrArg (fun y : Θ(S, ω) ↦ (Z y).1.val z) ha
+    exact he.trans (ht.1 hz)
+  · intro z hz
+    have he := congrArg (fun y : Θ(S, ω) ↦ (Z y).2.val z) ha
+    exact he.trans (ht.2 hz)
+
+open MeasureTheory in
+private theorem gamma_action_bound (χ : PontryaginDual J(S)) (g : ℝ → J(S))
+    (hnorm : ∀ t, (((m(S) (g t)).val : ℝ)) = Real.exp (-t))
+    (hχ : ∀ t, χ (g t) = 1) :
+    let ω := χ.comp (⟨(m(S)).ker.subtype, continuous_subtype_val⟩ : J₁(S) →ₜ* J(S))
+    ∀ (ρ : J(S) →* (fullPV(ω) →L[ℂ] fullPV(ω))),
+      (∀ h x, (ρ h x).val = A(S, ω) h x.val) →
+    ∀ Q : Seminorm ℂ (fullPV(ω)), Continuous Q →
+      ∃ a : ℝ, ∃ Q' : Seminorm ℂ (fullPV(ω)),
+        ∀ x, ∀ᶠ t in atTop, Q (ρ (g t) x) ≤ Real.exp (-a*t) * Q' x := by
+  intro ω ρ hρ Q hQ
+  let X := SchwartzBergman (Ioi (0 : ℝ))
+  let Y := SchwartzBergman (Iio (1 : ℝ))
+  let Z := sLocalZetaPair (F := F) (S := S) χ
+  let J : fullPV(ω) →ₗ[ℂ] X × Y := Z.comp (fullPV(ω)).subtype
+  have hJ : IsInducing J := (sLocalZetaPair_isClosedEmbedding (F := F) (S := S) χ).isInducing.comp
+    Topology.IsInducing.subtypeVal
+  let p (I : Set ℝ) : I × ℕ → Seminorm ℂ (SchwartzBergman I) := fun i ↦ Seminorm.of
+    (fun f : schwartzBergmanSubmodule I ↦ (eLpNorm (weightedVerticalTrace i.1 i.2 f.val) 2 volume).toReal)
+    (schwartzBergman_l2_seminorm I i).1 (schwartzBergman_l2_seminorm I i).2
+  have hp (I : Set ℝ) : WithSeminorms (p I) := withGeneratingSeminorms_spec _ _
+  have hfactor (t : ℝ) (z : ℂ) :
+      shift((⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp χ, z) (g t) =
+        Complex.exp (-(t : ℂ)*z) := by
+    change (χ (g t) : ℂ) * ((((m(S) (g t)).val : ℝ) : ℂ)^z) = _
+    rw [hχ t, Circle.coe_one, one_mul, hnorm t]
+    rw [Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr (Real.exp_pos _).ne'),
+      ← Complex.ofReal_log (Real.exp_pos _).le, Real.log_exp, Complex.ofReal_neg]
+  apply product_action_bound (fullPV(ω)) X Y ((Ioi (0 : ℝ)) × ℕ) ((Iio (1 : ℝ)) × ℕ)
+    (p _) (hp _) (p _) (hp _) (fun i ↦ (i.1 : ℝ)) (fun i ↦ (i.1 : ℝ))
+    (fun t ↦ (ρ (g t)).toLinearMap) J hJ ?_ ?_ Q hQ
+  · intro i t x
+    have he : ∀ z ∈ Complex.re ⁻¹' Ioi (0 : ℝ),
+        (J (ρ (g t) x)).1.val z = Complex.exp (-(t : ℂ)*z) * (J x).1.val z := by
+      intro z hz
+      have hmap := congrArg (fun y : Θ(S, ω) ↦ (Z y).1.val z) (hρ (g t) x)
+      have ht := (gamma_zeta_translate χ (g t) x.val).1 hz
+      exact hmap.trans (ht.trans (congrArg (fun w : ℂ ↦ w * (J x).1.val z) (hfactor t z)))
+    have h := bergman_trace_multiplier_norm (Ioi (0 : ℝ)) i.1 i.2 (J x).1 (J (ρ (g t) x)).1 t he
+    change lpNorm (weightedVerticalTrace i.1 i.2 (J (ρ (g t) x)).1.val) 2 volume =
+      Real.exp (-(i.1 : ℝ)*t) * lpNorm (weightedVerticalTrace i.1 i.2 (J x).1.val) 2 volume
+    rw [show -(i.1 : ℝ)*t = -t*(i.1 : ℝ) by ring]
+    exact h
+  · intro i t x
+    have he : ∀ z ∈ Complex.re ⁻¹' Iio (1 : ℝ),
+        (J (ρ (g t) x)).2.val z = Complex.exp (-(t : ℂ)*z) * (J x).2.val z := by
+      intro z hz
+      have hmap := congrArg (fun y : Θ(S, ω) ↦ (Z y).2.val z) (hρ (g t) x)
+      have ht := (gamma_zeta_translate χ (g t) x.val).2 hz
+      exact hmap.trans (ht.trans (congrArg (fun w : ℂ ↦ w * (J x).2.val z) (hfactor t z)))
+    have h := bergman_trace_multiplier_norm (Iio (1 : ℝ)) i.1 i.2 (J x).2 (J (ρ (g t) x)).2 t he
+    change lpNorm (weightedVerticalTrace i.1 i.2 (J (ρ (g t) x)).2.val) 2 volume =
+      Real.exp (-(i.1 : ℝ)*t) * lpNorm (weightedVerticalTrace i.1 i.2 (J x).2.val) 2 volume
+    rw [show -(i.1 : ℝ)*t = -t*(i.1 : ℝ) by ring]
+    exact h
+
+private theorem gamma_weight_shift (τ : ℝ≥0ˣ →ₜ* J(S)) (hτ : RightInverse τ (m(S)))
+    (c : Xₛ) (z : ℂ) :
+    let u : ℝ≥0ˣ := Units.mk0 2 two_ne_zero
+    Real.log ‖shift(c,z) (τ u)‖ / Real.log 2 = Real.log ‖c (τ u)‖ / Real.log 2 + z.re := by
+  intro u
+  have hu : (((u : ℝ≥0ˣ).val : ℝ)) = 2 := by norm_num [u]
+  have hn : ‖shift(c,z) (τ u)‖ = ‖c (τ u)‖ * (2 : ℝ)^z.re := by
+    change ‖c (τ u) * ((((m(S) (τ u)).val : ℝ) : ℂ)^z)‖ = _
+    rw [norm_mul,hτ u,hu,Complex.norm_cpow_eq_rpow_re_of_pos (by norm_num)]
+  have hc : ‖c (τ u)‖ ≠ 0 := norm_ne_zero_iff.mpr (((Group.isUnit (τ u)).map c).ne_zero)
+  rw [hn,Real.log_mul hc (Real.rpow_pos_of_pos (by norm_num) _).ne',Real.log_rpow (by norm_num)]
+  have hlog : Real.log 2 ≠ 0 := (Real.log_pos (by norm_num : (1 : ℝ) < 2)).ne'
+  field_simp
+
+private theorem gamma_finite_centers_above (ω : PontryaginDual J₁(S))
+    (τ : ℝ≥0ˣ →ₜ* J(S)) (hτ : RightInverse τ (m(S))) (A : ℝ) :
+    let u : ℝ≥0ˣ := Units.mk0 2 two_ne_zero
+    Set.Finite {c : Xₛ | onComponent(c,ω) ∧ (arch(c)).Nonempty ∧
+      A ≤ Real.log ‖c (τ u)‖ / Real.log 2} := by
+  intro u
+  classical
+  obtain ⟨c₀,h₀⟩ := sLocalGammaOrbitalQuotient_coeff_exists ω
+  let P (w : InfinitePlace F) := sLocalGammaFiltration_iInf_placePoles c₀ w
+  let b := Real.log ‖c₀ (τ u)‖ / Real.log 2
+  let pole (w : InfinitePlace F) (n : ℕ) : Xₛ :=
+    shift(c₀, -((P w).choose_spec.choose * (n : ℝ) : ℂ) - (P w).choose)
+  choose N hN using fun w : InfinitePlace F ↦
+    exists_nat_gt ((b - (P w).choose.re - A) / (P w).choose_spec.choose)
+  let U := ⋃ w : InfinitePlace F, Set.range (fun n : Fin (N w) ↦ pole w n.val)
+  have hU : U.Finite := Set.finite_iUnion fun w ↦ Set.finite_range _
+  apply hU.subset
+  rintro c ⟨hc,hw,hA⟩
+  obtain ⟨s,hs⟩ := sLocalGammaOrbitalQuotient_coeff_shift ω c₀ c h₀ hc
+  obtain ⟨w,hw⟩ := hw
+  rw [hs] at hw
+  obtain ⟨n,hn⟩ := ((P w).choose_spec.choose_spec.2 s).mp hw
+  have he : c = pole w n := by rw [hs,hn]
+  have hwgt : Real.log ‖c (τ u)‖ / Real.log 2 =
+      b - (P w).choose_spec.choose * (n : ℝ) - (P w).choose.re := by
+    rw [he]
+    have h := gamma_weight_shift τ hτ c₀
+      (-((P w).choose_spec.choose * (n : ℝ) : ℂ) - (P w).choose)
+    change Real.log ‖(pole w n) (τ u)‖ / Real.log 2 = b + _ at h
+    rw [h]
+    simp only [Complex.sub_re,Complex.neg_re,Complex.ofReal_re,Complex.mul_re,
+      Complex.ofReal_im,mul_zero,sub_zero]
+    ring
+  have hstep := (P w).choose_spec.choose_spec.1
+  have hnr : (n : ℝ) < N w := lt_of_le_of_lt
+    ((le_div_iff₀ hstep).mpr (by rw [hwgt] at hA; linarith)) (hN w)
+  have hnn : n < N w := by exact_mod_cast hnr
+  exact Set.mem_iUnion.mpr ⟨w,⟨⟨n,hnn⟩,he.symm⟩⟩
+
+private theorem gamma_finite_indices_above (ω : PontryaginDual J₁(S))
+    (τ : ℝ≥0ˣ →ₜ* J(S)) (hτ : RightInverse τ (m(S))) (A : ℝ) :
+    let u : ℝ≥0ˣ := Units.mk0 2 two_ne_zero
+    Set.Finite {j : ΓIndex(ω,(Set.univ : Set Xₛ)) |
+      A ≤ Real.log ‖j.val.1 (τ u)‖ / Real.log 2} := by
+  intro u
+  have hC := gamma_finite_centers_above ω τ hτ A
+  apply Set.Finite.of_injOn (f := fun j : ΓIndex(ω,(Set.univ : Set Xₛ)) ↦ j.val) ?_
+    Subtype.val_injective.injOn (hC.prod (Set.finite_Iic (Fintype.card (InfinitePlace F))))
+  intro j hj
+  exact ⟨⟨j.property.1,Finset.card_pos.mp (j.property.2.2.1.trans_le j.property.2.2.2),hj⟩,
+    j.property.2.2.2.trans (Finset.card_le_univ _)⟩
+
+private theorem gamma_block_code (ω : PontryaginDual J₁(S)) :
+    ∃ code : ΓIndex(ω,(Set.univ : Set Xₛ)) → ℕ,
+      (∀ i j, code i = code j ↔ i.val.1 = j.val.1) ∧
+      ∀ k, Finite {j : ΓIndex(ω,(Set.univ : Set Xₛ)) // code j = k} := by
+  classical
+  let C := {c : Xₛ // onComponent(c,ω) ∧ (arch(c)).Nonempty}
+  let center (j : ΓIndex(ω,(Set.univ : Set Xₛ))) : C :=
+    ⟨j.val.1,j.property.1,Finset.card_pos.mp (j.property.2.2.1.trans_le j.property.2.2.2)⟩
+  have : Countable (ΓIndex(ω,(Set.univ : Set Xₛ))) := sLocalGammaOrbitalQuotient_coeff_countable ω
+  have : Countable C := Function.Injective.countable
+    (f := fun c : C ↦ (⟨(c.val,1),c.property.1,Set.mem_univ _,one_pos,Finset.card_pos.mpr c.property.2⟩ : ΓIndex(ω,(Set.univ : Set Xₛ))))
+    (fun i j h ↦ Subtype.ext (congrArg (fun j : ΓIndex(ω,(Set.univ : Set Xₛ)) ↦ j.val.1) h))
+  let : Encodable C := Encodable.ofCountable C
+  let code (j : ΓIndex(ω,(Set.univ : Set Xₛ))) := Encodable.encode (center j)
+  have he (i j) : code i = code j ↔ i.val.1 = j.val.1 := by
+    constructor
+    · intro h
+      exact congrArg Subtype.val (Encodable.encode_injective h)
+    · intro h
+      exact congrArg Encodable.encode (Subtype.ext h)
+  refine ⟨code,he,fun k ↦ ?_⟩
+  let f : {j : ΓIndex(ω,(Set.univ : Set Xₛ)) // code j = k} → Fin (Fintype.card (InfinitePlace F)+1) :=
+    fun j ↦ ⟨j.val.val.2,Nat.lt_succ_of_le (j.val.property.2.2.2.trans (Finset.card_le_univ _))⟩
+  apply Finite.of_injective f
+  intro i j h
+  apply Subtype.ext
+  apply Subtype.ext
+  apply Prod.ext
+  · exact (he i.val j.val).mp (i.property.trans j.property.symm)
+  · exact congrArg Fin.val h
+
+private theorem gamma_positive_flow :
+    ∃ ν : Multiplicative ℝ →* ℝ≥0ˣ,
+      ∀ t : ℝ, ((ν (Multiplicative.ofAdd t)).val : ℝ) = Real.exp t := by
+  let ν : Multiplicative ℝ →* ℝ≥0ˣ :=
+    { toFun := fun t ↦ Units.mk0 (Real.exp t.toAdd).toNNReal (by positivity)
+      map_one' := by apply Units.ext; apply NNReal.coe_injective; simp
+      map_mul' := by
+        intro t u
+        apply Units.ext
+        apply NNReal.coe_injective
+        simp [Real.exp_add,max_eq_left (Real.exp_pos t.toAdd).le,
+          max_eq_left (Real.exp_pos u.toAdd).le,
+          max_eq_left (mul_nonneg (Real.exp_pos t.toAdd).le (Real.exp_pos u.toAdd).le)] }
+  exact ⟨ν,fun t ↦ Real.coe_toNNReal _ (Real.exp_pos t).le⟩
+
+private theorem gamma_character_exponent (τ : ℝ≥0ˣ →ₜ* J(S))
+    (ν : Multiplicative ℝ →* ℝ≥0ˣ)
+    (hν : ∀ t : ℝ, ((ν (Multiplicative.ofAdd t)).val : ℝ) = Real.exp t) (c : Xₛ) :
+    ∃ s : ℂ,
+      (∀ t : ℝ, c (τ (ν (Multiplicative.ofAdd t))) = Complex.exp (s*(t : ℂ))) ∧
+      (let u : ℝ≥0ˣ := Units.mk0 2 two_ne_zero
+       Real.log ‖c (τ u)‖ / Real.log 2 = s.re) := by
+  obtain ⟨s,hs,_⟩ := existsUnique_complexPower (c.comp τ)
+  refine ⟨s,fun t ↦ ?_,?_⟩
+  · have h := hs (ν (Multiplicative.ofAdd t))
+    change c (τ (ν (Multiplicative.ofAdd t))) =
+      ((((ν (Multiplicative.ofAdd t)).val : ℝ) : ℂ)^s) at h
+    rw [hν t] at h
+    rw [h,Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr (Real.exp_pos _).ne'),
+      ← Complex.ofReal_log (Real.exp_pos _).le,Real.log_exp]
+    congr 1
+    ring
+  · intro u
+    have h := congrArg norm (hs u)
+    change ‖c (τ u)‖ = ‖(((u.val : ℝ) : ℂ)^s)‖ at h
+    have hu : ((u.val : ℝ)) = 2 := by norm_num [u]
+    rw [hu,Complex.norm_cpow_eq_rpow_re_of_pos (by norm_num)] at h
+    rw [h,Real.log_rpow (by norm_num)]
+    exact mul_div_cancel_right₀ _ (Real.log_pos (by norm_num : (1 : ℝ) < 2)).ne'
+
+private theorem gamma_action_laurent_class (ω : PontryaginDual J₁(S)) (x : Θ(S, ω))
+    (c : Xₛ) (hc : onComponent(c, ω)) (k : ℕ) (hk : k ≤ sLocalRhoPoleOrder c)
+    (g : J(S)) :
+    sLocalThetaPrincipalPartCoeff ω c hc k (A(S, ω) g x) =
+      c g * ∑ j ∈ Finset.range (sLocalRhoPoleOrder c-k+1),
+        sLocalThetaPrincipalPartCoeff ω c hc (k+j) x *
+          (Real.log (((m(S) g).val : ℝ)) : ℂ)^j / (j.factorial : ℂ) := by
+  refine Quotient.inductionOn' g ?_
+  intro u
+  exact gamma_action_laurent ω x c hc k hk u
+
+private theorem gamma_coefficient_decay (ω : PontryaginDual J₁(S))
+    (τ : ℝ≥0ˣ →ₜ* J(S)) (hτ : RightInverse τ (m(S)))
+    (ν : Multiplicative ℝ →* ℝ≥0ˣ)
+    (hν : ∀ t : ℝ, ((ν (Multiplicative.ofAdd t)).val : ℝ) = Real.exp t)
+    (ρ : J(S) →* (fullPV(ω) →L[ℂ] fullPV(ω)))
+    (hρ : ∀ g x, (ρ g x).val = A(S, ω) g x.val)
+    (c : Xₛ) (hc : onComponent(c, ω)) (k : ℕ) (hk : k ≤ sLocalRhoPoleOrder c)
+    (a : ℝ) (ha : Real.log ‖c (τ (Units.mk0 2 two_ne_zero))‖ / Real.log 2 < a)
+    (y : fullPV(ω)) :
+    Tendsto (fun t : ℝ ↦ Real.exp (-a*t) *
+      ‖sLocalThetaPrincipalPartCoeff ω c hc k (ρ (τ (ν (Multiplicative.ofAdd t))) y).val‖)
+      atTop (𝓝 0) := by
+  obtain ⟨s,hs,hw⟩ := gamma_character_exponent τ ν hν c
+  let N := sLocalRhoPoleOrder c-k+1
+  let b (j : ℕ) := sLocalThetaPrincipalPartCoeff ω c hc (k+j) y.val / (j.factorial : ℂ)
+  have he (t : ℝ) :
+      sLocalThetaPrincipalPartCoeff ω c hc k (ρ (τ (ν (Multiplicative.ofAdd t))) y).val =
+        Complex.exp (s*(t : ℂ)) * ∑ j ∈ Finset.range N, b j * (t : ℂ)^j := by
+    let g := τ (ν (Multiplicative.ofAdd t))
+    have hlog : Real.log (((m(S) g).val : ℝ)) = t := by
+      change Real.log (((m(S) (τ (ν (Multiplicative.ofAdd t)))).val : ℝ)) = t
+      rw [hτ,hν,Real.log_exp]
+    calc
+      _ = sLocalThetaPrincipalPartCoeff ω c hc k (A(S, ω) g y.val) :=
+        congrArg (sLocalThetaPrincipalPartCoeff ω c hc k) (hρ g y)
+      _ = c g * ∑ j ∈ Finset.range N,
+          sLocalThetaPrincipalPartCoeff ω c hc (k+j) y.val *
+            (Real.log (((m(S) g).val : ℝ)) : ℂ)^j / (j.factorial : ℂ) :=
+        gamma_action_laurent_class ω y.val c hc k hk g
+      _ = _ := by
+        apply congrArg₂ (fun u v : ℂ ↦ u*v) (hs t)
+        apply Finset.sum_congr rfl
+        intro j hj
+        calc
+          _ = sLocalThetaPrincipalPartCoeff ω c hc (k+j) y.val * (t : ℂ)^j / (j.factorial : ℂ) :=
+            congrArg (fun w : ℂ ↦ sLocalThetaPrincipalPartCoeff ω c hc (k+j) y.val * w^j / (j.factorial : ℂ))
+              (congrArg Complex.ofReal hlog)
+          _ = b j * (t : ℂ)^j := by dsimp [b]; ring
+  have hsa : s.re < a := by rw [← hw]; exact ha
+  exact (exponential_polynomial_decay s a hsa N b).congr'
+    (Eventually.of_forall fun t ↦ (congrArg (fun w : ℂ ↦ Real.exp (-a*t)*‖w‖) (he t)).symm)
+
+private theorem gamma_finite_coeff_independent (ω : PontryaginDual J₁(S))
+    (ι : Type*) [Finite ι] (j : ι → ΓIndex(ω,(Set.univ : Set Xₛ))) (hj : Injective j) :
+    LinearIndependent ℂ (fun i ↦ ΓCoeff(ω,j i)) := by
+  classical
+  let : Fintype ι := Fintype.ofFinite ι
+  choose N hN using fun i ↦ sLocalGammaFiltration_iInf_mem_cutoff ω (j i).val.1
+    (j i).property.1 (Finset.card_pos.mp ((j i).property.2.2.1.trans_le (j i).property.2.2.2))
+  let M : depths := Finset.univ.sup N
+  have hM (i : ι) : (j i).val.1 ∈ sLocalGammaPoleCutoff (F := F) (S := S) ω M := by
+    obtain ⟨hc,w,hw,hcard⟩ := hN i
+    refine ⟨hc,w,hw,hcard.trans ?_⟩
+    have hle : N i ≤ M := Finset.le_sup (Finset.mem_univ i)
+    exact_mod_cast hle w
+  let e (i : ι) : ΓIndex(ω,sLocalGammaPoleCutoff (F := F) (S := S) ω M) :=
+    ⟨(j i).val,(j i).property.1,hM i,(j i).property.2.2⟩
+  have he : Injective e := by
+    intro i k h
+    apply hj
+    exact Subtype.ext (congrArg (fun a : ΓIndex(ω,sLocalGammaPoleCutoff (F := F) (S := S) ω M) ↦ a.val) h)
+  exact (sLocalGammaFiltration_coeff_independent ω M).2.comp e he
+
+open Classical in
+private theorem gamma_prefix_biorthogonal (ω : PontryaginDual J₁(S))
+    (code : ΓIndex(ω,(Set.univ : Set Xₛ)) → ℕ)
+    (hf : ∀ n, Finite {j : ΓIndex(ω,(Set.univ : Set Xₛ)) // code j = n}) (k : ℕ) :
+    ∃ v : {j : ΓIndex(ω,(Set.univ : Set Xₛ)) // code j = k} → fullPV(ω),
+      (∀ i j, code j < k → ΓCoeff(ω,j) (v i) = 0) ∧
+      ∀ i j, (i = j → ΓCoeff(ω,j.val) (v i) = 1) ∧ (i ≠ j → ΓCoeff(ω,j.val) (v i) = 0) := by
+  classical
+  let I := {j : ΓIndex(ω,(Set.univ : Set Xₛ)) // code j ≤ k}
+  let B := {j : ΓIndex(ω,(Set.univ : Set Xₛ)) // code j = k}
+  letI : Finite I := finite_code_prefix _ code hf k
+  letI : Fintype I := Fintype.ofFinite I
+  have hli := gamma_finite_coeff_independent ω I Subtype.val Subtype.val_injective
+  have hs := finite_interpolation (fullPV(ω)) I (fun j ↦ ΓCoeff(ω,j.val)) hli
+  choose v hv using fun i : B ↦ hs (fun j : I ↦ if j.val = i.val then 1 else 0)
+  refine ⟨v,?_,?_⟩
+  · intro i j hj
+    have hne : j ≠ i.val := by
+      intro h
+      have hi := i.property
+      rw [← h] at hi
+      omega
+    exact (congrFun (hv i) ⟨j,le_of_lt hj⟩).trans (if_neg hne)
+  · intro i j
+    have h := congrFun (hv i) (⟨j.val,le_of_eq j.property⟩ : I)
+    constructor
+    · intro hij
+      exact h.trans (if_pos (congrArg Subtype.val hij).symm)
+    · intro hij
+      exact h.trans (if_neg (fun he ↦ hij (Subtype.ext he.symm)))
+
+private theorem gamma_coeff_kernel_invariant (ω : PontryaginDual J₁(S))
+    (ρ : J(S) →* (fullPV(ω) →L[ℂ] fullPV(ω)))
+    (hρ : ∀ g x, (ρ g x).val = A(S, ω) g x.val)
+    (U : Xₛ → Prop) (x : fullPV(ω))
+    (hx : ∀ j : ΓIndex(ω,(Set.univ : Set Xₛ)), U j.val.1 → ΓCoeff(ω,j) x = 0)
+    (g : J(S)) (j : ΓIndex(ω,(Set.univ : Set Xₛ))) (hj : U j.val.1) :
+    ΓCoeff(ω,j) (ρ g x) = 0 := by
+  have hk : j.val.2 ≤ sLocalRhoPoleOrder j.val.1 := by
+    rw [sLocalRhoPoleOrder_eq_card_polePlaces]
+    exact j.property.2.2.2.trans (Nat.le_add_right _ _)
+  change sLocalThetaPrincipalPartCoeff ω j.val.1 j.property.1 j.val.2 (ρ g x).val = 0
+  calc
+    _ = sLocalThetaPrincipalPartCoeff ω j.val.1 j.property.1 j.val.2 (A(S, ω) g x.val) :=
+      congrArg (sLocalThetaPrincipalPartCoeff ω j.val.1 j.property.1 j.val.2) (hρ g x)
+    _ = j.val.1 g * ∑ r ∈ Finset.range (sLocalRhoPoleOrder j.val.1-j.val.2+1),
+        sLocalThetaPrincipalPartCoeff ω j.val.1 j.property.1 (j.val.2+r) x.val *
+          (Real.log (((m(S) g).val : ℝ)) : ℂ)^r / (r.factorial : ℂ) :=
+      gamma_action_laurent_class ω x.val j.val.1 j.property.1 j.val.2 hk g
+    _ = 0 := by
+      have hz (r : ℕ) : sLocalThetaPrincipalPartCoeff ω j.val.1 j.property.1 (j.val.2+r) x.val = 0 := by
+        by_cases hr : j.val.2+r ≤ (arch(j.val.1)).card
+        · let j' : ΓIndex(ω,(Set.univ : Set Xₛ)) :=
+            ⟨(j.val.1,j.val.2+r),j.property.1,Set.mem_univ _,by have := j.property.2.2.1; omega,hr⟩
+          exact hx j' hj
+        · exact gamma_high_coeff_zero ω x j.val.1 j.property.1 _ (Nat.lt_of_not_ge hr)
+      rw [Finset.sum_eq_zero (fun r hr ↦ by rw [hz,zero_mul,zero_div]),mul_zero]
+
+private theorem gamma_coded_kernel (ω : PontryaginDual J₁(S))
+    (ρ : J(S) →* (fullPV(ω) →L[ℂ] fullPV(ω)))
+    (hρ : ∀ g x, (ρ g x).val = A(S, ω) g x.val)
+    (code : ΓIndex(ω,(Set.univ : Set Xₛ)) → ℕ)
+    (he : ∀ i j, code i = code j ↔ i.val.1 = j.val.1)
+    (p : ℕ → Prop) (g : J(S)) (x : fullPV(ω))
+    (hx : ∀ j, p (code j) → ΓCoeff(ω,j) x = 0)
+    (j : ΓIndex(ω,(Set.univ : Set Xₛ))) (hj : p (code j)) : ΓCoeff(ω,j) (ρ g x) = 0 := by
+  apply gamma_coeff_kernel_invariant ω ρ hρ
+    (fun c ↦ ∃ i, i.val.1 = c ∧ p (code i)) x ?_ g j ⟨j,rfl,hj⟩
+  intro i ⟨l,hli,hl⟩
+  have hcode := (he l i).mpr hli
+  exact hx i (hcode ▸ hl)
+
+private theorem gamma_unitary_interpolation (τ : ℝ≥0ˣ →ₜ* J(S)) (hτ : RightInverse τ (m(S)))
+    (χ : PontryaginDual J(S)) (hχ : ∀ u, χ (τ u) = 1) :
+    let ω := χ.comp (⟨(m(S)).ker.subtype, continuous_subtype_val⟩ : J₁(S) →ₜ* J(S))
+    Surjective (fun (x : fullPV(ω)) (j : ΓIndex(ω,(Set.univ : Set Xₛ))) ↦ ΓCoeff(ω,j) x) := by
+  classical
+  intro ω
+  obtain ⟨ν,hν⟩ := gamma_positive_flow
+  obtain ⟨ρ,hρ⟩ := gamma_full_action ω
+  obtain ⟨code,he,hf⟩ := gamma_block_code ω
+  let g : Multiplicative ℝ →* J(S) := τ.toMonoidHom.comp ν
+  let R (t : ℝ) := (ρ (g (Multiplicative.ofAdd (-t)))).toLinearMap
+  have hV := gamma_prefix_biorthogonal ω code hf
+  have hinv : ∀ t x, R t (R (-t) x) = x := by
+    intro t x
+    exact real_action_inverse _ (ρ.comp g) t x
+  have hF := gamma_range_frechet F S ω
+  apply surjective_of_translated_coefficients (fullPV(ω)) (ΓIndex(ω,(Set.univ : Set Xₛ))) hF
+    (fun j ↦ ΓCoeff(ω,j)) code hf hV R hinv ?_ ?_ ?_
+  · intro p t x hx j hj
+    exact gamma_coded_kernel ω ρ hρ code he p (g (Multiplicative.ofAdd (-t))) x hx j hj
+  · intro q hq
+    apply gamma_action_bound χ (fun t ↦ g (Multiplicative.ofAdd (-t))) ?_ ?_ ρ hρ q hq
+    · intro t
+      change (((m(S) (τ (ν (Multiplicative.ofAdd (-t))))).val : ℝ)) = _
+      rw [hτ,hν]
+    · intro t
+      exact hχ _
+  · intro a
+    let weight (j : ΓIndex(ω,(Set.univ : Set Xₛ))) :=
+      Real.log ‖j.val.1 (τ (Units.mk0 2 two_ne_zero))‖ / Real.log 2
+    have hbad : Set.Finite {j : ΓIndex(ω,(Set.univ : Set Xₛ)) | a ≤ weight j} :=
+      gamma_finite_indices_above ω τ hτ a
+    let K := hbad.toFinset.sup code + 1
+    refine ⟨K,fun j hj y ↦ ?_⟩
+    have hweight : weight j < a := by
+      by_contra h
+      have hmem : j ∈ hbad.toFinset := hbad.mem_toFinset.mpr (le_of_not_gt h)
+      have hb : code j ≤ hbad.toFinset.sup code := Finset.le_sup hmem
+      dsimp [K] at hj
+      omega
+    have hk : j.val.2 ≤ sLocalRhoPoleOrder j.val.1 := by
+      rw [sLocalRhoPoleOrder_eq_card_polePlaces]
+      exact j.property.2.2.2.trans (Nat.le_add_right _ _)
+    have h := gamma_coefficient_decay ω τ hτ ν hν ρ hρ j.val.1 j.property.1 j.val.2 hk a hweight y
+    change Tendsto (fun t : ℝ ↦ Real.exp (-a*t) *
+      ‖sLocalThetaPrincipalPartCoeff ω j.val.1 j.property.1 j.val.2
+        (ρ (τ (ν (Multiplicative.ofAdd (-(-t))))) y).val‖) atTop (𝓝 0)
+    simpa only [neg_neg] using h
+
+end GammaInterpolationHelpers
+
+/-- Paper: Theorem 7.3.4.1(4), p. 365.
+Every array of archimedean principal parts on the component is realized by one
+class in the full finite principal-value range.
+Deviation: States explicitly the interpolation needed for the canonical product model. -/
+theorem sLocalGamma_all_coeff_surjective (ω : PontryaginDual J₁(S)) :
+    Function.Surjective (fun (x : fullPV(ω)) (j : ΓIndex(ω, (Set.univ : Set Xₛ))) ↦
+      ΓCoeff(ω, j) x) := by
+  obtain ⟨τ,hτ⟩ := sIdeleQuotientNorm_exists_section F S
+  obtain ⟨χ,⟨hω,hχ⟩,_⟩ := existsUnique_sLocalNormSectionCharacter τ hτ ω
+  subst ω
+  exact gamma_unitary_interpolation τ hτ χ hχ
+
+
 
 /-- A surjective continuous linear map from a Fréchet space onto a countable product of
 complex lines is open. -/

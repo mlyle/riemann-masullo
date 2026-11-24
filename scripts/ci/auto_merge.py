@@ -54,6 +54,10 @@ BRANCH = "main"
 CHECK_WORKFLOW = ".github/workflows/pr_check.yml"
 MAIN_WORKFLOW = "main_state.yml"
 HOLD_LABEL = "integrator"     # what the merger puts on a pull request it leaves for the integrator
+# What a check lane that merges pull requests in batches puts on those it is checking together,
+# and on the others that change the same files: merging one of them alone in the meantime would
+# make the batch's check useless. The lane removes the label when its check is over.
+TRAIN_LABEL = "train"
 SHA = re.compile(r"[0-9a-f]{40}")
 REPO = re.compile(r"[A-Za-z0-9._-]+/[A-Za-z0-9._-]+")
 MAX_ARTIFACT_BYTES = 256 * 1024
@@ -330,6 +334,8 @@ class Merger:
             return "draft: left alone"
         if HOLD_LABEL in [label["name"] for label in pr.get("labels", [])]:
             return f"labelled {HOLD_LABEL}: left alone"
+        if TRAIN_LABEL in [label["name"] for label in pr.get("labels", [])]:
+            return f"labelled {TRAIN_LABEL}: left to the batch it is being checked in"
         run = self.latest_run(sha, run_info["head_repository_id"])
         if run is None or run["id"] != run_info["id"]:
             if run is not None and run.get("status") == "completed":
