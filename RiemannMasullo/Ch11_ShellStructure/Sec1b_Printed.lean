@@ -7,6 +7,7 @@ import RiemannMasullo.ForMathlib.NumberTheory.NumberField.Completion.FinitePlace
 import Mathlib.Analysis.Calculus.BumpFunction.FiniteDimension
 import Mathlib.NumberTheory.NumberField.CanonicalEmbedding.Basic
 import RiemannMasullo.AppA_AlgebraicNT.Sec3
+import RiemannMasullo.Ch11_ShellStructure.Sec2a
 
 /-!
 # Printed claims in §11.1.2
@@ -55,17 +56,6 @@ def Printed.sLocalCutoffCarving_strictSubsequence : Prop :=
             (bandMeasurable[twoSided, Λ (k m)]) <
           sLocalCutoffCarving s (ω[F, χ]) i.val (band[twoSided, Λ (k m)])
             (bandMeasurable[twoSided, Λ (k m)])
-
-/-- Paper: Theorem 11.1.2.1(2), p. 480, strictness in (11.1.2.6).
-Take F = ℚ, the trivial character, S with no finite places, s = 2, the empty
-index and the singleton at 2. Use bounded cutoffs with radii k + 2. On the
-logarithmic line the principal value is I − T, where T translates by log 2
-up to sign. The theta test space is translation invariant. Applying I − T
-to a finite sum of translates of a test gives the test minus a distant
-translate, which tends to zero after cutting off to any bounded window.
-Thus the two closed stages are equal at every radius in the sequence. -/
-theorem Printed.sLocalCutoffCarving_strictSubsequence_false :
-    ¬ Printed.sLocalCutoffCarving_strictSubsequence := by sorry
 
 /-- Paper: Theorem 11.1.2.1(3), p. 480, (11.1.2.7). The printed
 generators are the raw cutoff theta series for all tests with both
@@ -768,5 +758,267 @@ theorem Printed.sLocalCarving_cutoff_norm_false :
     rfl
   exact (ne_of_gt hpos') hclaim.symm
 
+local notation "Cℚ" => C[ℚ]
+local notation "Uℚ" => IdeleGroup (𝓞 ℚ) ℚ
+local notation "μℚ" => ideleClassTamagawaMeasure ℚ
+local notation "νℚ" => (μℚ).withDensity
+  (fun g ↦ ENNReal.ofReal (intervalSobolevDensity 0 0 2 (Real.log (norm[ℚ] g))))
+local notation "Wℚ" => IdeleClassZeroLineSobolev ℚ 2
+local notation "mℚ" => (⟨ideleClassNorm ℚ, (isProperMap_ideleClassNorm ℚ).continuous⟩ :
+  Cℚ →ₜ* ℝ≥0ˣ)
+local notation "M[" Λ "]" => modulatedAbsoluteCutoffOperator mℚ νℚ
+  (band[true, Λ]) (bandMeasurable[true, Λ])
+local notation "Bℚ" => ↥(adelePolarSubspace ℚ)
+local notation "θ[" f "]" => homogeneousAdelicTheta (1 : PontryaginDual (ideleClassNorm ℚ).ker) (f)
+local notation "θL[" f "]" => (memLp_homogeneousTheta_zeroLine 2 1 (f)).toLp (θ[(f).val])
+
+/-- Powers of a norm-contracting class send a fixed band into the large-norm
+region under inverse translation. The resulting cutoff theta tends to zero in L². -/
+private theorem strictSubsequence_cutoff_translate_tendsto (Λ : ℝ) (hΛ : 1 ≤ Λ)
+    (a : Cℚ) (ha : norm[ℚ] a < 1) (f : Bℚ) (z : ℕ → Wℚ)
+    (hz : ∀ n, (z n : Cℚ → ℂ) =ᵐ[νℚ] (fun g ↦ θ[f.val] ((a ^ n)⁻¹ * g))) :
+    Tendsto (fun n ↦ M[Λ] (z n)) atTop (𝓝 0) := by
+  have : (μℚ).IsHaarMeasure := (ideleClassTamagawaMeasure_isWeil ℚ).1
+  let E := norm[ℚ] ⁻¹' band[true, Λ]
+  have hp : 0 < Λ := zero_lt_one.trans_le hΛ
+  have ha0 : 0 < norm[ℚ] a := NNReal.coe_pos.mpr (Units.zero_lt _)
+  have he (g : Cℚ) : g ∈ E ↔ Λ⁻¹ ≤ norm[ℚ] g ∧ norm[ℚ] g ≤ Λ := by
+    rfl
+  have hnorm : Continuous norm[ℚ] :=
+    NNReal.continuous_coe.comp (Units.continuous_val.comp (mℚ).continuous)
+  -- As in the compact-band argument in §9.2 (Sec2.lean), use the positive units homeomorphism.
+  have hcompact : IsCompact E := by
+    let e := Nonneg.unitsHomeomorphPos ℝ
+    let K : Set {x : ℝ // 0 < x} := Subtype.val ⁻¹' Icc Λ⁻¹ Λ
+    have hk : IsCompact K := by
+      rw [Topology.IsEmbedding.subtypeVal.isCompact_iff]
+      convert isCompact_Icc (a := Λ⁻¹) (b := Λ) using 1
+      ext x
+      constructor
+      · rintro ⟨y, hy, rfl⟩
+        exact hy
+      · intro hx
+        exact ⟨⟨x, (inv_pos.mpr hp).trans_le hx.1⟩, hx, rfl⟩
+    change IsCompact (ideleClassNorm ℚ ⁻¹' (e ⁻¹' K))
+    exact (isProperMap_ideleClassNorm ℚ).isCompact_preimage (by
+      change IsCompact (e ⁻¹' K)
+      rw [← e.image_symm]
+      exact hk.image e.symm.continuous)
+  have hw (g : Cℚ) (hg : g ∈ E) :
+      1 + Real.log (norm[ℚ] g) ^ 2 ≤ 1 + Real.log Λ ^ 2 := by
+    have hg0 := (inv_pos.mpr hp).trans_le ((he g).mp hg).1
+    have hleft := Real.log_le_log (inv_pos.mpr hp) ((he g).mp hg).1
+    rw [Real.log_inv] at hleft
+    have hright := Real.log_le_log hg0 ((he g).mp hg).2
+    have habs := abs_le.mpr ⟨hleft, hright⟩
+    have hsq := pow_le_pow_left₀ (abs_nonneg _) habs 2
+    rw [sq_abs] at hsq
+    exact add_le_add_right hsq 1
+  have hwν : μℚ ≪ νℚ := by
+    refine withDensity_absolutelyContinuous' ?_ (.of_forall fun g ↦ ?_)
+    · have hm : Measurable (fun g : Cℚ ↦ (1 : ℝ) + Real.log (norm[ℚ] g) ^ 2) :=
+        measurable_const.add ((Real.measurable_log.comp hnorm.measurable).pow_const 2)
+      exact (by simpa [intervalSobolevDensity] using hm.ennreal_ofReal : Measurable _).aemeasurable
+    · simp [intervalSobolevDensity, show (0 : ℝ) < 1 + Real.log (norm[ℚ] g) ^ 2 by positivity]
+  obtain ⟨D, T, hD, hT, hlarge⟩ :=
+    homogeneousAdelicTheta_decay_large (1 : PontryaginDual (ideleClassNorm ℚ).ker) f.val 1
+  let b : ℝ := norm[ℚ] a
+  have hb : Tendsto (fun n : ℕ ↦ b ^ n) atTop (𝓝 0) :=
+    tendsto_pow_atTop_nhds_zero_of_lt_one ha0.le ha
+  have hbnd : ∀ᶠ n : ℕ in atTop, b ^ n < Λ⁻¹ / T :=
+    hb.eventually (gt_mem_nhds (div_pos (inv_pos.mpr hp) hT))
+  let A : ℕ → ℝ := fun n ↦ D * (b ^ n * Λ)
+  let B : ℕ → ℝ := fun n ↦ A n ^ 2 * (1 + Real.log Λ ^ 2) * (μℚ).real E
+  have hB : Tendsto B atTop (𝓝 0) := by
+    simpa [B, A] using (((tendsto_const_nhds.mul (hb.mul_const Λ)).pow 2).mul_const
+      (1 + Real.log Λ ^ 2)).mul_const ((μℚ).real E)
+  have hest : ∀ᶠ n in atTop, ‖M[Λ] (z n)‖ ≤ Real.sqrt (B n) := by
+    filter_upwards [hbnd] with n hn
+    have hv (g : Cℚ) (hg : g ∈ E) : ‖θ[f.val] ((a ^ n)⁻¹ * g)‖ ≤ A n := by
+      have hmul : norm[ℚ] ((a ^ n)⁻¹ * g) = (b ^ n)⁻¹ * norm[ℚ] g := by
+        simp only [b, map_mul, map_inv, map_pow, Units.val_mul, Units.val_inv_eq_inv_val,
+          Units.val_pow_eq_pow_val, NNReal.coe_mul, NNReal.coe_inv, NNReal.coe_pow]
+      have hb0 : 0 < b ^ n := pow_pos ha0 _
+      have hLo := ((he g).mp hg).1
+      have hh : T < (b ^ n)⁻¹ * norm[ℚ] g := by
+        rw [inv_mul_eq_div, lt_div_iff₀ hb0]
+        rw [mul_comm T]
+        exact ((lt_div_iff₀ hT).mp hn).trans_le hLo
+      specialize hlarge ((a ^ n)⁻¹ * g) (hmul ▸ hh)
+      simp only [pow_one, hmul] at hlarge
+      refine hlarge.trans (mul_le_mul_of_nonneg_left ?_ hD.le)
+      rw [mul_inv_rev, inv_inv, mul_comm]
+      exact mul_le_mul_of_nonneg_left
+        ((inv_le_iff_one_le_mul₀ ((inv_pos.mpr hp).trans_le hLo)).2
+          (by rw [mul_comm, ← div_le_iff₀ hp, one_div]; exact hLo)) hb0.le
+    have hnrm := (sLocalCarving_cutoff_norm (F := ℚ) 2 true Λ (z n)).2
+    rw [hnrm]
+    apply Real.sqrt_le_sqrt
+    let w : Cℚ → ℝ := fun g ↦ 1 + Real.log (norm[ℚ] g) ^ 2
+    have hintegral :
+        ∫ g in E, ‖z n g‖ ^ 2 * (1 + Real.log (norm[ℚ] g) ^ 2) ^ ((2 : ℝ) / 2) ∂μℚ =
+          ∫ g in E, ‖θ[f.val] ((a ^ n)⁻¹ * g)‖ ^ 2 * w g ∂μℚ := by
+      refine integral_congr_ae (ae_restrict_of_ae ((hwν.ae_eq (hz n)).mono fun g hg ↦ ?_))
+      change z n g = _ at hg
+      dsimp only
+      rw [hg, div_self (by norm_num : (2 : ℝ) ≠ 0), Real.rpow_one]
+    rw [hintegral]
+    have hbound := norm_setIntegral_le_of_norm_le_const (μ := μℚ)
+      (f := fun g ↦ ‖θ[f.val] ((a ^ n)⁻¹ * g)‖ ^ 2 * w g) (hcompact.measure_lt_top (μ := μℚ))
+      (C := A n ^ 2 * (1 + Real.log Λ ^ 2)) (fun g hg ↦ by
+        have hnonneg : 0 ≤ w g := by dsimp [w]; positivity
+        rw [Real.norm_of_nonneg (mul_nonneg (sq_nonneg _) hnonneg)]
+        exact mul_le_mul (pow_le_pow_left₀ (norm_nonneg _) (hv g hg) 2) (hw g hg)
+          hnonneg (sq_nonneg _))
+    exact (Real.le_norm_self _).trans hbound
+  rw [tendsto_zero_iff_norm_tendsto_zero]
+  refine squeeze_zero' (.of_forall fun _ ↦ norm_nonneg _) hest ?_
+  simpa only [Function.comp_def, Real.sqrt_zero] using (Real.continuous_sqrt.tendsto 0).comp hB
+
+private def strictSubsequence_translate (u : Uℚ) (f : Bℚ) : Bℚ :=
+  ⟨schwartzBruhatUnitTranslate u f.val, by
+    obtain ⟨hf0, hfF⟩ := (mem_adelePolarSubspace f.val).mp f.property
+    apply (mem_adelePolarSubspace _).mpr
+    constructor
+    · change f.val (Multiplicative.ofAdd (u⁻¹.val * 0)) = 0
+      simpa only [mul_zero] using hf0
+    · rw [(adeleSchwartzFourier_apply_zero _).2]
+      change (∫ x, f.val (Multiplicative.ofAdd ((↑u⁻¹ : 𝔸[ℚ]) * x))
+        ∂additiveTamagawaMeasure ℚ) = 0
+      rw [sLocalCarving_cutoff_norm_false_integral_translate u
+        (fun z ↦ f.val (Multiplicative.ofAdd z)), ← (adeleSchwartzFourier_apply_zero f.val).2,
+        hfF, mul_zero]⟩
+
+local notation "pv[" v ", " f "]" =>
+  (⟨adelePrincipalValue ℚ {v} (f).val, adelePrincipalValue_mem_polarSubspace {v} (f)⟩ : Bℚ)
+
+/-- The cutoff theta of a polar-free test is a limit of finite sums of cutoff
+principal values, by telescoping its successive translates. -/
+private theorem strictSubsequence_stages_eq (Λ : ℝ) (hΛ : 1 ≤ Λ) (v : V[ℚ])
+    (u : Uℚ) (hu : norm[ℚ] (QuotientGroup.mk u) < 1)
+    (hPV : ∀ (f : Bℚ) (g : Cℚ), θ[(pv[v, f]).val] g =
+      θ[f.val] g - θ[f.val] ((QuotientGroup.mk u)⁻¹ * g)) :
+    sLocalCutoffCarving 2 (1 : PontryaginDual (ideleClassNorm ℚ).ker) {v} (band[true, Λ])
+        (bandMeasurable[true, Λ]) =
+      sLocalCutoffCarving 2 1 ∅ (band[true, Λ]) (bandMeasurable[true, Λ]) := by
+  refine le_antisymm (sLocalCutoffCarving_antitone 2 1 _ _ (Finset.empty_subset _)) ?_
+  let Y := sLocalCutoffCarving 2 (1 : PontryaginDual (ideleClassNorm ℚ).ker) {v}
+    (band[true, Λ]) (bandMeasurable[true, Λ])
+  have hY : IsClosed (Y : Set Wℚ) := Submodule.isClosed_topologicalClosure _
+  have hgen (f : Bℚ) : M[Λ] θL[f] ∈ Y := by
+    let a : Cℚ := QuotientGroup.mk u
+    let z (n : ℕ) : Wℚ := θL[strictSubsequence_translate (u ^ n) f]
+    have hpow (n : ℕ) : (QuotientGroup.mk (u ^ n) : Cℚ) = a ^ n :=
+      map_pow (QuotientGroup.mk' (IdeleGroup.principalSubgroup (𝓞 ℚ) ℚ)) u n
+    have hz (n : ℕ) : (z n : Cℚ → ℂ) =ᵐ[νℚ] (fun g ↦ θ[f.val] ((a ^ n)⁻¹ * g)) := by
+      refine (MemLp.coeFn_toLp _).trans (.of_forall fun g ↦ ?_)
+      change θ[schwartzBruhatUnitTranslate (u ^ n) f.val] g = _
+      rw [sLocalCarving_cutoff_norm_false_translate, hpow]
+    have hd (n : ℕ) : θL[pv[v, strictSubsequence_translate (u ^ n) f]] = z n - z (n + 1) := by
+      apply Lp.ext
+      filter_upwards [
+        MemLp.coeFn_toLp (memLp_homogeneousTheta_zeroLine 2 1
+          (pv[v, strictSubsequence_translate (u ^ n) f])),
+        Lp.coeFn_sub (z n) (z (n + 1)), hz n, hz (n + 1)] with g h₁ h₂ h₃ h₄
+      change θL[pv[v, strictSubsequence_translate (u ^ n) f]] g = _ at h₁
+      rw [h₁, Pi.sub_apply] at *
+      rw [h₂, h₃, h₄, hPV]
+      simp only [strictSubsequence_translate, sLocalCarving_cutoff_norm_false_translate]
+      change θ[f.val] ((QuotientGroup.mk (u ^ n))⁻¹ * g) -
+          θ[f.val] ((QuotientGroup.mk (u ^ n))⁻¹ * (a⁻¹ * g)) = _
+      rw [hpow, pow_succ', mul_inv_rev, mul_assoc]
+    have hstep (n : ℕ) : M[Λ] (z n) - M[Λ] (z (n + 1)) ∈ Y := by
+      rw [← map_sub, ← hd]
+      exact Submodule.le_topologicalClosure _ (Submodule.subset_span ⟨_, rfl⟩)
+    have hz0 : z 0 = θL[f] := by
+      apply Lp.ext
+      refine (hz 0).trans ?_
+      simp only [pow_zero, inv_one, one_mul]
+      exact (MemLp.coeFn_toLp _).symm
+    have hmem (n : ℕ) : M[Λ] θL[f] - M[Λ] (z n) ∈ Y := by
+      induction n with
+      | zero => simpa only [hz0, sub_self] using Y.zero_mem
+      | succ n ih =>
+        rw [← sub_add_sub_cancel
+          (M[Λ] θL[f]) (M[Λ] (z n)) (M[Λ] (z (n + 1)))]
+        exact Y.add_mem ih (hstep n)
+    have ht := strictSubsequence_cutoff_translate_tendsto Λ hΛ a hu f z hz
+    exact hY.mem_of_tendsto (by simpa using tendsto_const_nhds.sub ht)
+      (.of_forall hmem)
+  rw [sLocalCutoffCarving_eq_closure_map, sLocalUncutCarving_empty]
+  apply Submodule.topologicalClosure_minimal _ _ hY
+  let Z : Submodule ℂ Wℚ := Submodule.span ℂ (range (fun f : Bℚ ↦ θL[f]))
+  have hZ : Z ≤ Y.comap (M[Λ]).toLinearMap := Submodule.span_le.mpr (by
+    rintro _ ⟨f, rfl⟩
+    exact hgen f)
+  exact Submodule.map_le_iff_le_comap.mpr
+    (Submodule.topologicalClosure_minimal _ hZ (hY.preimage (M[Λ]).continuous))
+
+private def strictSubsequence_twoPlace : V[ℚ] := Rat.HeightOneSpectrum.primesEquiv.symm ⟨2, Nat.prime_two⟩
+
+-- The prime calculation follows the one in §11.3.1 (Sec3_Printed.lean).
+private theorem strictSubsequence_twoPlace_ideal :
+    strictSubsequence_twoPlace.asIdeal = Ideal.span {(2 : 𝓞 ℚ)} := by
+  let e := Rat.IsIntegralClosure.intEquiv (𝓞 ℚ)
+  have hg : Rat.HeightOneSpectrum.natGenerator strictSubsequence_twoPlace = 2 := congrArg Subtype.val
+    (Rat.HeightOneSpectrum.primesEquiv.apply_symm_apply ⟨2, Nat.prime_two⟩)
+  have he := Rat.HeightOneSpectrum.span_natGenerator strictSubsequence_twoPlace
+  rw [hg] at he
+  apply (Ideal.relIsoOfBijective (f := e.toRingHom) e.bijective).symm.injective
+  change Ideal.map e _ = Ideal.map e _
+  rw [Ideal.map_span, Set.image_singleton, map_ofNat]
+  exact he.symm
+
+/-- Paper: Theorem 11.1.2.1(2), p. 480, strictness in (11.1.2.6).
+Take F = ℚ, the trivial character, S with no finite places, s = 2, the empty
+index and the singleton at 2. Use bounded cutoffs with radii k + 2. On the
+logarithmic line the principal value is I − T, where T translates by log 2
+up to sign. The theta test space is translation invariant. Applying I − T
+to a finite sum of translates of a test gives the test minus a distant
+translate, which tends to zero after cutting off to any bounded window.
+Thus the two closed stages are equal at every radius in the sequence. -/
+theorem Printed.sLocalCutoffCarving_strictSubsequence_false :
+    ¬ Printed.sLocalCutoffCarving_strictSubsequence := by
+  intro h
+  let v : V[ℚ] := strictSubsequence_twoPlace
+  let i : SLocalCarvingIndex (F := ℚ) ∅ := ⟨∅, by simp⟩
+  let i' : SLocalCarvingIndex (F := ℚ) ∅ := ⟨{v}, by simp⟩
+  have hii : i < i' := Finset.empty_ssubset.mpr (Finset.singleton_nonempty _)
+  have hprime : ∃ p : ℕ, p.Prime ∧ (∀ w ∈ i.val, (p : 𝓞 ℚ) ∉ w.asIdeal) ∧
+      ∃ w ∈ i'.val, (p : 𝓞 ℚ) ∈ w.asIdeal := by
+    refine ⟨2, Nat.prime_two, fun w hw ↦ (Finset.notMem_empty w hw).elim, v,
+      Finset.mem_singleton_self _, ?_⟩
+    change (2 : 𝓞 ℚ) ∈ strictSubsequence_twoPlace.asIdeal
+    rw [strictSubsequence_twoPlace_ideal]
+    exact Ideal.subset_span rfl
+  let Λ : ℕ → ℝ := fun k ↦ (k : ℝ) + 2
+  have hΛ (k : ℕ) : 1 ≤ Λ k := by
+    dsimp [Λ]
+    linarith [Nat.cast_nonneg (α := ℝ) k]
+  have hlim : Tendsto Λ atTop atTop :=
+    tendsto_atTop_add_const_right _ 2 tendsto_natCast_atTop_atTop
+  obtain ⟨k, -, hk⟩ := h ℚ 1 ∅ sLocalCarving_cutoff_norm_false_unramified
+    sLocalCarving_cutoff_norm_false_pic 2 (by rw [Module.finrank_self]; norm_num)
+    i i' hii hprime true Λ (fun k ↦ zero_lt_one.trans_le (hΛ k))
+    (fun a b hab ↦ add_le_add_left (Nat.cast_le.mpr hab) 2) hlim
+  let val : Valuation (v.adicCompletion ℚ) (WithZero (Multiplicative ℤ)) := Valued.v
+  obtain ⟨p, hp⟩ := val.exists_isUniformizer_of_isCyclic_of_nontrivial
+  let π : (v.adicCompletion ℚ)ˣ := Units.mk0 p hp.ne_zero
+  let u : Uℚ := IdeleGroup.ofAdicCompletion (𝓞 ℚ) ℚ v π
+  have hnorm : norm[ℚ] (QuotientGroup.mk u) < 1 := by
+    change ((ideleClassNorm ℚ (IdeleClassGroup.ofAdicCompletion (𝓞 ℚ) ℚ v π)).val : ℝ) < 1
+    rw [ideleClassNorm_ofAdicCompletion]
+    change ‖(p : v.adicCompletion ℚ)‖ < 1
+    rw [norm_uniformizer_adicCompletion v _ hp]
+    exact inv_lt_one_of_one_lt₀ (by exact_mod_cast NumberField.HeightOneSpectrum.one_lt_absNorm v)
+  have hω : ω[ℚ, (1 : PontryaginDual Cℚ)] = 1 := by ext g; rfl
+  have hi : i.val = ∅ := rfl
+  have hi' : i'.val = {v} := rfl
+  have hh := hk 0
+  rw [hω, hi, hi'] at hh
+  have hdiff (f : Bℚ) (g : Cℚ) : θ[(pv[v, f]).val] g =
+      θ[f.val] g - θ[f.val] ((QuotientGroup.mk u)⁻¹ * g) :=
+    homogeneousAdelicTheta_one_principalValue_singleton v π hp f g
+  exact (not_lt_of_ge (strictSubsequence_stages_eq _ (hΛ (k 0)) v u hnorm hdiff).symm.le) hh
 
 end RiemannMasullo

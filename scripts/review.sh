@@ -83,7 +83,9 @@ root=$main; seed="$(dirname "$main")/$(basename "$main")-wt/seed"
 if [ -d "$seed/.lake/build" ]; then
   ( flock 8
     built=$(stat -c %Y "$seed/.lake/built-at" 2>/dev/null || echo 0)
-    if [ $(( $(date +%s) - built )) -gt 600 ]; then
+    # Where something else keeps the seed built (a local check lane does, and marks it with
+    # the file .agent/seed-kept), take the seed as it is: see the same rule in agent.sh.
+    if [ $(( $(date +%s) - built )) -gt 600 ] && [ ! -e "$main/.agent/seed-kept" ]; then
       git -C "$seed" checkout -q --detach origin/main &&
         (cd "$seed" && lake build RiemannMasullo >/dev/null 2>&1) && touch "$seed/.lake/built-at"
     fi ) 8>"$main/.agent/seed.lock" || true

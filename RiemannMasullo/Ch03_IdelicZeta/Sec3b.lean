@@ -3,6 +3,7 @@ module
 public import RiemannMasullo.Ch03_IdelicZeta.Sec3
 public import RiemannMasullo.AppB_AnalyticNT.Sec2
 public import RiemannMasullo.AppC_LCTVS.Sec5b
+public import Mathlib.Analysis.Distribution.SchwartzSpace.Fourier
 import all RiemannMasullo.Ch02_AdelicTheta.Sec2b
 import all RiemannMasullo.Ch02_AdelicTheta.Sec2a
 import all RiemannMasullo.Ch02_AdelicTheta.Sec3
@@ -10,7 +11,6 @@ import all RiemannMasullo.Ch03_IdelicZeta.Sec3
 import all RiemannMasullo.AppB_AnalyticNT.Sec2
 import all RiemannMasullo.AppC_LCTVS.Sec5b
 import Mathlib.Analysis.Normed.Field.ProperSpace
-import Mathlib.Analysis.Distribution.SchwartzSpace.Fourier
 import Mathlib.Analysis.SpecialFunctions.Gaussian.FourierTransform
 import RiemannMasullo.ForMathlib.Analysis.SpecialFunctions.Gaussian.Schwartz
 import Mathlib.RingTheory.Complex
@@ -780,6 +780,9 @@ private theorem sLocalIdelicZFunction_heightBound (f : ℬ(Aₛ)) (χ : Pontryag
   rw [harg]
   exact hy (σ - e) hσ'
 
+/-- The S-local zeta function decays faster than each inverse power of height on closed positive strips. -/
+alias sLocalIdelicZFunction_rapid_decay_on_positive_strip := sLocalIdelicZFunction_heightBound
+
 /-- Paper: Lemma 3.3.1.7(1), p. 135. On every bounded strip in the positive
 half-plane the zeta function is uniformly Schwartz in height. -/
 theorem sLocalIdelicZFunction_schwartzOnStrip (f : ℬ(SAdeleRing F S)) (χ : PontryaginDual Jₛ)
@@ -930,6 +933,9 @@ private theorem differentiable_inv_sLocalHeckeL (χ : PontryaginDual Jₛ) :
       ((differentiable_neg).const_cpow (Or.inl hq)))
   · simp_rw [inv_one]
     exact differentiable_const _
+
+/-- The reciprocal partial Euler product is differentiable along every unitary norm-twist chart. -/
+alias sLocalHeckeL_inv_differentiable := differentiable_inv_sLocalHeckeL
 
 /-- Paper: Equation (3.3.1.26), p. 135. In the positive half-plane the
 normalized function is the convergent zeta integral divided by the Euler product. -/
@@ -4951,6 +4957,9 @@ private theorem sLocalFinite_charts (χ : PontryaginDual Jₛ) (v : S) :
   exact (congrArg (fun u : Jₛ ↦ chartₛ(χ) z u) (show (i g)⁻¹ = i g⁻¹ from (map_inv i g).symm)).trans
     (DFunLike.congr_fun (hchart z) g⁻¹)
 
+/-- A finite-place restriction of a unitary norm-twist chart and its dual is a local chart and its dual. -/
+alias sLocalFiniteRestriction_exists_normTwistChart := sLocalFinite_charts
+
 /-- Paper: Lemma 3.3.1.7(3)(b), p. 136. The S-local epsilon factor is entire. -/
 theorem sLocalEpsilonFactor_entire (χ : PontryaginDual Jₛ) :
     AnalyticOnNhd ℂ (fun s ↦ sLocalEpsilonFactor (chartₛ(χ) s)) univ := by
@@ -4985,6 +4994,9 @@ private theorem orientedCoord_eq (h : Bool) (z : ℂ) :
     (z.re : ℂ)+orientedCoord h Complex.I*(z.im:ℂ) = orientedCoord h z := by
   conv_rhs => rw [← Complex.re_add_im z]
   cases h <;> simp [orientedCoord,mul_comm]
+
+/-- Duality sends a unitary norm-twist chart to the inverse unitary chart at the reflected parameter. -/
+alias sLocalNormTwistChart_dual := sLocal_dual_chart
 
 private def modelGaussian {E : Type*} [SeminormedAddCommGroup E] (b : ℝ) (z : E) : ℂ :=
   Real.exp (-b * ‖z‖^2)
@@ -5351,6 +5363,147 @@ private theorem complexTate_ratio_strip (w : InfinitePlace F) (hw : w.IsComplex)
   rw [Complex.Gammaℂ_def]
   exact mul_ne_zero (mul_ne_zero two_ne_zero (Complex.cpow_ne_zero_iff.mpr (Or.inl (by exact_mod_cast (mul_pos zero_lt_two Real.pi_pos).ne'))))
     (Complex.Gamma_ne_zero_of_re_pos hz')
+
+/-- Realize each sign parity as a unitary character in the real local field model. -/
+private theorem realLocalTate_signCharacter (w : InfinitePlace F) (hw : w.IsReal) (a : Fin 2) :
+    ∃ χ : PontryaginDual w.Completionˣ, ∀ x : ℝˣ,
+      ((χ (Units.map (InfinitePlace.Completion.ringEquivRealOfIsReal hw).symm.toMonoidHom x) :
+        Circle) : ℂ) = (if 0 < (x : ℝ) then 1 else (-1 : ℂ)) ^ a.val := by
+  let e := InfinitePlace.Completion.ringEquivRealOfIsReal hw
+  have hc : Continuous (fun x : ℝˣ ↦ (x : ℝ)) := Units.continuous_val
+  have hpos : IsClopen {x : ℝˣ | 0 < (x : ℝ)} := by
+    refine ⟨?_, isOpen_lt continuous_const hc⟩
+    have he : {x : ℝˣ | 0 < (x : ℝ)} = {x : ℝˣ | 0 ≤ (x : ℝ)} :=
+      Set.ext fun x ↦ by
+        change 0 < (x : ℝ) ↔ 0 ≤ (x : ℝ)
+        exact ⟨le_of_lt, fun hx ↦ lt_of_le_of_ne hx x.ne_zero.symm⟩
+    rw [he]
+    exact isClosed_le continuous_const hc
+  let sign : ℝˣ →ₜ* Circle :=
+    { toFun x := if 0 < (x : ℝ) then 1 else -1
+      map_one' := by simp
+      map_mul' x y := by
+        change (if 0 < (x : ℝ) * (y : ℝ) then _ else _) = _
+        rcases x.ne_zero.lt_or_gt with hx | hx <;> rcases y.ne_zero.lt_or_gt with hy | hy
+        · simp [hx.not_gt, hy.not_gt, mul_pos_of_neg_of_neg hx hy]
+        · simp [hx.not_gt, hy, (mul_neg_of_neg_of_pos hx hy).not_gt]
+        · simp [hx, hy.not_gt, (mul_neg_of_pos_of_neg hx hy).not_gt]
+        · simp [hx, hy, mul_pos hx hy]
+      continuous_toFun := Continuous.if (by simp [hpos.frontier_eq]) continuous_const continuous_const }
+  let i : w.Completionˣ →ₜ* ℝˣ := ⟨Units.map e.toMonoidHom,
+    (InfinitePlace.Completion.isometryEquivRealOfIsReal hw).continuous.units_map _⟩
+  let power : Circle →ₜ* Circle := ⟨powMonoidHom a.val, continuous_pow a.val⟩
+  refine ⟨power.comp (sign.comp i), fun x ↦ ?_⟩
+  have he : i (Units.map e.symm.toMonoidHom x) = x := Units.ext (e.apply_symm_apply _)
+  change ((sign (i (Units.map e.symm.toMonoidHom x)) ^ a.val : Circle) : ℂ) = _
+  rw [he, Circle.coe_pow]
+  change (↑(if 0 < (x : ℝ) then (1 : Circle) else -1) : ℂ) ^ a.val = _
+  by_cases hx : 0 < (x : ℝ) <;> simp [hx]
+
+/-- Tate's equation at a real place, in Euclidean coordinates on the strip of convergence.
+The parity selects the sign character and its Fourier phase. -/
+theorem realLocalTate_mellin_fourier (w : InfinitePlace F) (hw : w.IsReal)
+    (f : SchwartzMap ℝ ℂ) (a : Fin 2) (z : ℂ) (hz : z.re ∈ Ioo (0 : ℝ) 1) :
+    mellin (fun t : ℝ ↦ f t + (-1 : ℂ) ^ a.val * f (-t)) z =
+      Complex.I ^ a.val * (Complex.Gammaℝ (z + a.val) / Complex.Gammaℝ (1 - z + a.val)) *
+        mellin (fun t : ℝ ↦ (𝓕 f) t + (-1 : ℂ) ^ a.val * (𝓕 f) (-t)) (1 - z) := by
+  let e := InfinitePlace.Completion.ringEquivRealOfIsReal hw
+  obtain ⟨χ, hχ⟩ := realLocalTate_signCharacter w hw a
+  let c := chart∞[w,χ] z
+  let d := dualQuasiCharacter m∞(w) h∞(w) c
+  have hc := realChart_shape w hw χ 0 a (fun x ↦ by
+    change (χ (Units.map e.symm.toMonoidHom x) : ℂ) = _
+    simpa only [Complex.cpow_zero, one_mul] using hχ x) z
+  simp only [add_zero] at hc
+  have hd := realDual_shape w hw c z a hc
+  have hdz : 0 < (1 - z).re := by simpa using sub_pos.mpr hz.2
+  obtain ⟨g, hg⟩ := exists_realModelTest w hw f
+  have hft : F∞(w) (fun x ↦ f (e x)) = fun y ↦ (𝓕 f) (e y) :=
+    funext (realModelFourier w hw (f : ℝ → ℂ))
+  have h := (infiniteLocalTateFactor_spec w).2 g χ z hz
+  change localIdelicZetaIntegral μ∞(w) (fun x ↦ g (Multiplicative.ofAdd x)) c =
+    infiniteLocalTateFactor w c * localIdelicZetaIntegral μ∞(w) (F∞(w) _) d at h
+  rw [hg, hft, realIntegral_shape w hw f c z a hc hz.1,
+    realIntegral_shape w hw (𝓕 f) d (1 - z) a hd hdz] at h
+  have hratio := realTate_ratio_strip w hw χ z hz
+  change infiniteLocalTateFactor w c = infiniteLocalEpsilonFactor w c *
+    (infiniteLocalEulerFactor w c / infiniteLocalEulerFactor w d) at hratio
+  have h₁ := realEuler_of_shape w hw c z a hc
+  have h₂ := realEuler_of_shape w hw d (1 - z) a hd
+  rw [h₁.1, h₁.2, h₂.1] at hratio
+  rwa [hratio] at h
+
+/-- Realize an integral angular weight by a unitary character on a complex completion. -/
+private theorem complexLocalTate_angularCharacter (w : InfinitePlace F) (hw : w.IsComplex) (k : ℤ) :
+    ∃ χ : PontryaginDual w.Completionˣ, ∀ x : ℂˣ,
+      ((χ (Units.map (InfinitePlace.Completion.ringEquivComplexOfIsComplex hw).symm.toMonoidHom x) :
+        Circle) : ℂ) = ((x : ℂ) / (‖(x : ℂ)‖ : ℂ)) ^ k := by
+  let e := InfinitePlace.Completion.ringEquivComplexOfIsComplex hw
+  let phase : ℂˣ →ₜ* Circle :=
+    { toFun x := ⟨(x : ℂ) / (‖(x : ℂ)‖ : ℂ), mem_sphere_zero_iff_norm.mpr (by
+        rw [norm_div, Complex.norm_of_nonneg (norm_nonneg _), div_self (norm_ne_zero_iff.mpr x.ne_zero)])⟩
+      map_one' := by ext; simp
+      map_mul' x y := by
+        apply Subtype.ext
+        change ((x : ℂ) * (y : ℂ)) / (‖(x : ℂ) * (y : ℂ)‖ : ℂ) = _
+        rw [norm_mul, Complex.ofReal_mul, mul_div_mul_comm]
+        rfl
+      continuous_toFun := (Units.continuous_val.div
+        (Complex.continuous_ofReal.comp (continuous_norm.comp Units.continuous_val))
+        (fun x ↦ Complex.ofReal_ne_zero.mpr (norm_ne_zero_iff.mpr x.ne_zero))).subtype_mk _ }
+  let i : w.Completionˣ →ₜ* ℂˣ := ⟨Units.map e.toMonoidHom,
+    (InfinitePlace.Completion.isometryEquivComplexOfIsComplex hw).continuous.units_map _⟩
+  let power : Circle →ₜ* Circle := ⟨zpowGroupHom k, continuous_zpow k⟩
+  refine ⟨power.comp (phase.comp i), fun x ↦ ?_⟩
+  have he : i (Units.map e.symm.toMonoidHom x) = x := Units.ext (e.apply_symm_apply _)
+  change ((phase (i (Units.map e.symm.toMonoidHom x)) ^ k : Circle) : ℂ) = _
+  rw [he, Circle.coe_zpow]
+  rfl
+
+/-- Tate's equation at a complex place in polar coordinates on the strip of convergence.
+The Fourier transform uses the trace pairing and reverses the angular exponent. -/
+theorem complexLocalTate_mellin_fourier (w : InfinitePlace F) (hw : w.IsComplex)
+    (f fHat : SchwartzMap ℂ ℂ) (hfHat : ∀ x : ℂ, fHat x = 2 * (𝓕 f) (2 * star x))
+    (k : ℤ) (z : ℂ) (hz : z.re ∈ Ioo (0 : ℝ) 1) :
+    let M (g : SchwartzMap ℂ ℂ) (j : ℤ) (s : ℂ) := 2 * mellin
+      (fun t : ℝ ↦ ∫ θ in Ioo (-Real.pi) Real.pi, Complex.exp ((j : ℂ) * (θ : ℂ) * Complex.I) *
+        g ((t : ℂ) * Complex.exp ((θ : ℂ) * Complex.I))) (2 * s)
+    M f k z = Complex.I ^ k.natAbs *
+      (Complex.Gammaℂ (z + (k.natAbs : ℂ) / 2) / Complex.Gammaℂ (1 - z + (k.natAbs : ℂ) / 2)) *
+      M fHat (-k) (1 - z) := by
+  let e := InfinitePlace.Completion.ringEquivComplexOfIsComplex hw
+  obtain ⟨χ, hχ⟩ := complexLocalTate_angularCharacter w hw k
+  let c := chart∞[w,χ] z
+  let d := dualQuasiCharacter m∞(w) h∞(w) c
+  have hc := complexChart_shape w hw χ 0 k (fun x ↦ by
+    change (χ (Units.map e.symm.toMonoidHom x) : ℂ) = _
+    simpa only [Complex.cpow_zero, one_mul] using hχ x) z
+  simp only [add_zero] at hc
+  have hd := complexDual_shape w hw c z k hc
+  have hdz : 0 < (1 - z).re := by simpa using sub_pos.mpr hz.2
+  let g : SchwartzBruhat (Multiplicative w.Completion) := ⟨fun x ↦ f (e x.toAdd),
+    (complexModelSchwartz_iff w hw f).mpr ⟨f, rfl⟩⟩
+  have hft : F∞(w) (fun x ↦ f (e x)) = fun y ↦ fHat (e y) := by
+    funext y
+    rw [hfHat, SchwartzMap.fourier_coe]
+    simpa only [Complex.real_smul, Complex.ofReal_ofNat] using complexModelFourier w hw (f : ℂ → ℂ) y
+  have h := (infiniteLocalTateFactor_spec w).2 g χ z hz
+  change localIdelicZetaIntegral μ∞(w) (fun x ↦ f (e x)) c =
+    infiniteLocalTateFactor w c * localIdelicZetaIntegral μ∞(w) (F∞(w) (fun x ↦ f (e x))) d at h
+  rw [hft, complexIntegral_shape w hw f c z k hc hz.1,
+    complexIntegral_shape w hw fHat d (1 - z) (-k) hd hdz] at h
+  have hratio := complexTate_ratio_strip w hw χ z hz
+  change infiniteLocalTateFactor w c = infiniteLocalEpsilonFactor w c *
+    (infiniteLocalEulerFactor w c / infiniteLocalEulerFactor w d) at hratio
+  have h₁ := complexEuler_of_shape w hw c z k hc
+  have h₂ := complexEuler_of_shape w hw d (1 - z) (-k) hd
+  rw [h₁.1, h₁.2, h₂.1, div_div_div_cancel_right₀ (by norm_num : (2 : ℂ) ≠ 0), Int.natAbs_neg] at hratio
+  have hp (g : SchwartzMap ℂ ℂ) (j : ℤ) : angularProfile g j =
+      fun t : ℝ ↦ ∫ θ in Ioo (-Real.pi) Real.pi, Complex.exp ((j : ℂ) * (θ : ℂ) * Complex.I) *
+        g ((t : ℂ) * Complex.exp ((θ : ℂ) * Complex.I)) := by
+    funext t
+    simp only [angularProfile, angularWeight, Int.cast_one, one_mul]
+  simpa only [hratio, hp] using h
 
 end ArchimedeanTateRatio
 
@@ -5806,5 +5959,296 @@ theorem sLocalNormalizedZFunction_functionalEquation (f : ℬ(SAdeleRing F S))
       _ = _ := by rw [mul_inv_cancel₀ hL, mul_one]
   rw [sLocal_dual_chart]
   exact congrFun (hG.eq_of_frequently_eq hH heq.frequently) t
+
+/-- The norm powers of a nonarchimedean local character are periodic in height. -/
+private theorem finiteLocal_chart_periodic (v : Primes)
+    (η : PontryaginDual (v.adicCompletion F)ˣ) :
+    ∃ T : ℝ, 0 < T ∧ Periodic (chart𝔭[v, η]) ((T : ℂ) * Complex.I) := by
+  let q := (v.asIdeal.absNorm : ℝ)
+  have hq : 1 < q := by
+    dsimp only [q]
+    exact_mod_cast HeightOneSpectrum.one_lt_absNorm v
+  let T := 2 * Real.pi / Real.log q
+  refine ⟨T, div_pos (by positivity) (Real.log_pos hq), fun z ↦ ?_⟩
+  ext1 u
+  let k := WithZero.log (Valued.v u.val)
+  have hnorm : ‖u.val‖ = q ^ k := by
+    rw [FinitePlace.norm_def, WithZeroMulInt.toNNReal_neg_apply _
+      ((Valuation.ne_zero_iff _).mpr u.ne_zero)]
+    push_cast
+    rfl
+  have hu : 0 < ‖u.val‖ := norm_pos_iff.mpr u.ne_zero
+  have hlog : Complex.log (‖u.val‖ : ℂ) = (k : ℂ) * (Real.log q : ℂ) := by
+    rw [← Complex.ofReal_log hu.le, hnorm, Real.log_zpow, Complex.ofReal_mul,
+      Complex.ofReal_intCast]
+  have hprod : (Real.log q : ℂ) * ((T : ℂ) * Complex.I) =
+      2 * (Real.pi : ℂ) * Complex.I := by
+    dsimp only [T]
+    push_cast
+    field_simp [(Real.log_pos hq).ne']
+  have hpow : (‖u.val‖ : ℂ) ^ ((T : ℂ) * Complex.I) = 1 := by
+    rw [Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr hu.ne'), hlog, mul_assoc, hprod,
+      Complex.exp_int_mul_two_pi_mul_I]
+  change (η u : ℂ) * (‖u.val‖ : ℂ) ^ (z + (T : ℂ) * Complex.I) =
+    (η u : ℂ) * (‖u.val‖ : ℂ) ^ z
+  rw [Complex.cpow_add _ _ (Complex.ofReal_ne_zero.mpr hu.ne'), hpow, mul_one]
+
+/-- A continuous function periodic in the imaginary direction is bounded on closed strips. -/
+private theorem norm_bounded_on_strip_of_periodic {p : ℂ → ℂ} {T : ℝ}
+    (hT : 0 < T) (hperiod : Periodic p ((T : ℂ) * Complex.I))
+    (hp : Continuous p) (a b : ℝ) :
+    ∃ C ≥ (0 : ℝ), ∀ z : ℂ, z.re ∈ Icc a b → ‖p z‖ ≤ C := by
+  let K := Complex.reProdIm (Icc a b) (Icc 0 T)
+  have hK : IsCompact K := isCompact_Icc.reProdIm isCompact_Icc
+  obtain ⟨C, hC⟩ := hK.bddAbove_image hp.norm.continuousOn
+  refine ⟨max C 0, le_max_right _ _, fun z hz ↦ ?_⟩
+  let n := ⌊z.im / T⌋
+  let v := (n : ℂ) * ((T : ℂ) * Complex.I)
+  have hvre : v.re = 0 := by simp [v, Complex.mul_re, Complex.mul_im]
+  have hvim : v.im = (n : ℝ) * T := by simp [v, Complex.mul_re, Complex.mul_im]
+  have hzK : z - v ∈ K := by
+    have hfloor := (le_div_iff₀ hT).mp (Int.floor_le (z.im / T))
+    have hceil := (div_lt_iff₀ hT).mp (Int.lt_floor_add_one (z.im / T))
+    change (z - v).re ∈ Icc a b ∧ (z - v).im ∈ Icc 0 T
+    rw [Complex.sub_re, hvre, sub_zero, Complex.sub_im, hvim]
+    exact ⟨hz, ⟨by dsimp [n]; linarith, by dsimp [n]; linarith⟩⟩
+  have hper : p z = p (z - v) := by
+    simpa only [v, zsmul_eq_mul, sub_add_cancel] using (hperiod.zsmul n (z - v))
+  rw [hper]
+  exact (hC ⟨z - v, hzK, rfl⟩).trans (le_max_left _ _)
+
+/-- The archimedean epsilon factors have norm one, and periodicity of each finite factor
+gives a bound for their product on every closed strip. -/
+private theorem sLocalEpsilonFactor_bounded_on_strip (χ : PontryaginDual Jₛ) (a b : ℝ) :
+    ∃ C ≥ (0 : ℝ), ∀ z : ℂ, z.re ∈ Icc a b → ‖sLocalEpsilonFactor (chartₛ(χ) z)‖ ≤ C := by
+  classical
+  have hfinite (v : S) : ∃ C ≥ (0 : ℝ), ∀ z : ℂ, z.re ∈ Icc a b →
+      ‖finiteLocalEpsilonFactor v.val (sLocalFiniteRestriction v (chartₛ(χ) z))‖ ≤ C := by
+    obtain ⟨η, hη, _⟩ := sLocalFinite_charts χ v
+    obtain ⟨T, hT, hperiod⟩ := finiteLocal_chart_periodic v.val η
+    have hE : Periodic (finiteLocalEpsilonFactor v.val ∘ chart𝔭[v.val, η])
+        ((T : ℂ) * Complex.I) := fun z ↦ congrArg (finiteLocalEpsilonFactor v.val) (hperiod z)
+    simpa only [hη, Function.comp_apply] using
+      norm_bounded_on_strip_of_periodic hT hE
+        (continuous_iff_continuousAt.mpr fun z ↦
+          ((finiteLocalEpsilonFactor_entire v.val η) z (mem_univ z)).continuousAt) a b
+  choose C hC hbound using hfinite
+  refine ⟨∏ v : S, C v, Finset.prod_nonneg fun v _ ↦ hC v, fun z hz ↦ ?_⟩
+  have harch (w : InfinitePlace F) :
+      ‖infiniteLocalEpsilonFactor w (sLocalInfiniteRestriction w (chartₛ(χ) z))‖ = 1 := by
+    unfold infiniteLocalEpsilonFactor
+    split <;> rw [norm_pow, Complex.norm_I, one_pow]
+  rw [sLocalEpsilonFactor, norm_mul, norm_prod, norm_prod]
+  simp only [harch, Finset.prod_const_one, one_mul]
+  exact Finset.prod_le_prod₀ (fun _ _ ↦ norm_nonneg _) (fun v _ ↦ hbound v z hz)
+
+section ClearedEulerStrips
+
+local notation "G" => SIdeleQuotient F S
+local notation "U" => PontryaginDual (IdeleClassGroup (𝓞 F) F)
+local notation "B" => SchwartzBruhat (Multiplicative (SAdeleRing F S))
+local notation "cc" => (⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ)
+local notation "chart(" χ ")" => quasiCharacterNormTwist (sIdeleQuotientNorm F S)
+  (isProperMap_sIdeleQuotientNorm F S).continuous ((cc).comp χ)
+local notation "Z(" f ", " χ ", " z ")" => sLocalIdelicZFunction f (chart(χ) z)
+local notation "Poly(" η ", " z ")" => ∏ v : S, (finiteHeckeEulerFactor η v.val z)⁻¹
+
+private theorem cleared_gamma_bound (η : U) (a : ℝ) :
+    ∃ C T : ℝ, 0 ≤ C ∧ ∀ z : ℂ, a ≤ z.re → z.re ≤ 1/2 → T ≤ |z.im| →
+      ‖heckeGammaFactor η z / heckeGammaFactor η⁻¹ (1-z)‖ ≤ C := by
+  obtain ⟨C,T,hC,_,h⟩ := heckeGamma_reflection_bound η⁻¹ (1/2) (1-a)
+  refine ⟨C,max T 1,hC.le,fun z ha hb ht ↦ ?_⟩
+  have hre : (1-z).re = 1-z.re := by simp
+  have him : |(1-z).im| = |z.im| := by simp
+  have hh := h (1-z) (by rw [hre]; linarith) (by rw [hre]; linarith)
+    (him ▸ (le_max_left _ _).trans ht)
+  rw [inv_inv,sub_sub_cancel,him,hre] at hh
+  apply hh.trans
+  apply mul_le_of_le_one_right hC.le
+  apply Real.rpow_le_one_of_one_le_of_nonpos ((le_max_right _ _).trans ht)
+  exact mul_nonpos_of_nonneg_of_nonpos (Nat.cast_nonneg _) (by linarith)
+
+private theorem cleared_finite_positive_bound (η : U) :
+    ∃ D ≥ (0 : ℝ), ∀ z : ℂ, 0 ≤ z.re → ‖Poly(η,z)‖ ≤ D := by
+  classical
+  let V (v : S) := 1 + ‖(ideleClassNormTwist η 0).localValue v.val‖
+  refine ⟨∏ v, V v, Finset.prod_nonneg (fun v _ ↦ by dsimp [V]; positivity), fun z hz ↦ ?_⟩
+  rw [norm_prod]
+  apply Finset.prod_le_prod₀ (fun v _ ↦ norm_nonneg _)
+  intro v _
+  unfold finiteHeckeEulerFactor
+  split_ifs
+  · rw [inv_inv]
+    refine (norm_sub_le _ _).trans ?_
+    rw [norm_one, norm_mul]
+    have hq : 1 < (v.val.asIdeal.absNorm : ℝ) := by exact_mod_cast HeightOneSpectrum.one_lt_absNorm v.val
+    have hpow : ‖(v.val.asIdeal.absNorm : ℂ) ^ (-z)‖ ≤ 1 := by
+      rw [← Complex.ofReal_natCast, Complex.norm_cpow_eq_rpow_re_of_pos (zero_lt_one.trans hq)]
+      exact Real.rpow_le_one_of_one_le_of_nonpos hq.le (by simpa using hz)
+    exact add_le_add_right (mul_le_of_le_one_right (norm_nonneg _) hpow) _
+  · simp [V]
+
+private theorem cleared_finite_continuous (η : U) : Continuous (fun z : ℂ ↦ Poly(η,z)) := by
+  classical
+  apply continuous_finsetProd
+  intro v _
+  unfold finiteHeckeEulerFactor
+  split_ifs
+  · simp only [inv_inv]
+    have hq : (v.val.asIdeal.absNorm : ℂ) ≠ 0 := Nat.cast_ne_zero.mpr
+      ((Ideal.absNorm_eq_zero_iff).not.mpr v.val.ne_bot)
+    exact continuous_const.sub (continuous_const.mul (continuous_neg.const_cpow (Or.inl hq)))
+  · exact continuous_const
+
+private theorem cleared_inverse_factors (χ : PontryaginDual G) (η : U)
+    (h : ideleClassNormTwist η 0 ∈ unramifiedOutside F S)
+    (he : sIdeleRestriction F S ⟨ideleClassNormTwist η 0,h⟩ = chart(χ) 0) (w : ℂ) :
+    sLocalHeckeL (chart(χ⁻¹) w) = heckeGammaFactor η⁻¹ w * ∏ v : S, finiteHeckeEulerFactor η⁻¹ v.val w := by
+  have hη (g : IdeleClassGroup (𝓞 F) F) :
+      ideleClassNormTwist η⁻¹ 0 g = (ideleClassNormTwist η 0 g)⁻¹ := by
+    change (((η g)⁻¹ : Circle) : ℂ) * _ ^ (0 : ℂ) = ((η g : ℂ) * _ ^ (0 : ℂ))⁻¹
+    simp
+  have hr : ideleClassNormTwist η⁻¹ 0 ∈ unramifiedOutside F S := by
+    rw [mem_unramifiedOutside_iff] at h ⊢
+    intro v hv u
+    have hu := h v hv u
+    exact (hη _).trans ((congrArg Inv.inv hu).trans inv_one)
+  apply sLocalHeckeL_eq_partialEulerProduct _ _ hr
+  ext1 x
+  obtain ⟨g,rfl⟩ := QuotientGroup.mk_surjective x
+  have hbase := DFunLike.congr_fun he (QuotientGroup.mk g)
+  rw [sIdeleRestriction_mk] at hbase ⊢
+  rw [hη, hbase]
+  change ((χ _ : ℂ) * _ ^ (0 : ℂ))⁻¹ = (((χ _)⁻¹ : Circle) : ℂ) * _ ^ (0 : ℂ)
+  simp
+
+private theorem cleared_reflection (χ : PontryaginDual G) (η : U) (f : B)
+    (h : ideleClassNormTwist η 0 ∈ unramifiedOutside F S)
+    (he : sIdeleRestriction F S ⟨ideleClassNormTwist η 0,h⟩ = chart(χ) 0) :
+    ∀ᶠ z : ℂ in codiscrete ℂ, Poly(η,z) * Z(f,χ,z) =
+      sLocalEpsilonFactor (chart(χ) z) * (heckeGammaFactor η z / heckeGammaFactor η⁻¹ (1-z)) *
+        (Poly(η⁻¹,1-z) * Z(sAdeleSchwartzFourier f,χ⁻¹,1-z)) := by
+  have hZ : (fun z ↦ Z(f,χ,z)) =ᶠ[codiscrete ℂ] (fun z ↦ sLocalRhoFactor (chart(χ) z) *
+      Z(sAdeleSchwartzFourier f,χ⁻¹,1-z)) := by
+    apply sLocal_meromorphic_identity (fun z ↦ ((sLocalIdelicZFunction_meromorphic f χ) (mem_univ z)).meromorphicAt)
+      (fun z ↦ (sLocalRhoFactor_meromorphic χ z).mul
+        (((sLocalIdelicZFunction_meromorphic (sAdeleSchwartzFourier f) χ⁻¹) (mem_univ (1-z))).meromorphicAt.comp_analyticAt
+          (g := fun u : ℂ ↦ 1-u) (by fun_prop)))
+    intro z hz
+    have hd : 0 < (1 - z).re := by simpa using sub_pos.mpr hz.2
+    refine (sLocalIdelicZFunction_eq_integral f ⟨χ,z,hz.1,rfl⟩).trans ?_
+    refine (sLocalIdelicZetaIntegral_functionalEquation f χ z hz).trans ?_
+    apply congrArg (sLocalRhoFactor (chart(χ) z) * ·)
+    exact (congrArg (sLocalIdelicZetaIntegral (sAdeleSchwartzFourier f)) (sLocal_dual_chart χ z)).trans
+      (sLocalIdelicZFunction_eq_integral _ ⟨χ⁻¹,1-z,hd,rfl⟩).symm
+  filter_upwards [hZ,sLocalRhoFactor_eq_epsilon_mul χ,sLocalRhoFactor_mul_dual χ] with z hz hρ hpair
+  have hne : sLocalRhoFactor (chart(χ) z) ≠ 0 := left_ne_zero_of_mul
+    (hpair.trans_ne ((Group.isUnit (QuotientGroup.mk (-1 : (SAdeleRing F S)ˣ) : G)).map (chart(χ) z)).ne_zero)
+  simp only [sLocal_dual_chart, sLocalHeckeL_eq_partialEulerProduct χ η h he, cleared_inverse_factors χ η h he] at hρ
+  have hprod : ∏ v : S, finiteHeckeEulerFactor η v.val z ≠ 0 := by
+    intro hh
+    exact hne (hρ.trans (by rw [hh, mul_zero, zero_div, mul_zero]))
+  rw [hz,hρ]
+  simp only [Finset.prod_inv_distrib, div_eq_mul_inv, mul_inv]
+  field_simp [hprod]
+
+/-- In the positive half-plane the reciprocal Euler polynomial is bounded. -/
+private theorem cleared_positive_height (χ : PontryaginDual G) (η : U) (f : B)
+    (b : ℝ) (hb : 1/2 < b) (N : ℕ) :
+    ∃ C T : ℝ, 0 ≤ C ∧ ∀ z : ℂ, z.re ∈ Icc (1/2) b → T ≤ |z.im| →
+      |z.im| ^ N * ‖Poly(η,z) * Z(f,χ,z)‖ ≤ C := by
+  obtain ⟨D,hD,hV⟩ := cleared_finite_positive_bound (S := S) η
+  obtain ⟨K,hK,hZ⟩ := sLocalIdelicZFunction_heightBound f χ (1/2) b (by norm_num) hb (N+1) (by omega)
+  obtain ⟨T,hT⟩ := eventually_atTop.mp (eventually_comap.mp hZ)
+  refine ⟨D * K, max T 1, mul_nonneg hD hK.le, fun z hz ht ↦ ?_⟩
+  have h1 : 1 ≤ |z.im| := (le_max_right _ _).trans ht
+  have hp : 0 < |z.im| := zero_lt_one.trans_le h1
+  have hval := hT |z.im| ((le_max_left _ _).trans ht) z.im rfl z.re hz
+  rw [Complex.re_add_im] at hval
+  have hpow : |z.im| ^ N * ‖Z(f,χ,z)‖ ≤ K := by
+    rw [mul_comm]
+    exact (mul_le_mul_of_nonneg_left (pow_le_pow_right₀ h1 (Nat.le_succ _)) (norm_nonneg _)).trans
+      ((le_div_iff₀ (pow_pos hp _)).mp hval)
+  rw [norm_mul, mul_left_comm]
+  exact mul_le_mul (hV z (by linarith [hz.1])) hpow (by positivity) hD
+
+/-- A uniform bound at large height off a discrete set suffices for a continuous
+function, after slightly enlarging the range of real parts. -/
+private theorem cleared_extend_bound (q : ℂ → ℂ) (hq : Continuous q) (a b : ℝ)
+    (M T : ℝ) (h : ∀ᶠ z : ℂ in codiscrete ℂ,
+      z.re ∈ Icc (a-1) (b+1) → T ≤ |z.im| → ‖q z‖ ≤ M) :
+    ∃ C : ℝ, ∀ z : ℂ, z.re ∈ Icc a b → ‖q z‖ ≤ C := by
+  have hK := isCompact_Icc (a := a) (b := b) |>.reProdIm (isCompact_Icc (a := -T) (b := T))
+  obtain ⟨K,hB⟩ := hK.exists_bound_of_continuousOn hq.continuousOn
+  refine ⟨max K M,fun z hz ↦ ?_⟩
+  by_cases ht : |z.im| ≤ T
+  · exact (hB z ⟨hz,abs_le.mp ht⟩).trans (le_max_left _ _)
+  have hnear (z : ℂ) (hz : z.re ∈ Icc a b) (ht : T < |z.im|) : ∀ᶠ w in 𝓝 z,
+      w.re ∈ Icc (a-1) (b+1) ∧ T ≤ |w.im| := by
+    have h₁ := (isOpen_lt continuous_const Complex.continuous_re).mem_nhds
+      (show a-1 < z.re by linarith [hz.1])
+    have h₂ := (isOpen_lt Complex.continuous_re continuous_const).mem_nhds
+      (show z.re < b+1 by linarith [hz.2])
+    have h₃ := (isOpen_lt continuous_const Complex.continuous_im.abs).mem_nhds ht
+    filter_upwards [h₁,h₂,h₃] with w hw hw' hv
+    exact ⟨⟨le_of_lt hw,le_of_lt hw'⟩,le_of_lt hv⟩
+  apply (le_max_right K M).trans'
+  apply le_of_tendsto ((hq.norm.continuousAt).continuousWithinAt (s := {z}ᶜ))
+  filter_upwards [h.filter_mono (nhdsNE_le_codiscrete z),
+    (hnear z hz (lt_of_not_ge ht)).filter_mono nhdsWithin_le_nhds] with w hw hnear
+  exact hw hnear.1 hnear.2
+
+/-- An entire S-local zeta chart has rapid decay on bounded vertical strips after
+multiplication by the finite reciprocal Euler factors of a unitary global lift. -/
+theorem sLocalIdelicZFunction_cleared_strips
+    (χ : PontryaginDual G) (f : B) (hZ : AnalyticOnNhd ℂ (fun z ↦ Z(f,χ,z)) univ) :
+    ∃ η : U, ∀ (a b : ℝ) (N : ℕ), ∃ C : ℝ, ∀ z : ℂ, z.re ∈ Icc a b →
+      ‖z ^ N * (Poly(η,z) * Z(f,χ,z))‖ ≤ C := by
+  obtain ⟨η,h,he,_⟩ := sLocal_character_extension χ
+  refine ⟨η,fun a b N ↦ ?_⟩
+  let m := 3 + |a| + |b|
+  have hm : 1/2 < m := by dsimp only [m]; linarith [abs_nonneg a,abs_nonneg b]
+  obtain ⟨C,T,hC,hp⟩ := cleared_positive_height χ η f m hm N
+  obtain ⟨D,T',hD,hd⟩ := cleared_positive_height χ⁻¹ η⁻¹ (sAdeleSchwartzFourier f) m hm N
+  obtain ⟨A,Tg,hA,hg⟩ := cleared_gamma_bound η (a-1)
+  obtain ⟨E,hE,heps⟩ := sLocalEpsilonFactor_bounded_on_strip χ (a - 1) (b + 1)
+  let T₀ := max (max T T') (max Tg (max m 1))
+  let Q (z : ℂ) := z ^ N * (Poly(η,z) * Z(f,χ,z))
+  have hQ : Continuous Q := (continuous_id.pow N).mul
+    ((cleared_finite_continuous (S := S) η).mul (continuous_iff_continuousAt.mpr fun z ↦ (hZ z trivial).continuousAt))
+  apply cleared_extend_bound Q hQ a b (2 ^ N * max C (E * A * D)) T₀
+  filter_upwards [cleared_reflection χ η f h he] with z hz
+  intro hr ht
+  have ht₁ : T ≤ |z.im| := (le_max_left T T').trans ((le_max_left _ _).trans ht)
+  have ht₂ : T' ≤ |z.im| := (le_max_right T T').trans ((le_max_left _ _).trans ht)
+  have ht₃ : Tg ≤ |z.im| := (le_max_left Tg _).trans ((le_max_right _ _).trans ht)
+  have ht₄ : m ≤ |z.im| := (le_max_left m _).trans ((le_max_right _ _).trans ((le_max_right _ _).trans ht))
+  have hweighted : |z.im| ^ N * ‖Poly(η,z) * Z(f,χ,z)‖ ≤ max C (E * A * D) := by
+    by_cases hh : 1/2 ≤ z.re
+    · exact (hp z ⟨hh, by dsimp only [m]; linarith [hr.2, le_abs_self b, abs_nonneg a]⟩ ht₁).trans (le_max_left _ _)
+    · have hw : (1-z).re ∈ Icc (1/2) m := by
+        change 1/2 ≤ 1-z.re ∧ 1-z.re ≤ m
+        dsimp only [m]; constructor <;> linarith [hr.1, neg_abs_le a, abs_nonneg b]
+      have him : |(1-z).im| = |z.im| := by simp
+      have hhD := hd (1-z) hw (him ▸ ht₂)
+      rw [him] at hhD
+      rw [hz,norm_mul,norm_mul,mul_left_comm]
+      exact (mul_le_mul (mul_le_mul (heps z hr) (hg z hr.1 (le_of_not_ge hh) ht₃)
+        (norm_nonneg _) hE) hhD (by positivity) (mul_nonneg hE hA)).trans (le_max_right _ _)
+  have hnorm : ‖z‖ ≤ 2 * |z.im| := by
+    apply z.norm_le_abs_re_add_abs_im.trans
+    have : |z.re| ≤ m := by
+      rw [abs_le]; dsimp only [m]
+      constructor <;> linarith [hr.1, hr.2, neg_abs_le a, le_abs_self b, abs_nonneg a, abs_nonneg b]
+    linarith
+  change ‖z ^ N * _‖ ≤ _
+  rw [norm_mul, norm_pow]
+  calc
+    _ ≤ (2 * |z.im|)^N * ‖Poly(η,z) * Z(f,χ,z)‖ :=
+      mul_le_mul_of_nonneg_right (pow_le_pow_left₀ (norm_nonneg _) hnorm N) (norm_nonneg _)
+    _ = 2 ^ N * (|z.im| ^ N * ‖Poly(η,z) * Z(f,χ,z)‖) := by rw [mul_pow,mul_assoc]
+    _ ≤ _ := mul_le_mul_of_nonneg_left hweighted (by positivity)
+
+end ClearedEulerStrips
 
 end RiemannMasullo

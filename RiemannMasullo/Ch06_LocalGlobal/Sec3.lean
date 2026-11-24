@@ -828,96 +828,13 @@ local notation "pvTheta(" S ", " ω ")" => (pvMorphism(S, ω)).range
 local notation "pvPolar(" S ")" => (P).map (PV(S))
 local notation "removal(" χ ", " S ")" => reciprocalPartialHeckeEulerProduct χ S
 
-/-- Paper: Theorem 6.3.2.2(1), pp. 309–310, equation (6.3.2.19).
-On a nontrivial norm-one component, the principal-value image embeds as the
-closed Schwartz–Bergman subspace divisible by the completed Hecke L-function
-times the reciprocals of the removed Euler factors. The ramified factors are one. -/
-theorem globalPrincipalValueConverse_nontrivial (S : Finset V) (χ : U) (_hχ : χ₁(χ) ≠ 1) :
-    ∃ ZB : pvTheta(S, χ₁(χ)) →L[ℂ] B, IsClosedEmbedding ZB ∧
-      (∀ (f : ℬ) s, (ZB ((pvMorphism(S, χ₁(χ))).rangeRestrict f)).val s = Z(PV(S) f, χ, s)) ∧
-      Set.range ZB = bergmanIdeal(fun s ↦ removal(χ, S) s * continuedCompletedHeckeL χ s) := by
-  sorry
-
 -- TODO(paper-gap): Equation (6.3.2.20) uses the unshifted zeta generator and
 -- omits the Schwartz–Bergman intersection. Even for S empty and trivial χ,
 -- the entire multiple with multiplier exp(s^4) is not Schwartz on a vertical line.
 
-/-- Paper: Theorem 6.3.2.2(1), pp. 309–310, equation (6.3.2.20).
-The Mellin transform of the principal value of a polar test is a continuous linear function of
-that principal value: there is a continuous linear chart of `pvPolar(S)` in the
-Schwartz–Bergman space taking `PV(S) f` to `Z(PV(S) f, χ, ·)`. Granting that the principal
-value of a polar test is itself polar -- the content of Theorem 7.5.0.1, proved in this library
-as `strongCoprimalityPrincipalValue_mem_polar`, which this chapter cannot import -- this is the
-restriction to the principal-value image of the norm-twist chart of (6.3.2.4). -/
-theorem globalPrincipalValueConverse_normTwist_mellin_map (S : Finset V) (χ : U) (t : ℝ)
-    (_hχ : χ₀(χ) = ideleClassNormTwist (1 : U) (shift(t))) :
-    ∃ ZB : pvPolar(S) →L[ℂ] B, ∀ (f : pvPolar(S)) s, (ZB f).val s = Z(f.val, χ, s) := by
-  sorry
-
-/-- Paper: Theorem 6.3.2.2(1), pp. 309–310, equation (6.3.2.20).
-A continuous linear chart of the principal-value polar image that computes the transforms of
-its elements has as its range exactly the Schwartz–Bergman functions divisible by the
-reciprocal partial Euler product and the shifted, pole-cancelled completed Hecke function. The
-hard inclusion is the division by the reciprocal Euler factors, which have zeros on the
-critical line; the `TODO(paper-gap)` above this section and ERRATA I200 record the gap, and
-`Sec3_Printed.lean` refutes the printed unshifted generator. -/
-theorem globalPrincipalValueConverse_normTwist_range (S : Finset V) (χ : U) (t : ℝ)
-    (_hχ : χ₀(χ) = ideleClassNormTwist (1 : U) (shift(t))) (ZB : pvPolar(S) →L[ℂ] B)
-    (hZB : ∀ (f : pvPolar(S)) s, (ZB f).val s = Z(f.val, χ, s)) :
-    Set.range ZB = bergmanIdeal(fun s ↦ removal(χ, S) s * regularizedL(χ, t) s) := by
-  sorry
-
-/-- Paper: Theorem 6.3.2.2(1), pp. 309–310, equation (6.3.2.20).
-The Mellin chart of the principal-value polar image is open onto a closed subspace of the
-Schwartz–Bergman space. Closedness is the completeness of the image; openness is the open
-mapping theorem for the nuclear Fréchet structure of the two spaces. -/
-theorem globalPrincipalValueConverse_normTwist_openMap (S : Finset V) (χ : U) (t : ℝ)
-    (_hχ : χ₀(χ) = ideleClassNormTwist (1 : U) (shift(t))) (ZB : pvPolar(S) →L[ℂ] B)
-    (hZB : ∀ (f : pvPolar(S)) s, (ZB f).val s = Z(f.val, χ, s)) :
-    IsOpenMap ZB.rangeRestrict ∧ IsClosed (Set.range ZB) := by
-  sorry
-
-/-- Paper: Theorem 6.3.2.2(1), pp. 309–310, equation (6.3.2.20).
-The kernel of the Mellin chart of the principal-value polar image is the principal-value image
-of those polar tests that also lie in the kernel of the trivial homogeneous theta map. -/
-theorem globalPrincipalValueConverse_normTwist_ker (S : Finset V) (χ : U) (t : ℝ)
-    (_hχ : χ₀(χ) = ideleClassNormTwist (1 : U) (shift(t))) (ZB : pvPolar(S) →L[ℂ] B)
-    (hZB : ∀ (f : pvPolar(S)) s, (ZB f).val s = Z(f.val, χ, s)) :
-    ZB.ker = (((K(1) ⊓ (P)).map (PV(S))).comap (pvPolar(S)).subtype) := by
-  sorry
-
-/-- Paper: Theorem 6.3.2.2(1), pp. 309–310, equation (6.3.2.20).
-On the principal-value image of the polar test space the Mellin map is open
-onto a closed range. Its kernel is the principal-value image of the restricted
-trivial homogeneous theta kernel.
-Deviation: The generator uses the same norm-twist shift and cancellation as
-(6.3.2.4), with the removed Euler factors. Divisibility is tested within the
-Schwartz–Bergman space. -/
-theorem globalPrincipalValueConverse_normTwist (S : Finset V) (χ : U) (t : ℝ)
-    (_hχ : χ₀(χ) = ideleClassNormTwist (1 : U) (shift(t))) :
-    ∃ ZB : pvPolar(S) →L[ℂ] B, IsOpenMap ZB.rangeRestrict ∧ IsClosed (Set.range ZB) ∧
-      (∀ (f : pvPolar(S)) s, (ZB f).val s = Z(f.val, χ, s)) ∧
-      Set.range ZB = bergmanIdeal(fun s ↦ removal(χ, S) s * regularizedL(χ, t) s) ∧
-      ZB.ker = (((K(1) ⊓ (P)).map (PV(S))).comap (pvPolar(S)).subtype) := by
-  obtain ⟨ZB, hZB⟩ := globalPrincipalValueConverse_normTwist_mellin_map S χ t _hχ
-  obtain ⟨hopen, hclosed⟩ := globalPrincipalValueConverse_normTwist_openMap S χ t _hχ ZB hZB
-  exact ⟨ZB, hopen, hclosed, hZB,
-    globalPrincipalValueConverse_normTwist_range S χ t _hχ ZB hZB,
-    globalPrincipalValueConverse_normTwist_ker S χ t _hχ ZB hZB⟩
-
 -- TODO(paper-gap): In (6.3.2.21) the terminal space must be zero on a nontrivial
 -- component, as in (6.3.2.23). In a pure norm-twist component with a nonempty
 -- removal set, the first residue vanishes on the entire principal-value image.
-
-/-- Paper: Theorem 6.3.2.2(2), p. 310, equations (6.3.2.21) and (6.3.2.23).
-On a nontrivial norm-one component, principal values of polar-free tests already
-give the full homogeneous principal-value image with its subspace topology.
-The inclusion corresponds to the identity on the range in (6.3.2.19).
-Deviation: The terminal residue space is zero, as in (6.3.2.23). -/
-theorem globalPrincipalValueConverse_nontrivial_exact (S : Finset V)
-    (ω : PontryaginDual C₁) (_hω : ω ≠ 1) :
-    IsOpenQuotientMap ((pvMorphism(S, ω)).rangeRestrict.comp (P).subtype) := by
-  sorry
 
 -- TODO(paper-gap): The powers in (6.3.2.22) drop the local phases when
 -- evaluating at the two shifted poles. The factors are 1 - 1 and 1 - qᵥ⁻¹
@@ -1242,6 +1159,476 @@ theorem globalPrincipalValueConverse_mellin (S : Finset V) (χ : U) (f : ℬ) :
     (fun s ↦ Z(PV(S) f, χ, s)) =ᶠ[codiscrete ℂ] (fun s ↦ removal(χ, S) s * Z(f, χ, s)) := by
   exact globalPrincipalValueConverse_mellin_stage S χ f
 
+/-- The real vertical trace differentiates by one factor of I at each step. -/
+private theorem globalPrincipalValueConverse_nontrivial_vertical_deriv (b : B) (a : (univ : Set ℝ))
+    (n : ℕ) (x : ℝ) :
+    iteratedDeriv n (fun y : ℝ ↦ b.val ((a.val : ℂ) + (y : ℂ) * Complex.I)) x =
+      Complex.I ^ n * iteratedDeriv n b.val ((a.val : ℂ) + (x : ℂ) * Complex.I) := by
+  let L (z : ℂ) := (a.val : ℂ) + z * Complex.I
+  have hL (z : ℂ) : HasDerivAt L Complex.I z := by
+    change HasDerivAt (fun w : ℂ ↦ (a.val : ℂ) + w * Complex.I) Complex.I z
+    simpa only [id_eq, one_mul] using
+      ((hasDerivAt_id z).mul_const Complex.I).const_add (a.val : ℂ)
+  have ha : AnalyticOnNhd ℂ b.val univ :=
+    fun z _ ↦ (show Differentiable ℂ b.val from fun w ↦
+      (b.property.2.1 w (by simp)).differentiableAt (by simp)).analyticAt z
+  have hn (k : ℕ) : AnalyticOnNhd ℂ (iteratedDeriv k b.val) univ := by
+    rw [iteratedDeriv_eq_iterate]
+    exact ha.iterated_deriv k
+  change iteratedDeriv n (fun y : ℝ ↦ b.val (L y)) x = Complex.I ^ n * iteratedDeriv n b.val (L x)
+  induction n generalizing x with
+  | zero => simp [iteratedDeriv_zero]
+  | succ k ih =>
+    have hx : L x ∈ univ := mem_univ _
+    have hh : HasDerivAt (iteratedDeriv k b.val) (iteratedDeriv (k + 1) b.val (L x)) (L x) := by
+      rw [iteratedDeriv_succ]
+      exact (hn k (L x) hx).differentiableAt.hasDerivAt
+    have he : (iteratedDeriv k (fun y : ℝ ↦ b.val (L y))) =
+        fun y : ℝ ↦ Complex.I ^ k * iteratedDeriv k b.val (L y) := funext ih
+    have hdiff : HasDerivAt (fun y : ℝ ↦ Complex.I ^ k * iteratedDeriv k b.val (L y))
+        (Complex.I ^ k * (iteratedDeriv (k + 1) b.val (L x) * Complex.I)) x :=
+      (((hh.comp (x : ℂ) (hL x)).comp_ofReal).const_mul (Complex.I ^ k))
+    rw [iteratedDeriv_succ, he]
+    exact hdiff.deriv.trans (by ring)
+
+private theorem globalPrincipalValueConverse_nontrivial_schwartz_deriv_continuous (n : ℕ) :
+    Continuous (fun f : SchwartzMap ℝ ℂ ↦ iteratedDeriv n (f : ℝ → ℂ)) := by
+  have h (n : ℕ) : ∀ f : SchwartzMap ℝ ℂ,
+      (⇑((SchwartzMap.derivCLM ℂ ℂ)^[n] f) : ℝ → ℂ) = iteratedDeriv n (f : ℝ → ℂ) := by
+    induction n with
+    | zero => intro f; simp [iteratedDeriv_zero]
+    | succ k ih =>
+      intro f
+      rw [Function.iterate_succ_apply', iteratedDeriv_succ, ← ih f]
+      exact funext (SchwartzMap.derivCLM_apply ℂ ((SchwartzMap.derivCLM ℂ ℂ)^[k] f))
+  simp_rw [← h]
+  have hc : Continuous (fun f : SchwartzMap ℝ ℂ ↦ (f : ℝ → ℂ)) :=
+    continuous_pi fun x ↦ ((continuous_eval_const (F := BoundedContinuousFunction ℝ ℂ) x).comp
+      (SchwartzMap.toBoundedContinuousFunctionCLM ℂ ℝ ℂ).continuous)
+  exact hc.comp ((SchwartzMap.derivCLM ℂ ℂ).continuous.iterate n)
+
+/-- The Schwartz-line realization of a Bergman function makes each complex jet continuous. -/
+private theorem globalPrincipalValueConverse_nontrivial_continuous_jet (s : ℂ) (n : ℕ) :
+    Continuous (fun b : B ↦ iteratedDeriv n b.val s) := by
+  obtain ⟨T, hT, hE⟩ := schwartzBergman_schwartzLine_topology (univ : Set ℝ) isOpen_univ
+    ordConnected_univ univ_nonempty
+  let a : (univ : Set ℝ) := ⟨s.re, mem_univ _⟩
+  have hL : (a.val : ℂ) + (s.im : ℂ) * Complex.I = s := Complex.re_add_im s
+  have hTeq (b : B) : ⇑(T b a) = fun y : ℝ ↦ b.val ((a.val : ℂ) + (y : ℂ) * Complex.I) := by
+    funext y
+    simpa only [weightedVerticalTrace, pow_zero, one_mul] using hT b a y
+  have hC : Continuous (fun b : B ↦ iteratedDeriv n ((T b a : SchwartzMap ℝ ℂ) : ℝ → ℂ) s.im) :=
+    (continuous_apply s.im).comp ((globalPrincipalValueConverse_nontrivial_schwartz_deriv_continuous n).comp
+      ((continuous_apply a).comp hE.continuous))
+  apply (hC.const_mul ((Complex.I ^ n)⁻¹)).congr
+  intro b
+  rw [hTeq, globalPrincipalValueConverse_nontrivial_vertical_deriv b a n, hL,
+    inv_mul_cancel_left₀ (pow_ne_zero _ Complex.I_ne_zero)]
+
+/-- The order inequalities remove all singularities of the quotient. -/
+private theorem globalPrincipalValueConverse_nontrivial_factor {f g : ℂ → ℂ} (hf : Differentiable ℂ f)
+    (hg : Differentiable ℂ g) :
+    (∃ u : ℂ → ℂ, Differentiable ℂ u ∧ ∀ z, f z = g z * u z) ↔
+      ∀ z, analyticOrderAt g z ≤ analyticOrderAt f z := by
+  constructor
+  · rintro ⟨u, hu, he⟩ z
+    rw [show f = g * u from funext he, analyticOrderAt_mul (hg.analyticAt z) (hu.analyticAt z)]
+    exact self_le_add_right _ _
+  · intro hord
+    let q := f / g
+    have hq : MeromorphicOn q univ := fun z _ ↦ (hf.analyticAt z).meromorphicAt.div (hg.analyticAt z).meromorphicAt
+    have hdiff : Differentiable ℂ (toMeromorphicNFOn q univ) := by
+      intro z
+      apply AnalyticAt.differentiableAt
+      have hnf := meromorphicNFOn_toMeromorphicNFOn q univ (mem_univ z)
+      apply hnf.meromorphicOrderAt_nonneg_iff_analyticAt.mp
+      rw [meromorphicOrderAt_toMeromorphicNFOn hq (mem_univ z),
+        meromorphicOrderAt_div (hf.analyticAt z).meromorphicAt (hg.analyticAt z).meromorphicAt,
+        (hf.analyticAt z).meromorphicOrderAt_eq, (hg.analyticAt z).meromorphicOrderAt_eq]
+      have hle := hord z
+      generalize analyticOrderAt f z = m at hle ⊢
+      generalize analyticOrderAt g z = n at hle ⊢
+      cases m using ENat.recTopCoe with
+      | top => simp
+      | coe m =>
+        cases n using ENat.recTopCoe with
+        | top => simp at hle
+        | coe n =>
+          exact WithTop.coe_le_coe.mpr (sub_nonneg.mpr (by exact_mod_cast hle : (n : ℤ) ≤ m))
+    refine ⟨_, hdiff, fun z ↦ ?_⟩
+    by_cases hz : g z = 0
+    · have hpos := lt_of_lt_of_le (pos_iff_ne_zero.mpr ((hg.analyticAt z).analyticOrderAt_ne_zero.mpr hz))
+          (hord z)
+      rw [hz, zero_mul]
+      exact (hf.analyticAt z).analyticOrderAt_ne_zero.mp hpos.ne'
+    · rw [toMeromorphicNFOn_eq_toMeromorphicNFAt hq (mem_univ z),
+        toMeromorphicNFAt_eq_self.mpr ((hf.analyticAt z).div (hg.analyticAt z) hz).meromorphicNFAt]
+      exact (mul_div_cancel₀ _ hz).symm
+
+/-- Each vanishing jet is a closed condition in the Schwartz–Bergman topology. -/
+private theorem globalPrincipalValueConverse_nontrivial_closed {g : ℂ → ℂ}
+    (hg : Differentiable ℂ g) : IsClosed bergmanIdeal(g) := by
+  have hdiff (f : B) : Differentiable ℂ f.val := fun w ↦
+    (f.property.2.1 w (by simp)).differentiableAt (by simp)
+  have hset : bergmanIdeal(g) = ⋂ (z : ℂ) (n : ℕ) (_ : (n : ℕ∞) ≤ analyticOrderAt g z)
+      (i : ℕ) (_ : i < n), {f : B | iteratedDeriv i f.val z = 0} := by
+    ext f
+    simp only [mem_ofPred_eq, mem_iInter, globalPrincipalValueConverse_nontrivial_factor (hdiff f) hg]
+    apply forall_congr'
+    intro z
+    rw [← ENat.forall_natCast_le_iff_le]
+    simp_rw [natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero ((hdiff f).analyticAt z)]
+  rw [hset]
+  exact isClosed_iInter fun z ↦ isClosed_iInter fun n ↦ isClosed_iInter fun _ ↦
+    isClosed_iInter fun i ↦ isClosed_iInter fun _ ↦
+      isClosed_eq (globalPrincipalValueConverse_nontrivial_continuous_jet z i) continuous_const
+
+private theorem globalPrincipalValueConverse_nontrivial_euler_form (χ : PontryaginDual C𝔽) (v : V) :
+    (fun z ↦ (finiteHeckeEulerFactor χ v z)⁻¹) = (1 : ℂ → ℂ) ∨
+    ∃ ℓ : ℝ, 0 < ℓ ∧ ∃ θ : ℝ,
+      (fun z ↦ (finiteHeckeEulerFactor χ v z)⁻¹) =
+        fun z ↦ 1 - Complex.exp (((-ℓ : ℝ) : ℂ) * z + (θ : ℂ) * Complex.I) := by
+  classical
+  by_cases hχ : (ideleClassNormTwist χ 0).IsUnramifiedAt v
+  · right
+    let hu := (Valued.v : Valuation (v.adicCompletion F)
+      (WithZero (Multiplicative ℤ))).exists_isUniformizer_of_isCyclic_of_nontrivial
+    let π : (v.adicCompletion F)ˣ := Units.mk0 hu.choose hu.choose_spec.ne_zero
+    obtain ⟨t, ⟨-, ht, -⟩, -⟩ :=
+      unramifiedHeckeCharacter_existsUnique_phase χ v hχ π hu.choose_spec
+    have hval := hχ.localValue_eq π.val hu.choose_spec
+    rw [HeckeCharacter.restrict, MulChar.ofUnitHom_coe] at hval
+    have ht' : (ideleClassNormTwist χ 0).localValue v =
+        (v.asIdeal.absNorm : ℂ) ^ (-(t : ℂ) * Complex.I) := hval.trans ht
+    have hq : (1 : ℝ) < v.asIdeal.absNorm := by exact_mod_cast HeightOneSpectrum.one_lt_absNorm v
+    let ℓ := Real.log (v.asIdeal.absNorm : ℝ)
+    refine ⟨ℓ, Real.log_pos hq, -ℓ * t, funext fun z ↦ ?_⟩
+    rw [finiteHeckeEulerFactor_inv_eq_phase χ v hχ t ht']
+    rw [Complex.cpow_def_of_ne_zero (by exact_mod_cast (zero_lt_one.trans hq).ne')]
+    have hlog : Complex.log (v.asIdeal.absNorm : ℂ) = (ℓ : ℂ) := by
+      simpa only [ℓ, Complex.ofReal_natCast] using (Complex.ofReal_log (zero_lt_one.trans hq).le).symm
+    rw [hlog]
+    congr 2
+    push_cast
+    dsimp [ℓ]
+    ring
+  · left
+    funext z
+    rw [finiteHeckeEulerFactor, ite_eq_right hχ, inv_one]
+    rfl
+
+private theorem globalPrincipalValueConverse_nontrivial_removal_differentiable
+    (χ : U) (S : Finset V) : Differentiable ℂ (removal(χ, S)) := by
+  apply Differentiable.fun_finsetProd
+  intro v _
+  rcases globalPrincipalValueConverse_nontrivial_euler_form χ v with h | ⟨_, _, _, h⟩
+  all_goals rw [h]; fun_prop
+
+open Complex in
+/-- Division by one vertical periodic Euler factor preserves rapid decay on
+closed strips once the quotient is entire. -/
+private theorem globalPrincipalValueConverse_nontrivial_divide_exp (bfun : SchwartzBergman (univ : Set ℝ))
+    (u : ℂ → ℂ) (hu : Differentiable ℂ u) {ℓ θ : ℝ} (hℓ : 0 < ℓ)
+    (h : ∀ z, bfun.val z = (1 - Complex.exp (((-ℓ : ℝ) : ℂ) * z + (θ : ℂ) * Complex.I)) * u z) :
+    u ∈ schwartzBergmanSubmodule (univ : Set ℝ) := by
+  refine ⟨fun _ hz ↦ (hz (mem_univ _)).elim, hu.differentiableOn, fun a b _ _ N ↦ ?_⟩
+  let L := min a 0 - 1
+  let R := max b 0 + 1
+  have hL : L < 0 := by dsimp [L]; linarith [min_le_right a 0]
+  have hR : 0 < R := by dsimp [R]; linarith [le_max_right b 0]
+  have hLR := hL.trans hR
+  let T (j : ℤ) := (θ - Real.pi - (j : ℝ) * (2 * Real.pi)) / ℓ
+  let e (w : ℂ) := ((-ℓ : ℝ) : ℂ) * w + (θ : ℂ) * Complex.I
+  have hre (w : ℂ) : (e w).re = -ℓ * w.re := by simp [e, Complex.mul_re]
+  have him (w : ℂ) : (e w).im = θ - ℓ * w.im := by simp [e, Complex.mul_im]; ring
+  let δ := min 1 (min (Real.exp (-ℓ * L) - 1) (1 - Real.exp (-ℓ * R)))
+  have hδ : 0 < δ := by
+    refine lt_min zero_lt_one (lt_min (sub_pos.mpr (Real.one_lt_exp_iff.mpr ?_))
+      (sub_pos.mpr (Real.exp_lt_one_iff.mpr ?_)))
+    · exact mul_pos_of_neg_of_neg (neg_neg_of_pos hℓ) hL
+    · exact mul_neg_of_neg_of_pos (neg_neg_of_pos hℓ) hR
+  have hhor (w : ℂ) (j : ℤ) (hw : w.im = T j) : δ ≤ ‖1 - Complex.exp (e w)‖ := by
+    have hphase : (e w).im = Real.pi + (j : ℝ) * (2 * Real.pi) := by
+      rw [him, hw]
+      dsimp [T]
+      field_simp
+      ring
+    have hreal : (1 - Complex.exp (e w)).re = 1 + Real.exp ((e w).re) := by
+      rw [Complex.sub_re, Complex.one_re, Complex.exp_re, hphase,
+        Real.cos_add_int_mul_two_pi, Real.cos_pi]
+      ring
+    exact (min_le_left _ _).trans ((le_add_of_nonneg_right (Real.exp_pos _).le).trans
+      (hreal ▸ Complex.re_le_norm (1 - Complex.exp (e w))))
+  have hvert (w : ℂ) (hw : w.re = L ∨ w.re = R) : δ ≤ ‖1 - Complex.exp (e w)‖ := by
+    rcases hw with hw | hw
+    · have he := norm_sub_norm_le (Complex.exp (e w)) (1 : ℂ)
+      rw [Complex.norm_exp, hre, hw, norm_one, norm_sub_rev] at he
+      exact ((min_le_right _ _).trans (min_le_left _ _)).trans he
+    · have he := norm_sub_norm_le (1 : ℂ) (Complex.exp (e w))
+      rw [Complex.norm_exp, hre, hw, norm_one] at he
+      exact ((min_le_right _ _).trans (min_le_right _ _)).trans he
+  obtain ⟨M, hM⟩ := bfun.property.2.2 L R hLR.le (subset_univ _) N
+  refine ⟨M / δ, ?_⟩
+  rintro _ ⟨z, hz, rfl⟩
+  have hzRe : z.re ∈ Icc L R :=
+    ⟨(by dsimp [L]; linarith [min_le_left a 0, hz.1]), (by dsimp [R]; linarith [le_max_left b 0, hz.2])⟩
+  let q := (θ - Real.pi - ℓ * z.im) / (2 * Real.pi)
+  obtain ⟨j, hj⟩ := exists_int_gt q
+  obtain ⟨k, hk⟩ := exists_int_lt q
+  have hπ : 0 < 2 * Real.pi := by positivity
+  have hj' : T j < z.im := by
+    have hj' := (div_lt_iff₀ hπ).mp hj
+    exact (div_lt_iff₀ hℓ).mpr (by linarith)
+  have hk' : z.im < T k := by
+    have hk' := (lt_div_iff₀ hπ).mp hk
+    exact (lt_div_iff₀ hℓ).mpr (by linarith)
+  have hjk := hj'.trans hk'
+  have hcl := Complex.closure_reProdIm (Ioo L R) (Ioo (T j) (T k))
+  rw [closure_Ioo hLR.ne, closure_Ioo hjk.ne] at hcl
+  apply Complex.norm_le_of_forall_mem_frontier_norm_le
+    ((Metric.isBounded_Ioo L R).reProdIm (Metric.isBounded_Ioo (T j) (T k)))
+    (((differentiable_pow N).mul hu).diffContOnCl)
+  · intro w hw
+    have hwRe : w.re ∈ Icc L R := (hcl ▸ frontier_subset_closure hw).1
+    rw [Complex.frontier_reProdIm, closure_Ioo hLR.ne, closure_Ioo hjk.ne,
+      frontier_Ioo hLR, frontier_Ioo hjk] at hw
+    have hden : δ ≤ ‖1 - Complex.exp (e w)‖ := by
+      rcases hw with hw | hw
+      · rcases show w.im = T j ∨ w.im = T k from hw.2 with hj | hk
+        exacts [hhor w j hj, hhor w k hk]
+      · exact hvert w hw.1
+    have hprod : ‖w ^ N * u w‖ * ‖1 - Complex.exp (e w)‖ ≤ M := by
+      have he := hM ⟨w, hwRe, rfl⟩
+      change ‖w ^ N * bfun.val w‖ ≤ M at he
+      have heq : w ^ N * bfun.val w = (w ^ N * u w) * (1 - Complex.exp (e w)) := by
+        rw [h w]; dsimp [e]; ring
+      rwa [heq, norm_mul] at he
+    exact (le_div_iff₀ hδ).mpr ((mul_le_mul_of_nonneg_left hden (norm_nonneg _)).trans hprod)
+  · rw [hcl]
+    exact ⟨hzRe, hj'.le, hk'.le⟩
+
+/-- An entire quotient of a Schwartz–Bergman function by a finite product of
+vertical periodic Euler factors still decays rapidly on closed strips. -/
+private theorem globalPrincipalValueConverse_nontrivial_divide_prod_exp {ι : Type*} (S : Finset ι) (A : ι → ℂ → ℂ)
+    (hA : ∀ i ∈ S, A i = 1 ∨ ∃ ℓ : ℝ, 0 < ℓ ∧ ∃ θ : ℝ,
+      A i = fun z ↦ 1 - Complex.exp (((-ℓ : ℝ) : ℂ) * z + (θ : ℂ) * Complex.I))
+    (bfun : SchwartzBergman (univ : Set ℝ)) (u : ℂ → ℂ)
+    (hu : Differentiable ℂ u) (h : ∀ z, bfun.val z = (∏ i ∈ S, A i z) * u z) :
+    u ∈ schwartzBergmanSubmodule (univ : Set ℝ) := by
+  classical
+  induction S using Finset.induction_on generalizing bfun with
+  | empty =>
+    have he : bfun.val = u := funext fun z ↦ by simpa using h z
+    exact he ▸ bfun.property
+  | @insert i S hi ih =>
+    have hAS := fun j (hj : j ∈ S) ↦ hA j (Finset.mem_insert_of_mem hj)
+    let v (z : ℂ) := (∏ j ∈ S, A j z) * u z
+    have hdiv (z : ℂ) : bfun.val z = A i z * v z := by
+      simpa only [Finset.prod_insert hi, mul_assoc, v] using h z
+    rcases hA i (Finset.mem_insert_self _ _) with hOne | ⟨ℓ, hℓ, θ, hθ⟩
+    · apply ih hAS bfun
+      simpa only [hOne, Pi.one_apply, one_mul, v] using hdiv
+    · have hd (j : ι) (hj : j ∈ S) : Differentiable ℂ (A j) := by
+        rcases hAS j hj with he | ⟨_, _, _, he⟩ <;> rw [he] <;> fun_prop
+      have hv : Differentiable ℂ v := (Differentiable.fun_finsetProd hd).mul hu
+      have hSB := globalPrincipalValueConverse_nontrivial_divide_exp bfun v hv hℓ (hθ ▸ hdiv)
+      exact ih hAS (⟨v, hSB⟩ : SchwartzBergman (univ : Set ℝ)) (fun _ ↦ rfl)
+
+/-- Paper: Theorem 6.3.2.2(1), pp. 309–310, equation (6.3.2.19).
+On a nontrivial norm-one component, the principal-value image embeds as the
+closed Schwartz–Bergman subspace divisible by the completed Hecke L-function
+times the reciprocals of the removed Euler factors. The ramified factors are one. -/
+theorem globalPrincipalValueConverse_nontrivial (S : Finset V) (χ : U) (_hχ : χ₁(χ) ≠ 1) :
+    ∃ ZB : pvTheta(S, χ₁(χ)) →L[ℂ] B, IsClosedEmbedding ZB ∧
+      (∀ (f : ℬ) s, (ZB ((pvMorphism(S, χ₁(χ))).rangeRestrict f)).val s = Z(PV(S) f, χ, s)) ∧
+      Set.range ZB = bergmanIdeal(fun s ↦ removal(χ, S) s * continuedCompletedHeckeL χ s) := by
+  classical
+  obtain ⟨M, hM, hval, hMrange⟩ := globalConverse_nontrivial χ _hχ
+  let E := removal(χ, S)
+  let L := continuedCompletedHeckeL χ
+  have hn : χ.toMonoidHom.comp (ideleClassNorm F).ker.subtype ≠ 1 :=
+    fun h ↦ _hχ (PontryaginDual.ext fun x ↦ DFunLike.congr_fun h x)
+  have hL : Differentiable ℂ L := completedHeckeL_continuation_entire χ L
+    (continuedCompletedHeckeL_spec χ).1 (continuedCompletedHeckeL_spec χ).2 hn
+  have hE : Differentiable ℂ E :=
+    globalPrincipalValueConverse_nontrivial_removal_differentiable χ S
+  have hmul (f : ℬ) (z : ℂ) : Z(PV(S) f, χ, z) = E z * Z(f, χ, z) := by
+    have H := nhdsNE_le_codiscrete z (globalPrincipalValueConverse_mellin S χ f)
+    exact (((globalIdelicZFunction_meromorphic _ χ (mem_univ z)).eventuallyEq_nhdsNE_iff_eventuallyEq_nhds
+      (((hE.mul (globalIdelicZFunction_entire_of_nontrivial f χ hn)).analyticAt z).meromorphicNFAt)).mp H).eq_of_nhds
+  let ZB := M.comp (pvTheta(S, χ₁(χ))).subtypeL
+  have hcomp (f : ℬ) (s : ℂ) :
+      (ZB ((pvMorphism(S, χ₁(χ))).rangeRestrict f)).val s = Z(PV(S) f, χ, s) :=
+    hval (PV(S) f) s
+  have hrange : Set.range ZB = bergmanIdeal(E * L) := by
+    ext b
+    constructor
+    · rintro ⟨⟨_, f, rfl⟩, rfl⟩
+      have hm : M ((K(χ₁(χ))).mkQ f) ∈ Set.range M := ⟨_, rfl⟩
+      rw [hMrange] at hm
+      obtain ⟨u, hu, he⟩ := hm
+      refine ⟨u, hu, fun z ↦ ?_⟩
+      have hz := (hcomp f z).trans (hmul f z)
+      rw [← hval f z, he z] at hz
+      exact hz.trans (mul_assoc _ _ _).symm
+    · rintro ⟨u, hu, he⟩
+      have hfact (z : ℂ) : b.val z = E z * (L z * u z) := (he z).trans (mul_assoc _ _ _)
+      let b' : B := ⟨L * u, globalPrincipalValueConverse_nontrivial_divide_prod_exp S
+        (fun v z ↦ (finiteHeckeEulerFactor χ v z)⁻¹)
+        (fun v _ ↦ globalPrincipalValueConverse_nontrivial_euler_form χ v)
+        b (L * u) (hL.mul hu) hfact⟩
+      have hb' : b' ∈ Set.range M := hMrange.symm ▸ ⟨u, hu, fun _ ↦ rfl⟩
+      obtain ⟨x, hx⟩ := hb'
+      obtain ⟨f, rfl⟩ := (K(χ₁(χ))).mkQ_surjective x
+      refine ⟨(pvMorphism(S, χ₁(χ))).rangeRestrict f, Subtype.ext (funext fun z ↦ ?_)⟩
+      rw [hcomp, hmul, ← hval, hx]
+      exact (hfact z).symm
+  exact ⟨ZB, ⟨hM.isEmbedding.comp IsEmbedding.subtypeVal,
+    hrange.symm ▸ globalPrincipalValueConverse_nontrivial_closed (hE.mul hL)⟩, hcomp, hrange⟩
+
+/-- On a homogeneous component the principal-value map is conjugate to the
+restriction of the ordinary theta operator to its closed isotype. -/
+private theorem globalPrincipalValueConverse_normTwist_divided_exact_transport (S : Finset V)
+    (ω : PontryaginDual C₁) :
+    ∃ e : Θ(ω) ≃L[ℂ] pvTheta(S, ω), ∀ f : ℬ,
+      e ((K(ω)).mkQ f) = (pvMorphism(S, ω)).rangeRestrict f := by
+  classical
+  obtain ⟨hs, i, hi⟩ := globalThetaIsotypicAverage_equiv (F := F) ω
+  let j := Subtype.val ∘ i
+  have hj : IsClosedEmbedding j := hs.isClosedEmbedding_subtypeVal.comp i.toHomeomorph.isClosedEmbedding
+  let W := globalThetaPrincipalValue F S
+  have hW : IsClosedEmbedding W := by
+    rcases S.eq_empty_or_nonempty with rfl | h
+    · have he : ⇑W = id := by
+        funext x
+        obtain ⟨f, rfl⟩ := (LinearMap.ker (adelicThetaLinearMap F)).mkQ_surjective x
+        exact congrArg (LinearMap.ker (adelicThetaLinearMap F)).mkQ
+          (LinearMap.congr_fun (globalPrincipalValueConverse_mellin_emptyTest (F := F)) f)
+      rw [he]
+      exact IsClosedEmbedding.id
+    · exact globalThetaPrincipalValue_isClosedEmbedding h
+  have hjq (f : ℬ) : j ((pvMorphism(S, ω)) f) = W (j ((K(ω)).mkQ f)) := by
+    exact (hi (PV(S) f)).trans ((globalThetaPrincipalValue_isotypicAverage S ω
+      (Submodule.Quotient.mk f)).symm.trans (congrArg W (hi f).symm))
+  let q := (pvMorphism(S, ω)).rangeRestrict
+  have hk : K(ω) ≤ q.ker := by
+    intro f hf
+    apply Subtype.ext
+    apply hj.injective
+    change j ((pvMorphism(S, ω)) f) = j 0
+    rw [hjq, show (K(ω)).mkQ f = 0 from (Submodule.Quotient.mk_eq_zero _).mpr hf]
+    simp [j]
+  let T := (K(ω)).liftQ q hk
+  have ht (f : ℬ) : T ((K(ω)).mkQ f) = q f := rfl
+  have heq : (j ∘ Subtype.val) ∘ T = W ∘ j := by
+    funext x
+    obtain ⟨f, rfl⟩ := (K(ω)).mkQ_surjective x
+    exact hjq f
+  have hT : IsEmbedding T := (hj.isEmbedding.comp IsEmbedding.subtypeVal).of_comp_iff.mp
+    (heq.symm ▸ (hW.isEmbedding.comp hj.isEmbedding))
+  have hsurj : Surjective T := by
+    rintro ⟨_, f, rfl⟩
+    exact ⟨(K(ω)).mkQ f, rfl⟩
+  let e := LinearEquiv.ofBijective T ⟨hT.injective, hsurj⟩
+  have hInv : Continuous e.symm := hT.isInducing.continuous_iff.mpr (by
+    change Continuous (fun y ↦ e (e.symm y))
+    simp only [e.apply_symm_apply]
+    exact continuous_id)
+  exact ⟨{e with continuous_toFun := hT.continuous, continuous_invFun := hInv}, ht⟩
+
+/-- Paper: Theorem 6.3.2.2(2), p. 310, equations (6.3.2.21) and (6.3.2.23).
+On a nontrivial norm-one component, principal values of polar-free tests already
+give the full homogeneous principal-value image with its subspace topology.
+The inclusion corresponds to the identity on the range in (6.3.2.19).
+Deviation: The terminal residue space is zero, as in (6.3.2.23). -/
+theorem globalPrincipalValueConverse_nontrivial_exact (S : Finset V)
+    (ω : PontryaginDual C₁) (_hω : ω ≠ 1) :
+    IsOpenQuotientMap ((pvMorphism(S, ω)).rangeRestrict.comp (P).subtype) := by
+  obtain ⟨e, he⟩ := globalPrincipalValueConverse_normTwist_divided_exact_transport S ω
+  have hmap : ⇑((pvMorphism(S, ω)).rangeRestrict.comp (P).subtype) =
+      e ∘ ((K(ω)).mkQ.comp (P).subtype) := funext fun f ↦ (he f.val).symm
+  rw [hmap]
+  exact e.toHomeomorph.isOpenQuotientMap.comp (globalConverse_nontrivial_exact ω _hω)
+
+/-- The Euler product is nonzero away from a discrete set, since each nonconstant
+factor has modulus strictly below one in its exponential term at the point 1. -/
+private theorem globalPrincipalValueConverse_normTwist_divided_exact_germs (S : Finset V)
+    (χ : U) (f : ℬ) : (fun s ↦ Z(PV(S) f, χ, s) / removal(χ, S) s) =ᶠ[codiscrete ℂ]
+        (fun s ↦ Z(f, χ, s)) := by
+  classical
+  have hf (v : V) : Differentiable ℂ (fun z ↦ (finiteHeckeEulerFactor χ v z)⁻¹) ∧
+      (finiteHeckeEulerFactor χ v 1)⁻¹ ≠ 0 := by
+    rcases globalPrincipalValueConverse_nontrivial_euler_form χ v with h | ⟨ℓ, hℓ, θ, h⟩
+    · exact ⟨h ▸ differentiable_const _, by simpa using (congrFun h 1).trans_ne one_ne_zero⟩
+    · refine ⟨h ▸ (by fun_prop), (congrFun h 1).trans_ne (sub_ne_zero.mpr ?_)⟩
+      have he : ‖Complex.exp (((-ℓ : ℝ) : ℂ) * 1 + (θ : ℂ) * Complex.I)‖ < 1 := by
+        rw [Complex.norm_exp, Real.exp_lt_one_iff]
+        simpa using hℓ
+      exact fun heq ↦ (ne_of_lt he) (heq ▸ norm_one)
+  have hE : Differentiable ℂ (removal(χ, S)) := Differentiable.fun_finsetProd fun v _ ↦ (hf v).1
+  have h1 : removal(χ, S) 1 ≠ 0 := Finset.prod_ne_zero_iff.mpr fun v _ ↦ (hf v).2
+  have ha : AnalyticOnNhd ℂ (removal(χ, S)) univ := fun z _ ↦ hE.analyticAt z
+  have hn := ha.eqOn_zero_or_eventually_ne_zero_of_preconnected isPreconnected_univ
+  have he : ∀ᶠ z in codiscrete ℂ, removal(χ, S) z ≠ 0 := by
+    exact hn.resolve_left (fun h ↦ h1 (h (mem_univ 1)))
+  filter_upwards [globalPrincipalValueConverse_mellin S χ f, he] with z hz hez
+  rw [hz, mul_div_cancel_left₀ _ hez]
+
+private theorem globalPrincipalValueConverse_normTwist_divided_exact_residue {f g : ℂ → ℂ} {ρ : ℂ}
+    (h : f =ᶠ[𝓝[≠] ρ] g) : complexResidue f ρ = complexResidue g ρ := by
+  obtain ⟨R, hR, hEq⟩ := Metric.nhdsWithin_basis_ball.eventually_iff.mp h
+  unfold complexResidue Filter.limUnder
+  apply congrArg Filter.lim
+  apply Filter.map_congr
+  filter_upwards [Ioo_mem_nhdsGT hR] with r hr
+  congr 1
+  apply circleIntegral.integral_congr hr.1.le
+  intro z hz
+  have hdist := Metric.mem_sphere.mp hz
+  refine hEq ⟨Metric.mem_ball.mpr (hdist.trans_lt hr.2), mem_compl_singleton_iff.mpr ?_⟩
+  rintro rfl
+  exact hr.1.ne (by simpa using hdist)
+
+/-- Transport the residue sequence, including the relative openness of the
+polar map, along a linear homeomorphism of its middle term. -/
+private theorem globalPrincipalValueConverse_normTwist_divided_exact_sequence
+    {X Y Z : Type*} [AddCommGroup X] [Module ℂ X] [TopologicalSpace X]
+    [AddCommGroup Y] [Module ℂ Y] [TopologicalSpace Y]
+    [AddCommGroup Z] [Module ℂ Z] [TopologicalSpace Z]
+    (A : Submodule ℂ X) (q₀ : X →ₗ[ℂ] Y) (q : X →ₗ[ℂ] Z)
+    (e : Y ≃L[ℂ] Z) (he : ∀ x, e (q₀ x) = q x)
+    (R₀ : Y →L[ℂ] ℂ × ℂ) (hker : R₀.ker = A.map q₀)
+    (hopen : IsOpenQuotientMap R₀) (hpolar : IsOpenQuotientMap (q₀.comp A.subtype).rangeRestrict) :
+    ∃ R : Z →L[ℂ] ℂ × ℂ, (∀ x, R (q x) = R₀ (q₀ x)) ∧ R.ker = A.map q ∧
+      IsOpenQuotientMap R ∧ IsOpenQuotientMap (q.comp A.subtype).rangeRestrict := by
+  let R := R₀.comp e.symm.toContinuousLinearMap
+  refine ⟨R, fun x ↦ ?_, ?_, hopen.comp e.symm.toHomeomorph.isOpenQuotientMap, ?_⟩
+  · change R₀ (e.symm (q x)) = _
+    rw [← he, e.symm_apply_apply]
+  · ext y
+    change e.symm y ∈ R₀.ker ↔ _
+    rw [hker]
+    constructor
+    · rintro ⟨x, hx, hxy⟩
+      exact ⟨x, hx, (he x).symm.trans ((congrArg e hxy).trans (e.apply_symm_apply y))⟩
+    · rintro ⟨x, hx, rfl⟩
+      exact ⟨x, hx, by rw [← he, e.symm_apply_apply]⟩
+  · let T := q₀.comp A.subtype
+    let polarMap := q.comp A.subtype
+    have hset : e.toHomeomorph '' (T.range : Set Y) = (polarMap.range : Set Z) := by
+      ext z
+      constructor
+      · rintro ⟨_, ⟨x, rfl⟩, rfl⟩
+        exact ⟨x, (he x.val).symm⟩
+      · rintro ⟨x, rfl⟩
+        exact ⟨T x, ⟨x, rfl⟩, he x.val⟩
+    let h : T.range ≃ₜ polarMap.range := (e.toHomeomorph.image T.range).trans (.setCongr hset)
+    have hh : (⇑polarMap.rangeRestrict) = h ∘ T.rangeRestrict :=
+      funext fun x ↦ Subtype.ext (he x.val).symm
+    change IsOpenQuotientMap polarMap.rangeRestrict
+    rw [hh]
+    exact h.isOpenQuotientMap.comp hpolar
+
 /-- Paper: Theorem 6.3.2.2(2), p. 310, equations (6.3.2.21)–(6.3.2.26).
 On the principal-value theta image the two original residue coordinates are
 recovered by dividing its Mellin transform by the known Euler multiplier.
@@ -1259,7 +1646,270 @@ theorem globalPrincipalValueConverse_normTwist_divided_exact (S : Finset V) (χ 
       (∀ f : ℬ, R (q f) = (-mass * f zeroAdele, mass * adeleSchwartzFourier f zeroAdele)) ∧
       R.ker = (P).map q ∧ IsOpenQuotientMap R ∧
       IsOpenQuotientMap (q.comp (P).subtype).rangeRestrict := by
-  sorry
+  classical
+  intro q
+  refine (globalPrincipalValueConverse_normTwist_divided_exact_transport (F := F) S
+    (1 : PontryaginDual C₁)).elim fun e he ↦ ?_
+  refine (globalConverse_normTwist_exact (F := F)).elim fun R₀ hR₀ ↦ ?_
+  have seq := globalPrincipalValueConverse_normTwist_divided_exact_sequence
+    (P) (K(1)).mkQ q e he R₀ hR₀.2.1 hR₀.2.2.1 hR₀.2.2.2
+  refine seq.elim fun R hR ↦ ?_
+  have hval (f : ℬ) := (hR.1 f).trans (hR₀.1 f)
+  refine ⟨R, ?_, hval, hR.2⟩
+  intro f
+  have h := globalPrincipalValueConverse_normTwist_residues ∅ χ t _hχ f
+  simp only [globalPrincipalValueConverse_mellin_emptyTest, LinearMap.id_apply,
+    reciprocalPartialHeckeEulerProduct, Finset.prod_empty, one_mul] at h
+  have hg := globalPrincipalValueConverse_normTwist_divided_exact_germs S χ f
+  rw [hval, ← h]
+  exact Prod.ext (globalPrincipalValueConverse_normTwist_divided_exact_residue
+    (nhdsNE_le_codiscrete _ hg)).symm (globalPrincipalValueConverse_normTwist_divided_exact_residue
+    (nhdsNE_le_codiscrete _ hg)).symm
+
+/-- The two residue identities force principal value to preserve both zero moments. -/
+private theorem globalPrincipalValueConverse_normTwist_mellin_map_polar
+    (S : Finset V) (f : P) : PV(S) f.val ∈ P := by
+  let μ := normOneIdeleClassTamagawaMeasure F
+  let : MeasurableSpace C𝔽 := borel _
+  let : CompactSpace C₁ := (ideleClassGroup_finiteness F).2.1
+  let : μ.IsHaarMeasure := (multiplicativeTamagawaMeasures_existsUnique F).exists.choose_spec.2.2.2.1
+  have hm : mass ≠ 0 := Complex.ofReal_ne_zero.mpr (measureReal_univ_pos (μ := μ)).ne'
+  have ht : χ₀((1 : U)) = ideleClassNormTwist (1 : U) (shift(0)) := by simp
+  have h := globalPrincipalValueConverse_normTwist_residues S 1 0 ht f.val
+  have h₀ := globalPrincipalValueConverse_normTwist_residues ∅ 1 0 ht (PV(S) f.val)
+  simp only [globalPrincipalValueConverse_mellin_emptyTest, LinearMap.id_apply,
+    reciprocalPartialHeckeEulerProduct, Finset.prod_empty, one_mul] at h₀
+  obtain ⟨hz, hF⟩ := (mem_adelePolarSubspace f.val).mp f.property
+  rw [hz, hF, mul_zero, mul_zero, mul_zero, mul_zero] at h
+  have he := h₀.symm.trans h
+  exact (mem_adelePolarSubspace _).mpr
+    ⟨(mul_eq_zero.mp (congrArg Prod.fst he)).resolve_left (neg_ne_zero.mpr hm),
+     (mul_eq_zero.mp (congrArg Prod.snd he)).resolve_left hm⟩
+
+/-- Paper: Theorem 6.3.2.2(1), pp. 309–310, equation (6.3.2.20).
+The Mellin transform of the principal value of a polar test is a continuous linear function of
+that principal value: there is a continuous linear chart of `pvPolar(S)` in the
+Schwartz–Bergman space taking `PV(S) f` to `Z(PV(S) f, χ, ·)`. Granting that the principal
+value of a polar test is itself polar -- the content of Theorem 7.5.0.1, proved in this library
+as `strongCoprimalityPrincipalValue_mem_polar`, which this chapter cannot import -- this is the
+restriction to the principal-value image of the norm-twist chart of (6.3.2.4). -/
+theorem globalPrincipalValueConverse_normTwist_mellin_map (S : Finset V) (χ : U) (t : ℝ)
+    (_hχ : χ₀(χ) = ideleClassNormTwist (1 : U) (shift(t))) :
+    ∃ ZB : pvPolar(S) →L[ℂ] B, ∀ (f : pvPolar(S)) s, (ZB f).val s = Z(f.val, χ, s) := by
+  refine (globalConverse_normTwist χ t _hχ).elim fun M hM ↦ ?_
+  have hP : pvPolar(S) ≤ P := by
+    rintro _ ⟨f, hf, rfl⟩
+    exact globalPrincipalValueConverse_normTwist_mellin_map_polar S ⟨f, hf⟩
+  let i : pvPolar(S) →L[ℂ] P := ⟨Submodule.inclusion hP,
+    continuous_subtype_val.subtype_mk _⟩
+  exact ⟨M.comp i, fun f z ↦ hM.2.2.1 (i f) z⟩
+
+/-- The two zeros of the shifted pole polynomial cancel the simple poles of the completion. -/
+private theorem globalPrincipalValueConverse_normTwist_range_regular (χ : U) (t : ℝ)
+    (ht : χ₀(χ) = ideleClassNormTwist (1 : U) (shift(t))) : Differentiable ℂ (regularizedL(χ, t)) := by
+  let b := shift(t)
+  let p := polePolynomial(t)
+  let L := continuedCompletedHeckeL χ
+  obtain ⟨hL, hEq⟩ := continuedCompletedHeckeL_spec χ
+  have hk : χ.toMonoidHom.comp (ideleClassNorm F).ker.subtype = 1 := by
+    ext x
+    have he := DFunLike.congr_fun ht x.val
+    change (χ x.val : ℂ) * _ ^ (0 : ℂ) = 1 * ((((ideleClassNorm F x.val).val : ℝ) : ℂ) ^ b) at he
+    rw [Complex.cpow_zero, mul_one, show ideleClassNorm F x.val = 1 from x.property,
+      Units.val_one, NNReal.coe_one, Complex.ofReal_one, Complex.one_cpow, one_mul] at he
+    exact he
+  have hω : χ₁(χ) = 1 := PontryaginDual.ext fun x ↦ DFunLike.congr_fun hk x
+  obtain ⟨u, ⟨hchar, hzero, hone, haway⟩, -⟩ := completedHeckeL_continuation_simplePoles χ L hL hEq hk
+  have hu : t = -u := (globalConverse_existsUnique_normTwist χ hω).unique ht (by
+    convert hchar using 2
+    push_cast
+    ring)
+  have hb : b = -(Complex.I * (u : ℂ)) := by dsimp [b]; rw [hu]; push_cast; ring
+  have hp (s : ℂ) : AnalyticAt ℂ p s := by dsimp [p]; fun_prop
+  have hmer : MeromorphicOn (p * L) univ := fun s hs ↦ (hp s).meromorphicAt.mul (hL hs).meromorphicAt
+  have hcancel (s : ℂ) (hz : p s = 0) (hord : meromorphicOrderAt L s = -1) :
+      0 ≤ meromorphicOrderAt (p * L) s := by
+    rw [meromorphicOrderAt_mul (hp s).meromorphicAt (hL (mem_univ s)).meromorphicAt, hord]
+    have hpos : 0 < meromorphicOrderAt p s := by
+      apply (tendsto_zero_iff_meromorphicOrderAt_pos (hp s).meromorphicAt).mp
+      rw [← hz]
+      exact (hp s).continuousAt.continuousWithinAt
+    generalize meromorphicOrderAt p s = w at hpos ⊢
+    cases w with
+    | top => simp
+    | coe k =>
+      have h : (0 : ℤ) < k := WithTop.coe_lt_coe.mp hpos
+      exact WithTop.coe_le_coe.mpr (show (0 : ℤ) ≤ k + (-1) by omega)
+  intro z
+  apply AnalyticAt.differentiableAt
+  apply (meromorphicNFOn_toMeromorphicNFOn (p * L) univ (mem_univ z)).meromorphicOrderAt_nonneg_iff_analyticAt.mp
+  rw [meromorphicOrderAt_toMeromorphicNFOn hmer (mem_univ z)]
+  by_cases hz : z = Complex.I * (u : ℂ)
+  · subst z
+    exact hcancel _ (by change (_ + b) * (1 - _ - b) = 0; rw [hb]; ring) hzero
+  by_cases hz₁ : z = 1 + Complex.I * (u : ℂ)
+  · subst z
+    exact hcancel _ (by change (_ + b) * (1 - _ - b) = 0; rw [hb]; ring) hone
+  exact ((hp z).mul (haway z (by simp [hz, hz₁]))).meromorphicOrderAt_nonneg
+
+/-- Paper: Theorem 6.3.2.2(1), pp. 309–310, equation (6.3.2.20).
+A continuous linear chart of the principal-value polar image that computes the transforms of
+its elements has as its range exactly the Schwartz–Bergman functions divisible by the
+reciprocal partial Euler product and the shifted, pole-cancelled completed Hecke function. The
+hard inclusion is the division by the reciprocal Euler factors, which have zeros on the
+critical line; the `TODO(paper-gap)` above this section and ERRATA I200 record the gap, and
+`Sec3_Printed.lean` refutes the printed unshifted generator. -/
+theorem globalPrincipalValueConverse_normTwist_range (S : Finset V) (χ : U) (t : ℝ)
+    (_hχ : χ₀(χ) = ideleClassNormTwist (1 : U) (shift(t))) (ZB : pvPolar(S) →L[ℂ] B)
+    (hZB : ∀ (f : pvPolar(S)) s, (ZB f).val s = Z(f.val, χ, s)) :
+    Set.range ZB = bergmanIdeal(fun s ↦ removal(χ, S) s * regularizedL(χ, t) s) := by
+  classical
+  refine (globalConverse_normTwist χ t _hχ).elim fun M hM ↦ ?_
+  let E := removal(χ, S)
+  let G := regularizedL(χ, t)
+  have hG : Differentiable ℂ G := globalPrincipalValueConverse_normTwist_range_regular χ t _hχ
+  have hE : Differentiable ℂ E :=
+    globalPrincipalValueConverse_nontrivial_removal_differentiable χ S
+  let pv (f : P) : pvPolar(S) := ⟨PV(S) f.val, ⟨f.val, f.property, rfl⟩⟩
+  have hdiff (b : B) : Differentiable ℂ b.val := fun w ↦
+    (b.property.2.1 w (by simp)).differentiableAt (by simp)
+  have hmul (f : P) (z : ℂ) : (ZB (pv f)).val z = E z * (M f).val z := by
+    have h := globalPrincipalValueConverse_mellin S χ f.val
+    have hg : (ZB (pv f)).val =ᶠ[codiscrete ℂ] E * (M f).val := by
+      filter_upwards [h] with w hw
+      exact (hZB _ w).trans (hw.trans (congrArg (E w * ·) (hM.2.2.1 f w).symm))
+    exact ((((hdiff _).analyticAt z).meromorphicNFAt.eventuallyEq_nhdsNE_iff_eventuallyEq_nhds
+      ((hE.mul (hdiff _)).analyticAt z).meromorphicNFAt).mp (nhdsNE_le_codiscrete z hg)).eq_of_nhds
+  ext b
+  constructor
+  · rintro ⟨⟨_, f, hf, rfl⟩, rfl⟩
+    let g : P := ⟨f, hf⟩
+    have hm : M g ∈ Set.range M := ⟨_, rfl⟩
+    rw [hM.2.2.2.1] at hm
+    obtain ⟨u, hu, h⟩ := hm
+    refine ⟨u, hu, fun z ↦ ?_⟩
+    exact (hmul g z).trans ((congrArg (E z * ·) (h z)).trans (mul_assoc _ _ _).symm)
+  · rintro ⟨u, hu, h⟩
+    have hfact (z : ℂ) : b.val z = E z * (G z * u z) := (h z).trans (mul_assoc _ _ _)
+    let b' : B := ⟨G * u, globalPrincipalValueConverse_nontrivial_divide_prod_exp S
+      (fun v z ↦ (finiteHeckeEulerFactor χ v z)⁻¹)
+      (fun v _ ↦ globalPrincipalValueConverse_nontrivial_euler_form χ v)
+      b (G * u) (hG.mul hu) hfact⟩
+    have hb' : b' ∈ Set.range M := hM.2.2.2.1.symm ▸ ⟨u, hu, fun _ ↦ rfl⟩
+    obtain ⟨g, hg⟩ := hb'
+    refine ⟨pv g, Subtype.ext (funext fun z ↦ ?_)⟩
+    rw [hmul, hg]
+    exact (hfact z).symm
+
+private theorem globalPrincipalValueConverse_normTwist_openMap_frechet_submodule {E : Type*}
+    [AddCommGroup E] [Module ℂ E] [TopologicalSpace E] (hE : IsFrechetTVS E)
+    (A : Submodule ℂ E) (hP : IsClosed (A : Set E)) : IsFrechetTVS A := by
+  obtain ⟨hadd, hpoly, hmet, hcomp⟩ := hE
+  let : UniformSpace E := IsTopologicalAddGroup.rightUniformSpace E
+  let : IsUniformAddGroup E := isUniformAddGroup_of_addCommGroup
+  let : CompleteSpace E := hcomp
+  let : IsUniformAddGroup A := A.toAddSubgroup.isUniformAddGroup
+  refine ⟨inferInstance, inferInstance, TopologicalSpace.MetrizableSpace.subtype _, ?_⟩
+  rw [IsUniformAddGroup.rightUniformSpace_eq]
+  exact hP.completeSpace_coe
+
+/-- The closed intersections with the Fréchet stages of a strict LF-space
+exhaust the source. A continuous surjection onto a closed Fréchet range is open. -/
+private theorem globalPrincipalValueConverse_normTwist_openMap_stages
+    {X Y : Type*} [AddCommGroup X] [Module ℂ X] [TopologicalSpace X]
+    [IsTopologicalAddGroup X] [ContinuousSMul ℂ X]
+    [AddCommGroup Y] [Module ℂ Y] [TopologicalSpace Y]
+    (hX : IsStrictLFSpace X) (hY : IsFrechetTVS Y) (A : Submodule ℂ X)
+    (hA : IsClosed (A : Set X)) (M : A →L[ℂ] Y) (hM : IsClosed (Set.range M)) :
+    IsOpenMap M.rangeRestrict := by
+  obtain ⟨hT2, T, hmono, hstage, hcover, _⟩ := hX
+  let D (k : ℕ) := A.comap (T k).subtype
+  let d (k : ℕ) : D k →L[ℂ] A :=
+    ((T k).subtypeL.comp (D k).subtypeL).codRestrict A fun x ↦ x.property
+  have hD (k : ℕ) : IsFrechetTVS (D k) :=
+    globalPrincipalValueConverse_normTwist_openMap_frechet_submodule (hstage k) _
+      (hA.preimage continuous_subtype_val)
+  have hinc (k : ℕ) : Set.range (d k) ⊆ Set.range (d (k + 1)) := by
+    rintro _ ⟨x, rfl⟩
+    exact ⟨⟨⟨x.val.val, hmono k.le_succ x.val.property⟩, x.property⟩, rfl⟩
+  have hcov (x : A) : ∃ k, x ∈ Set.range (d k) := by
+    obtain ⟨k, hk⟩ := hcover x.val
+    exact ⟨k, ⟨⟨⟨x.val, hk⟩, x.property⟩, rfl⟩⟩
+  exact isOpenMap_of_surjective_toLF (isLFSpace_of_isFrechetTVS
+    (globalPrincipalValueConverse_normTwist_openMap_frechet_submodule hY M.range hM))
+    hD d hinc hcov M.rangeRestrict M.surjective_rangeRestrict
+
+/-- Paper: Theorem 6.3.2.2(1), pp. 309–310, equation (6.3.2.20).
+The Mellin chart of the principal-value polar image is open onto a closed subspace of the
+Schwartz–Bergman space. Closedness is the completeness of the image; openness is the open
+mapping theorem for the nuclear Fréchet structure of the two spaces. -/
+theorem globalPrincipalValueConverse_normTwist_openMap (S : Finset V) (χ : U) (t : ℝ)
+    (_hχ : χ₀(χ) = ideleClassNormTwist (1 : U) (shift(t))) (ZB : pvPolar(S) →L[ℂ] B)
+    (hZB : ∀ (f : pvPolar(S)) s, (ZB f).val s = Z(f.val, χ, s)) :
+    IsOpenMap ZB.rangeRestrict ∧ IsClosed (Set.range ZB) := by
+  have hE : Differentiable ℂ (removal(χ, S)) :=
+    globalPrincipalValueConverse_nontrivial_removal_differentiable χ S
+  have hR : IsClosed (Set.range ZB) := by
+    rw [globalPrincipalValueConverse_normTwist_range S χ t _hχ ZB hZB]
+    exact globalPrincipalValueConverse_nontrivial_closed
+      (hE.mul (globalPrincipalValueConverse_normTwist_range_regular χ t _hχ))
+  let vals : ℬ →L[ℂ] ℂ × ℂ := ⟨adelePolarValues, adelePolarValues_continuous⟩
+  have hP : IsClosed (pvPolar(S) : Set ℬ) :=
+    (adelePrincipalValue_isClosedEmbedding S).isClosedMap (P : Set ℬ) vals.isClosed_ker
+  exact ⟨globalPrincipalValueConverse_normTwist_openMap_stages (adeleSchwartz_strictLF (F := F)).2
+    (schwartzBergman_frechet _ isOpen_univ ordConnected_univ univ_nonempty) _ hP ZB hR, hR⟩
+
+/-- Paper: Theorem 6.3.2.2(1), pp. 309–310, equation (6.3.2.20).
+The kernel of the Mellin chart of the principal-value polar image is the principal-value image
+of those polar tests that also lie in the kernel of the trivial homogeneous theta map. -/
+theorem globalPrincipalValueConverse_normTwist_ker (S : Finset V) (χ : U) (t : ℝ)
+    (_hχ : χ₀(χ) = ideleClassNormTwist (1 : U) (shift(t))) (ZB : pvPolar(S) →L[ℂ] B)
+    (hZB : ∀ (f : pvPolar(S)) s, (ZB f).val s = Z(f.val, χ, s)) :
+    ZB.ker = (((K(1) ⊓ (P)).map (PV(S))).comap (pvPolar(S)).subtype) := by
+  classical
+  refine (globalConverse_normTwist χ t _hχ).elim fun M hM ↦ ?_
+  refine (globalPrincipalValueConverse_normTwist_divided_exact_transport (F := F) S
+    (1 : PontryaginDual C₁)).elim fun e he ↦ ?_
+  have hclass (f : ℬ) : PV(S) f ∈ K(1) ↔ f ∈ K(1) := by
+    have hq : (pvMorphism(S, (1 : PontryaginDual C₁))).rangeRestrict f = 0 ↔
+        (K(1)).mkQ (PV(S) f) = 0 := Subtype.ext_iff
+    rw [← he, map_eq_zero_iff e e.injective] at hq
+    exact (Submodule.Quotient.mk_eq_zero _).symm.trans
+      (hq.symm.trans (Submodule.Quotient.mk_eq_zero _))
+  apply Submodule.ext
+  rintro ⟨_, f, hf, rfl⟩
+  let y : pvPolar(S) := ⟨PV(S) f, ⟨f, hf, rfl⟩⟩
+  let g : P := ⟨PV(S) f, globalPrincipalValueConverse_normTwist_mellin_map_polar S ⟨f, hf⟩⟩
+  have hval : ZB y = M g := Subtype.ext (funext fun z ↦ (hZB y z).trans (hM.2.2.1 g z).symm)
+  change ZB y = 0 ↔ PV(S) f ∈ (K(1) ⊓ P).map (PV(S))
+  rw [hval]
+  change g ∈ M.ker ↔ _
+  rw [hM.2.2.2.2]
+  change PV(S) f ∈ K(1) ↔ _
+  rw [hclass]
+  constructor
+  · exact fun hk ↦ ⟨f, ⟨hk, hf⟩, rfl⟩
+  · rintro ⟨f', hf', heq⟩
+    exact (adelePrincipalValue_isClosedEmbedding S).injective heq ▸ hf'.1
+
+/-- Paper: Theorem 6.3.2.2(1), pp. 309–310, equation (6.3.2.20).
+On the principal-value image of the polar test space the Mellin map is open
+onto a closed range. Its kernel is the principal-value image of the restricted
+trivial homogeneous theta kernel.
+Deviation: The generator uses the same norm-twist shift and cancellation as
+(6.3.2.4), with the removed Euler factors. Divisibility is tested within the
+Schwartz–Bergman space. -/
+theorem globalPrincipalValueConverse_normTwist (S : Finset V) (χ : U) (t : ℝ)
+    (_hχ : χ₀(χ) = ideleClassNormTwist (1 : U) (shift(t))) :
+    ∃ ZB : pvPolar(S) →L[ℂ] B, IsOpenMap ZB.rangeRestrict ∧ IsClosed (Set.range ZB) ∧
+      (∀ (f : pvPolar(S)) s, (ZB f).val s = Z(f.val, χ, s)) ∧
+      Set.range ZB = bergmanIdeal(fun s ↦ removal(χ, S) s * regularizedL(χ, t) s) ∧
+      ZB.ker = (((K(1) ⊓ (P)).map (PV(S))).comap (pvPolar(S)).subtype) := by
+  obtain ⟨ZB, hZB⟩ := globalPrincipalValueConverse_normTwist_mellin_map S χ t _hχ
+  obtain ⟨hopen, hclosed⟩ := globalPrincipalValueConverse_normTwist_openMap S χ t _hχ ZB hZB
+  exact ⟨ZB, hopen, hclosed, hZB,
+    globalPrincipalValueConverse_normTwist_range S χ t _hχ ZB hZB,
+    globalPrincipalValueConverse_normTwist_ker S χ t _hχ ZB hZB⟩
 
 end PrincipalValue
 

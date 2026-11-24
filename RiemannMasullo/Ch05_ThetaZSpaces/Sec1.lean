@@ -754,7 +754,9 @@ theorem globalTwist_mem_rightHalf (χ : PontryaginDual C𝔽) {s : ℂ} (hs : 1 
   change 1 < quasiCharacterAbscissa _ _ _ _
   rwa [quasiCharacterAbscissa_ideleClassNormTwist]
 
-private theorem globalZ_eq_zero_of_theta_eq_zero (f : ℬ𝔽) (hf : adelicTheta f = 0) (c : X𝔽) :
+/-- A Schwartz-Bruhat function whose adelic theta series vanishes has zero global Z-function at
+every quasi-character of the idele class group. -/
+theorem globalZ_eq_zero_of_theta_eq_zero (f : ℬ𝔽) (hf : adelicTheta f = 0) (c : X𝔽) :
     globalIdelicZFunction f c = 0 := by
   obtain ⟨χ, s, rfl⟩ := exists_ideleClassNormTwist c
   refine congrFun (eq_of_agree_rightHalf (globalIdelicZFunction_meromorphic f χ)
@@ -915,7 +917,7 @@ variable {G : Type*} [CommGroup G] [TopologicalSpace G] [IsTopologicalGroup G]
   [T2Space G] [LocallyCompactSpace G] [MeasurableSpace G] [BorelSpace G]
 
 /-- Testing a weighted continuous function against all characters recovers the function. -/
-private theorem eq_zero_of_weighted_integrals (μ : Measure G) [μ.IsHaarMeasure] [μ.Regular]
+theorem eq_zero_of_weighted_integrals (μ : Measure G) [μ.IsHaarMeasure] [μ.Regular]
     (θ : C(G, ℂ)) (w : QuasiCharacter G) (hi : Integrable (fun x ↦ θ x * w x) μ)
     (hz : ∀ χ : PontryaginDual G, ∫ x, θ x * w x * (χ x : ℂ) ∂μ = 0) : θ = 0 := by
   let ev (x : G) : PontryaginDual G →* Circle :=
@@ -977,7 +979,8 @@ theorem globalThetaMellin_injective : Injective (globalThetaMellin (F := F)) := 
     adelicTheta f g * ((χ g : ℂ) * _ ^ (2 : ℂ))
   rw [one_mul, mul_right_comm, mul_assoc]
 
-private theorem sLocalOrderBound_positive (χ : PontryaginDual Jₛ) {s : ℂ} (hs : 0 < s.re) :
+/-- Positive real part gives a regular S-local order bound on the unitary chart. -/
+theorem sLocalOrderBound_positive (χ : PontryaginDual Jₛ) {s : ℂ} (hs : 0 < s.re) :
     0 ≤ sLocalIdelicOrderBound (unitaryₛ(χ) s) := by
   rw [sLocalOrderBound_chart, le_min_iff]
   have h := sLocalRhoFactor_iteratedDeriv_analyticOn χ 0 s hs

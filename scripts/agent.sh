@@ -226,7 +226,10 @@ ${review:-(none)}"
             { [ ! -d "$main/.lake/build" ] || cp -a --reflink=auto "$main/.lake/build" "$seed/.lake/build"; }
         fi
         built=$(stat -c %Y "$seed/.lake/built-at" 2>/dev/null || echo 0)
-        if [ $(( $(date +%s) - built )) -gt 600 ]; then
+        # Where something else keeps the seed built (a local check lane does, and marks it with
+        # the file .agent/seed-kept), take the seed as it is. Building it here would hold the
+        # lock for a whole build while every check that starts from the seed waits.
+        if [ $(( $(date +%s) - built )) -gt 600 ] && [ ! -e "$main/.agent/seed-kept" ]; then
           git -C "$seed" checkout -q --detach "$base" &&
             (cd "$seed" && lake build RiemannMasullo >/dev/null 2>&1) && touch "$seed/.lake/built-at"
         fi

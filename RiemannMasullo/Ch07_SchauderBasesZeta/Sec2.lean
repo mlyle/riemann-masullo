@@ -15,6 +15,9 @@ import all RiemannMasullo.AppD_SchwartzBruhat.Sec3a_part2
 import RiemannMasullo.ForMathlib.Analysis.LocallyConvex.SeparatingDual
 import RiemannMasullo.ForMathlib.Analysis.LocallyConvex.StrongBidual
 import all RiemannMasullo.Ch05_ThetaZSpaces.Sec1
+import RiemannMasullo.Ch03_IdelicZeta.Sec3
+import RiemannMasullo.Ch03_IdelicZeta.Sec2
+import RiemannMasullo.AppA_AlgebraicNT.Sec3
 import all RiemannMasullo.Ch05_ThetaZSpaces.Sec5
 import all RiemannMasullo.Ch05_ThetaZSpaces.Sec3b
 import all RiemannMasullo.Ch03_IdelicZeta.Sec3b
@@ -3427,8 +3430,7 @@ private theorem sLocalPrincipalValue_homogeneous_comm {S₀ : Finset Places}
 private theorem sLocalPrincipalValue_tfae_three_four {S₀ : Finset Places}
     (h₀ : S₀ ⊆ S) (hn : S₀.Nonempty)
     (hPic : Subsingleton (CommRing.Pic ((S : Set Places).integer F)))
-    (χ : PontryaginDual C𝔽) (hχ : globalUnitary(χ) ∈ unramifiedOutside F S₀) (f : ℬₛ) :
-    let hS : globalUnitary(χ) ∈ unramifiedOutside F S := outsideS(h₀, hχ)
+    (χ : PontryaginDual C𝔽) (hS : globalUnitary(χ) ∈ unramifiedOutside F S) (f : ℬₛ) :
     let ω := globalNormOne(χ)
     let hω : NormOneCharacterUnramifiedOutside ω S := ⟨⟨globalUnitary(χ), hS⟩, fun _ ↦ rfl⟩
     let ωₛ := sLocalNormOneCharacter S ω hω
@@ -3436,7 +3438,7 @@ private theorem sLocalPrincipalValue_tfae_three_four {S₀ : Finset Places}
     let π := sLocalHomogeneousThetaToGlobal hω
     x ∈ (sLocalHomogeneousThetaPrincipalValue h₀ ωₛ).range ↔
       ∃ g : ℬ𝔽, (K𝔽(ω)).mkQ (adelePrincipalValue F S₀ g) = π x := by
-  intro hS ω hω ωₛ x π
+  intro ω hω ωₛ x π
   obtain ⟨e, he⟩ := sLocalHomogeneousThetaToGlobal_equiv_of_unramified hPic hω
   have heπ (z) : e z = π z := LinearMap.congr_fun he z
   let L := sAdeleSchwartzToGlobal F S
@@ -3457,6 +3459,25 @@ private theorem sLocalPrincipalValue_tfae_three_four {S₀ : Finset Places}
     refine ⟨Q u, e.injective ?_⟩
     exact (heπ _).trans ((hcomm u).trans
       ((sLocalPrincipalValue_global_congr ω (L u) g hu).trans (hg.trans (heπ x).symm)))
+
+/-- Vanishing of the selected highest coefficients gives a principal-value preimage
+on the component of a character unramified outside the ambient set of places. -/
+theorem sLocalPrincipalValue_mem_range_of_coeff_eq_zero {T : Finset Places}
+    (hT : T ⊆ S) (hn : T.Nonempty)
+    (hPic : Subsingleton (CommRing.Pic ((S : Set Places).integer F)))
+    (χ : PontryaginDual C𝔽) (hS : globalUnitary(χ) ∈ unramifiedOutside F S) (f : ℬₛ) :
+    let hω : NormOneCharacterUnramifiedOutside (globalNormOne(χ)) S :=
+      ⟨⟨globalUnitary(χ), hS⟩, fun _ ↦ rfl⟩
+    let ωₛ := sLocalNormOneCharacter S (globalNormOne(χ)) hω
+    (∀ c : Xₛ, onComponent(c, ωₛ) → 0 < sLocalFinitePoleMultiplicity T c →
+      ∀ k : ℕ, sLocalRhoPoleOrder c - sLocalFinitePoleMultiplicity T c < k →
+      k ≤ sLocalRhoPoleOrder c → sLocalPrincipalPartCoeff c k f = 0) →
+    (Kₛ(ωₛ)).mkQ f ∈ (sLocalHomogeneousThetaPrincipalValue hT ωₛ).range := by
+  intro hω ωₛ hf
+  apply (sLocalPrincipalValue_tfae_three_four hT hn hPic χ hS f).mpr
+  rw [sLocalHomogeneousThetaToGlobal_mk hω f]
+  exact (sLocalPrincipalValue_two_four hT χ hS (sAdeleSchwartzToGlobal F S f)).mp
+    ((sLocalPrincipalValue_tfae_one_two hT χ hS f).mp hf)
 
 open Classical in
 /-- Paper: Proposition 7.2.2.1, p. 339.
@@ -3488,7 +3509,7 @@ theorem sLocalPrincipalValue_tfae {S₀ : Finset Places} (h₀ : S₀ ⊆ S) (_h
     ] := by
   intro hS ω hω ωₛ x π Z
   tfae_have 1 ↔ 2 := sLocalPrincipalValue_tfae_one_two h₀ χ hS f
-  tfae_have 3 ↔ 4 := sLocalPrincipalValue_tfae_three_four h₀ _hn _hPic χ hχ f
+  tfae_have 3 ↔ 4 := sLocalPrincipalValue_tfae_three_four h₀ _hn _hPic χ hS f
   tfae_have 2 ↔ 4 := by
     have hπ : π x = (K𝔽(ω)).mkQ (sAdeleSchwartzToGlobal F S f) :=
       sLocalHomogeneousThetaToGlobal_mk hω f
@@ -3501,7 +3522,17 @@ local notation "polarValuesₛ" =>
 
 /-- Paper: Equation (7.2.2.3), p. 340.
 Evaluation at zero before and after S-adelic Fourier transform is complex linear. -/
-theorem sAdelePolarValues_isLinear : IsLinearMap ℂ polarValuesₛ := by sorry
+theorem sAdelePolarValues_isLinear : IsLinearMap ℂ polarValuesₛ := by
+  obtain ⟨T, hT⟩ := sLocal_fourier_continuousLinear (F := F) (S := S)
+  constructor
+  · intro f g
+    refine Prod.ext rfl ?_
+    rw [← hT, map_add, hT, hT]
+    rfl
+  · intro c f
+    refine Prod.ext rfl ?_
+    rw [← hT, map_smul, hT]
+    rfl
 
 variable (F S) in
 /-- Paper: Equation (7.2.2.3), p. 340.
@@ -3522,7 +3553,30 @@ theorem mem_sAdelePolarSubspace (f : ℬₛ) :
 Insertion with integer indicators outside S preserves the two zero evaluations
 that define the polar subspaces. -/
 theorem sAdeleSchwartzToGlobal_mem_polarSubspace (f : sAdelePolarSubspace F S) :
-    sAdeleSchwartzToGlobal F S f.val ∈ adelePolarSubspace F := by sorry
+    sAdeleSchwartzToGlobal F S f.val ∈ adelePolarSubspace F := by
+  classical
+  let : MeasurableSpace 𝔸[F] := borel _
+  let : MeasurableSpace Aₛ := instMeasurableSpaceSAdeleRing F S
+  obtain ⟨hf, hFourier⟩ := (mem_sAdelePolarSubspace f.val).mp f.property
+  apply (mem_adelePolarSubspace _).mpr
+  constructor
+  · rw [sAdeleSchwartzToGlobal_apply]
+    simp only [map_zero, hf, ite_self]
+  · obtain ⟨c, _, _, hm, _⟩ := sAdeleProjection_dual_masses F S
+    have hLift : (fun x ↦ sAdeleSchwartzToGlobal F S f.val (Multiplicative.ofAdd x)) =
+        (integralAdelesOutside F S : Set 𝔸[F]).indicator
+          ((fun x ↦ f.val (Multiplicative.ofAdd x)) ∘ adeleProjection F S) := by
+      funext x
+      rw [sAdeleSchwartzToGlobal_apply]
+      simp only [Set.indicator, SetLike.mem_coe, integralTail_iff, Function.comp_apply]
+    have h := congrFun (tamagawaFourier_sAdeleLift F S c hm
+      (fun x ↦ f.val (Multiplicative.ofAdd x)) (partialTensor_integrable F S f.val)) 0
+    change tamagawaFourier _ _ _ 0 = 0
+    rw [hLift, h]
+    change (sAdeleTailDual F S).indicator
+      (fun x ↦ (c : ℝ) • sAdeleSchwartzFourier f.val
+        (Multiplicative.ofAdd (adeleProjection F S x))) 0 = 0
+    simp only [Set.indicator, map_zero, hFourier, smul_zero, ite_self]
 
 local notation "C₁" => (m𝔽).ker
 local notation "PicTrivial" => Subsingleton (CommRing.Pic ((S : Set Places).integer F))

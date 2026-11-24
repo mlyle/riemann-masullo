@@ -1723,7 +1723,7 @@ private theorem dual_schwartzBruhat_basis {H : Type*} [CommGroup H] [Topological
   exact ⟨h, absolute_of_barrelled_nuclear schwartzBruhat_strongDual_nuclear h⟩
 
 /-- On the infinite cyclic group the maximal elementary stage is the integer lattice. -/
-private theorem integer_schwartz_sequence :
+theorem integer_schwartz_sequence :
     ∃ A : RapidDecaySequence 1 ≃L[ℂ] SchwartzBruhat (Multiplicative ℤ),
       ∀ s (k : ℤ), A s (Multiplicative.ofAdd k) = s (fun _ ↦ k) := by
   let H := Multiplicative ℤ
@@ -1769,6 +1769,62 @@ private theorem integer_schwartz_sequence :
   change schwartzBruhatStageRealization a e (hR.choose s) (Multiplicative.ofAdd n) = _
   rw [schwartzBruhatStageRealization_apply, dite_eq_left (Subgroup.mem_top _)]
   exact hR.choose_spec s _
+
+/-- Sampling a Schwartz function on an affine lattice and retaining any subset of
+the samples gives a Schwartz–Bruhat function on the infinite cyclic group. -/
+theorem schwartzBruhat_of_affine_integer_samples (f : SchwartzMap ℝ ℂ) (a b : ℝ) (ha : a ≠ 0)
+    (p : ℤ → Prop) [DecidablePred p] :
+    ∃ v : SchwartzBruhat (Multiplicative ℤ), ∀ n : ℤ,
+      v (Multiplicative.ofAdd n) = if p n then f (a * n + b) else 0 := by
+  let g : SchwartzMap ℝ ℂ := SchwartzMap.compCLMOfAntilipschitz ℂ
+    (g := fun t : ℝ ↦ a*t+b) (by fun_prop)
+    ((isometry_add_right b).antilipschitzWith.comp (antilipschitzWith_mul_left ha)) f
+  let s (i : Fin 1 → ℤ) := if p (i 0) then g (i 0) else 0
+  have hs : s ∈ rapidDecaySequenceSubmodule 1 := by
+    intro j
+    let w (x : ℝ) := ((1 + x^2 : ℝ) : ℂ) ^ j
+    have hw : w.HasTemperateGrowth := by dsimp [w]; fun_prop
+    let H := SchwartzMap.smulLeftCLM ℂ w g
+    have hH (x : ℝ) : ‖H x‖ = (1 + x^2)^j * ‖g x‖ := by
+      change ‖(SchwartzMap.smulLeftCLM ℂ w g) x‖ = _
+      rw [SchwartzMap.smulLeftCLM_apply hw, norm_smul]
+      dsimp only [w]
+      rw [norm_pow, Complex.norm_real, Real.norm_of_nonneg (by positivity : 0 ≤ 1 + x^2)]
+    have hsum : Summable (fun n : ℤ ↦ ‖H (n : ℝ)‖) := by
+      apply summable_of_isBigO (Real.summable_abs_int_rpow (b := 2) (by norm_num))
+      obtain ⟨C, hC⟩ := ((H.isBigO_cocompact_rpow (-2)).comp_tendsto Int.tendsto_coe_cofinite).bound
+      apply Asymptotics.IsBigO.of_bound C
+      filter_upwards [hC] with n hn
+      simpa only [comp_apply, Real.norm_eq_abs, abs_of_nonneg (norm_nonneg _)] using hn
+    have hmajor := hsum.mul_left ((2 : ℝ)^j)
+    have hsmall : Summable (fun n : ℤ ↦ (1 + |(n : ℝ)|)^j * ‖s (fun _ ↦ n)‖) := by
+      apply Summable.of_nonneg_of_le (fun _ ↦ by positivity) _ hmajor
+      intro n
+      change _ ≤ 2^j * ‖H (n : ℝ)‖
+      rw [hH, ← mul_assoc, ← mul_pow]
+      apply mul_le_mul
+      · apply pow_le_pow_left₀ (by positivity)
+        nlinarith [sq_abs (n : ℝ), sq_nonneg (|(n : ℝ)| - 1)]
+      · by_cases hn : p n <;> simp [s, hn]
+      · positivity
+      · positivity
+    have hbound : rapidDecaySequenceBound j s =
+        ∑' n : ℤ, ENNReal.ofReal ((1 + |(n : ℝ)|)^j * ‖s (fun _ ↦ n)‖) := by
+      unfold rapidDecaySequenceBound
+      rw [← (Equiv.funUnique (Fin 1) ℤ).symm.tsum_eq]
+      apply tsum_congr
+      intro n
+      rw [ENNReal.ofReal_mul (by positivity), ENNReal.ofReal_pow (by positivity), ofReal_norm,
+        ENNReal.ofReal_add zero_le_one (abs_nonneg _), ENNReal.ofReal_one]
+      congr 2
+      congr 1
+      change ‖(WithLp.toLp 2 (fun _ : Fin 1 ↦ (n : ℝ)) : EuclideanSpace ℝ (Fin 1))‖ₑ = _
+      rw [← ofReal_norm, EuclideanSpace.norm_eq]
+      simp [Real.norm_eq_abs, Real.sqrt_sq_eq_abs]
+    rw [hbound, ← ENNReal.ofReal_tsum_of_nonneg (fun _ ↦ by positivity) hsmall]
+    exact ENNReal.ofReal_lt_top
+  obtain ⟨A, hA⟩ := integer_schwartz_sequence
+  exact ⟨A ⟨s,hs⟩, fun n ↦ hA ⟨s,hs⟩ n⟩
 
 /-- A polynomially bounded scalar sequence multiplies every Schwartz sequence on the
 infinite cyclic group. The weight of order j is controlled by that of order j + d. -/

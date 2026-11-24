@@ -785,7 +785,7 @@ private theorem schwartz_equiv_of_euclidean_coordinates
 
 /-- Pullback in mixed coordinates identifies the classical and archimedean
 Schwartz–Bruhat spaces as topological complex vector spaces. -/
-private theorem archimedeanSchwartzBruhat_equiv :
+theorem archimedeanSchwartzBruhat_equiv :
     ∃ J : SchwartzMap (mixedEmbedding.mixedSpace F) ℂ ≃L[ℂ]
         SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)),
       ∀ f x, J f (Multiplicative.ofAdd x) = f (mixed x) := by

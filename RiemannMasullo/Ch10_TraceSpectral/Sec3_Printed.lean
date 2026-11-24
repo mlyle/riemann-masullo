@@ -71,6 +71,237 @@ def Printed.spectralLineJet_uniformBiorthogonalBound : Prop :=
           i.val.1 = j.val.1 → i.val.2.1 = j.val.2.1 → j.val.2.2 ≤ i.val.2.2 →
           ‖D (Λ j)‖ * ‖x i‖ ≤ C
 
+/-- A grid of width 1/(k+1) forces two distinct ordinates in the same cell. -/
+private theorem spectralLineJet_close_ordinates
+    (hcount : ∀ k : ℕ, ∃ T : ℕ, ∃ S : Finset ℝ, (k + 1) * (T + 1) < S.card ∧
+      ∀ t ∈ S, t ∈ Ioc (0 : ℝ) T ∧ riemannZeta (1 / 2 + (t : ℂ) * Complex.I) = 0)
+    (k : ℕ) : ∃ t u : ℝ, t ≠ u ∧ |t - u| < 1 / ((k : ℝ) + 1) ∧
+      riemannZeta (1 / 2 + (t : ℂ) * Complex.I) = 0 ∧
+      riemannZeta (1 / 2 + (u : ℂ) * Complex.I) = 0 := by
+  obtain ⟨T, S, hS, hz⟩ := hcount k
+  let f (t : ℝ) := ⌊((k : ℝ) + 1) * t⌋₊
+  have hk : 0 < (k : ℝ) + 1 := by positivity
+  have hmap : MapsTo f S (Finset.range ((k + 1) * (T + 1))) := by
+    intro t ht
+    apply Finset.mem_range.mpr
+    have hle : f t ≤ (k + 1) * T := by
+      apply Nat.floor_le_of_le
+      exact_mod_cast mul_le_mul_of_nonneg_left (hz t ht).1.2 hk.le
+    exact hle.trans_lt (Nat.mul_lt_mul_of_pos_left (Nat.lt_succ_self T) (Nat.succ_pos k))
+  obtain ⟨t, ht, u, hu, hneq, he⟩ := Finset.exists_ne_map_eq_of_card_lt_of_maps_to
+    (by simpa only [Finset.card_range] using hS) hmap
+  refine ⟨t, u, hneq, ?_, (hz t ht).2, (hz u hu).2⟩
+  have h₁ := Nat.floor_le (mul_nonneg hk.le (hz t ht).1.1.le)
+  have h₂ := Nat.floor_le (mul_nonneg hk.le (hz u hu).1.1.le)
+  have h₃ := Nat.lt_floor_add_one (((k : ℝ) + 1) * t)
+  have h₄ := Nat.lt_floor_add_one (((k : ℝ) + 1) * u)
+  change f t = f u at he
+  change (f t : ℝ) ≤ _ at h₁
+  change _ < (f t : ℝ) + 1 at h₃
+  change (f u : ℝ) ≤ _ at h₂
+  change _ < (f u : ℝ) + 1 at h₄
+  rw [he] at h₁ h₃
+  rw [abs_lt, ← neg_div, div_lt_iff₀ hk, lt_div_iff₀ hk]
+  constructor <;> nlinarith
+
+/-- The L² distance of two jets can be estimated by integrating their squared pointwise distance. -/
+private theorem spectralLineJet_norm_sq {G : Type*} [MeasurableSpace G] (μ : Measure G)
+    (f : Lp ℂ 2 μ) : ‖f‖ ^ 2 = ∫ g, ‖f g‖ ^ 2 ∂μ := by
+  calc
+    ‖f‖ ^ 2 = RCLike.re (inner ℂ f f) := by
+      rw [norm_eq_sqrt_re_inner (𝕜 := ℂ), Real.sq_sqrt inner_self_nonneg]
+    _ = RCLike.re (∫ g, inner ℂ (f g) (f g) ∂μ) := by rw [L2.inner_def]
+    _ = ∫ g, RCLike.re (inner ℂ (f g) (f g)) ∂μ :=
+      (integral_re (L2.integrable_inner f f)).symm
+    _ = ∫ g, ‖f g‖ ^ 2 ∂μ := by simp_rw [inner_self_eq_norm_sq]
+
+open Filter in
+open scoped Topology in
+/-- A vanishing ordinate gap gives vanishing L² distance for unit-modulus phases.
+The fixed L² representative shows the constant dominator is integrable. -/
+private theorem spectralLineJet_dist_tendsto {G : Type*} [MeasurableSpace G] (μ : Measure G)
+    (P : ℝ → G → ℂ) (hone : ∀ t g, ‖P t g‖ = 1)
+    (hp : ∀ g, ContinuousAt (fun t ↦ P t g) 0) (hp0 : ∀ g, P 0 g = 1)
+    (hsub : ∀ t u g, P t g - P u g = (P (t - u) g - 1) * P u g)
+    (t u : ℕ → ℝ) (hlim : Tendsto (fun n ↦ t n - u n) atTop (𝓝 0))
+    (x y : ℕ → Lp ℂ 2 μ)
+    (hx : ∀ n, (x n : G → ℂ) =ᵐ[μ] P (t n))
+    (hy : ∀ n, (y n : G → ℂ) =ᵐ[μ] P (u n)) :
+    Tendsto (fun n ↦ dist (x n) (y n)) atTop (𝓝 0) := by
+  let d (n : ℕ) := x n - y n
+  have hd (n : ℕ) : ∀ᵐ g ∂μ, d n g = P (t n) g - P (u n) g := by
+    filter_upwards [Lp.coeFn_sub (x n) (y n), hx n, hy n] with g h₁ h₂ h₃
+    exact h₁.trans (congrArg₂ (· - ·) h₂ h₃)
+  have h4 : Integrable (fun _ : G ↦ (4 : ℝ)) μ := by
+    have hi := (memLp_two_iff_integrable_sq_norm (Lp.aestronglyMeasurable (x 0))).mp (Lp.memLp _)
+    refine (hi.const_mul 4).congr ?_
+    filter_upwards [hx 0] with g hg
+    simp only [hg, hone, one_pow, mul_one]
+  have he (g : G) : Tendsto (fun n ↦ ‖P (t n) g - P (u n) g‖ ^ 2) atTop (𝓝 0) := by
+    have h := (((hp g).tendsto.comp hlim).sub_const 1).norm.pow 2
+    simpa only [hsub, norm_mul, hone, mul_one, Function.comp_def, hp0, sub_self, norm_zero,
+      zero_pow (by decide : 2 ≠ 0)] using h
+  have hs := tendsto_integral_of_dominated_convergence
+    (F := fun n g ↦ ‖d n g‖ ^ 2) (f := fun _ ↦ (0 : ℝ)) (fun _ ↦ (4 : ℝ))
+    (fun n ↦ (Lp.aestronglyMeasurable (d n)).norm.pow _) h4
+    (fun n ↦ (hd n).mono fun g hg ↦ by
+      rw [Real.norm_eq_abs, abs_of_nonneg (sq_nonneg _), hg]
+      have h := norm_sub_le (P (t n) g) (P (u n) g)
+      rw [hone, hone] at h
+      exact (pow_le_pow_left₀ (norm_nonneg _) h 2).trans_eq (by norm_num))
+    (by
+      filter_upwards [ae_all_iff.mpr hd] with g hg
+      simpa only [hg] using he g)
+  have hs' : Tendsto (fun n ↦ ‖d n‖ ^ 2) atTop (𝓝 0) := by
+    simpa only [spectralLineJet_norm_sq μ, integral_zero] using hs
+  simpa only [Function.comp_def, Real.sqrt_sq (norm_nonneg _), Real.sqrt_zero,
+    d, dist_eq_norm] using (Real.continuous_sqrt.tendsto _).comp hs'
+
+/-- Choose the trivial lift of the trivial rational norm-one character. -/
+private theorem spectralLineJet_rational_basepoint :
+    ∃ χ : PontryaginDual C₁(ℚ) → PontryaginDual C𝔽(ℚ), IsSpectralBasepointChoice χ ∧ χ 1 = 1 := by
+  classical
+  obtain ⟨ψ, hψ⟩ := exists_spectralBasepointChoice ℚ
+  refine ⟨Function.update ψ 1 1, ?_, Function.update_self ..⟩
+  intro ω
+  by_cases h : ω = 1
+  · subst ω
+    rw [Function.update_self]
+    rfl
+  · simpa only [Function.update_of_ne h] using hψ ω
+
+/-- Each distinct critical-line zeta zero supplies a zeroth jet at Sobolev exponent two. -/
+private theorem spectralLineJet_rational_zero_index
+    (χ : PontryaginDual C₁(ℚ) → PontryaginDual C𝔽(ℚ)) (hχ : χ 1 = 1) (t : ℝ)
+    (ht : riemannZeta (1/2 + (t : ℂ) * Complex.I) = 0) :
+    ∃ j : SpectralLineJetIndex χ (1/2) 2, j.val = (1, t, 0) := by
+  let z : ℂ := 1/2 + (t : ℂ) * Complex.I
+  have hre : z.re = 1/2 := by simp [z, Complex.mul_re]
+  have hne : z ≠ 1 := fun e ↦ by norm_num [e] at hre
+  have hm : MeromorphicOn riemannZeta univ := by
+    simpa only [DirichletCharacter.LFunction_modOne_eq] using
+      meromorphic_dirichletLFunction (1 : DirichletCharacter ℂ 1)
+  have hz : 0 < meromorphicOrderAt riemannZeta z := by
+    apply (tendsto_zero_iff_meromorphicOrderAt_pos (hm z (mem_univ z))).mp
+    change riemannZeta z = 0 at ht
+    rw [← ht]
+    exact (differentiableAt_riemannZeta hne).continuousAt.continuousWithinAt
+  have htwo : meromorphicOrderAt riemannZeta (2 : ℂ) = 0 :=
+    (analyticOn_riemannZeta _ (by norm_num : (2 : ℂ) ≠ 1)).meromorphicNFAt.meromorphicOrderAt_eq_zero_iff.mpr
+      (riemannZeta_ne_zero_of_one_lt_re (by norm_num))
+  have hfin := hm.meromorphicOrderAt_ne_top_of_isPreconnected isPreconnected_univ
+    (mem_univ (2 : ℂ)) (mem_univ z) (by rw [htwo]; simp)
+  have hnat : 0 < (meromorphicOrderAt riemannZeta z).untop₀.toNat := by
+    rw [← WithTop.coe_untop₀_of_ne_top hfin] at hz
+    have hint : 0 < (meromorphicOrderAt riemannZeta z).untop₀ := WithTop.coe_lt_coe.mp hz
+    omega
+  refine ⟨⟨(1, t, 0), ?_⟩, rfl⟩
+  apply (lt_spectralBoundaryMultiplicity 2 _ 0).mpr
+  refine ⟨?_, by norm_num⟩
+  rw [hχ]
+  convert hnat using 1
+  push_cast
+  rw [meromorphicOrderAt_finiteHeckeL_continuation (1 : PontryaginDual C𝔽(ℚ)) hm (fun s ↦
+    (dedekindZeta_rat_eq_riemannZeta s.property).symm.trans
+      (finiteHeckeL_one_eq_dedekindZeta (K := ℚ) s).symm) (by rw [hre]; norm_num)]
+
+/-- A uniform bound on the diagonal products of a biorthogonal system
+with normalized coordinate forms forces the forms to be uniformly separated. -/
+private theorem spectralLineJet_separation_of_diagonal_bound
+    {ι E V : Type*} [NormedAddCommGroup E] [NormedSpace ℂ E] [NormedAddCommGroup V]
+    (x : ι → E) (Λ : ι → StrongDual ℂ E) (hB : IsSpectralMarkushevichBasis x Λ)
+    (D : StrongDual ℂ E → V) (hD : Isometry D)
+    (hN : IsNormalizedSpectralFamily (fun i ↦ D (Λ i)))
+    (C : ℝ) (hC : 0 < C) (hbound : ∀ i, ‖D (Λ i)‖ * ‖x i‖ ≤ C) :
+    ∃ ε : ℝ, 0 < ε ∧ ∀ i j, i ≠ j → ε ≤ dist (D (Λ i)) (D (Λ j)) := by
+  obtain ⟨c, hc, hlower⟩ := hN.2
+  refine ⟨c / C, div_pos hc hC, fun i j hij ↦ ?_⟩
+  have heval : 1 ≤ ‖Λ i - Λ j‖ * ‖x i‖ := by
+    simpa only [sub_apply, hB.1 i, hB.2.1 i j hij, sub_zero, norm_one]
+      using (Λ i - Λ j).le_opNorm (x i)
+  have hx : c * ‖x i‖ ≤ C :=
+    (mul_le_mul_of_nonneg_right (hlower i) (norm_nonneg _)).trans (hbound i)
+  rw [hD.dist_eq, dist_eq_norm, div_le_iff₀ hC]
+  calc
+    c = c * 1 := (mul_one _).symm
+    _ ≤ c * (‖Λ i - Λ j‖ * ‖x i‖) := mul_le_mul_of_nonneg_left heval hc.le
+    _ = ‖Λ i - Λ j‖ * (c * ‖x i‖) := by ring
+    _ ≤ ‖Λ i - Λ j‖ * C := mul_le_mul_of_nonneg_left hx (norm_nonneg _)
+
+/-- At exponent two the printed and corrected jet cutoffs agree. The printed
+bound would therefore separate all the rational jet vectors uniformly in L². -/
+private theorem spectralLineJet_separation_of_printed
+    (h : Printed.spectralLineJet_uniformBiorthogonalBound)
+    (χ : PontryaginDual C₁(ℚ) → PontryaginDual C𝔽(ℚ)) (hχ : IsSpectralBasepointChoice χ) :
+    let hs : (1 : ℝ) < 2 := by norm_num
+    let jet (j : SpectralLineJetIndex χ (1 / 2) 2) :=
+      (spectralLineJet_memLp χ hs j).toLp (spectralZeroJet (χ j.val.1) 0 j.val.2.1 j.val.2.2)
+    ∃ ε : ℝ, 0 < ε ∧ ∀ i j, i ≠ j → ε ≤ dist (jet i) (jet j) := by
+  intro hs jet
+  obtain ⟨x, Λ, hB, heq, hN⟩ := spectralLineMarkushevichBasis_normalized (a := 1/2) χ hχ hs
+  let D := spectralSobolevDualEmbedding ℚ (1/2) (le_rfl (a := (0 : ℝ))) (zero_lt_one.trans hs).le
+  have hD : Isometry D := (spectralSobolevDualEmbedding_isometry_range (F := ℚ) (1/2) le_rfl _).1
+  have hP := h ℚ χ hχ (1/2) 2 hs
+  dsimp only at hP
+  have hcut : Nat.floor (((2 : ℝ) - 1) / 2 + 1) = Nat.ceil (((2 : ℝ) - 1) / 2) := by
+    exact ((Nat.floor_eq_iff (by norm_num) (n := 1)).mpr (by norm_num)).trans
+      ((Nat.ceil_eq_iff (by decide : (1 : ℕ) ≠ 0)).mpr (by norm_num)).symm
+  rw [hcut] at hP
+  obtain ⟨C, hC, hbound⟩ := hP x Λ hB (fun j ↦ ⟨_, heq j⟩)
+  obtain ⟨ε, hε, hsep⟩ := spectralLineJet_separation_of_diagonal_bound x Λ hB D hD hN C hC
+    (fun i ↦ hbound i i rfl rfl le_rfl)
+  refine ⟨ε, hε, fun i j hij ↦ ?_⟩
+  simpa only [D, heq] using hsep i j hij
+
+open Filter in
+open scoped Topology in
+/-- For the rational trivial character, the order-zero jet at frequency t is the
+unitary phase |g|^(it). Its L² distance to the jet at u tends to zero when t-u does. -/
+private theorem spectralLineJet_rational_phase_dist
+    (χ : PontryaginDual C₁(ℚ) → PontryaginDual C𝔽(ℚ)) (hχ : χ 1 = 1)
+    (t u : ℕ → ℝ) (hlim : Tendsto (fun n ↦ t n - u n) atTop (𝓝 0))
+    (i j : ℕ → SpectralLineJetIndex χ (1 / 2) 2)
+    (hi : ∀ n, (i n).val = (1, t n, 0)) (hj : ∀ n, (j n).val = (1, u n, 0)) :
+    let hs : (1 : ℝ) < 2 := by norm_num
+    let jet (v : SpectralLineJetIndex χ (1 / 2) 2) :=
+      (spectralLineJet_memLp χ hs v).toLp (spectralZeroJet (χ v.val.1) 0 v.val.2.1 v.val.2.2)
+    Tendsto (fun n ↦ dist (jet (i n)) (jet (j n))) atTop (𝓝 0) := by
+  intro hs jet
+  let R (g : C𝔽(ℚ)) : ℝ := ((ideleClassNorm ℚ g).val : ℝ)
+  let P (t : ℝ) (g : C𝔽(ℚ)) : ℂ := (R g : ℂ) ^ ((t : ℂ) * Complex.I)
+  have hR (g) : 0 < R g := Units.zero_lt (ideleClassNorm ℚ g)
+  have hP (t g) : ‖P t g‖ = 1 := by
+    dsimp only [P]
+    rw [Complex.norm_cpow_eq_rpow_re_of_pos (hR g)]
+    simp [Complex.mul_re]
+  have hcont (g) : ContinuousAt (fun r ↦ P r g) 0 :=
+    ((continuous_const_cpow' (Complex.ofReal_ne_zero.mpr (hR g).ne')).comp
+      (Complex.continuous_ofReal.mul continuous_const)).continuousAt
+  have hsub (t u g) : P t g - P u g = (P (t - u) g - 1) * P u g := by
+    have he : P t g = P (t - u) g * P u g := by
+      dsimp [P]
+      rw [← Complex.cpow_add _ _ (Complex.ofReal_ne_zero.mpr (hR g).ne')]
+      push_cast
+      ring_nf
+    rw [he, sub_mul, one_mul]
+  let ν := (ideleClassTamagawaMeasure ℚ).withDensity fun g : C𝔽(ℚ) ↦
+    ENNReal.ofReal (intervalSobolevDensity 0 0 2 (Real.log (R g)))⁻¹
+  have hc (v : SpectralLineJetIndex χ (1 / 2) 2) (r : ℝ) (hv : v.val = (1, r, 0)) :
+      (jet v : C𝔽(ℚ) → ℂ) =ᵐ[ν] P r := by
+    refine (MemLp.coeFn_toLp (spectralLineJet_memLp χ hs v)).trans (ae_of_all _ fun g ↦ ?_)
+    rw [hv, hχ, spectralZeroJet, pow_zero, mul_one, Complex.ofReal_zero, zero_add]
+    change (1 : ℂ) * _ = _
+    exact one_mul _
+  exact spectralLineJet_dist_tendsto ν P hP hcont (fun g ↦ by simp [P]) hsub t u hlim
+    (fun n ↦ jet (i n)) (fun n ↦ jet (j n)) (fun n ↦ hc _ _ (hi n)) (fun n ↦ hc _ _ (hj n))
+
+/-- Arithmetic input for the refutation of (10.3.1.18), p. 451. The number of distinct
+critical-line zeta ordinates up to height T, divided by T, is unbounded. This follows from a
+positive proportion of distinct critical-line zeros and the Riemann–von Mangoldt count. -/
+private theorem spectralLineJet_rational_critical_zero_count (k : ℕ) :
+    ∃ T : ℕ, ∃ S : Finset ℝ, (k + 1) * (T + 1) < S.card ∧
+      ∀ t ∈ S, t ∈ Ioc (0 : ℝ) T ∧ riemannZeta (1 / 2 + (t : ℂ) * Complex.I) = 0 := by sorry
+
 /-- Paper: (10.3.1.18), p. 451. For F = ℚ use the trivial base character,
 a = 1/2 and s = 2. Take pairs of simple critical-line zeta zeros with
 ordinates t and u tending arbitrarily close. The two cutoffs agree at s = 2.
@@ -78,7 +309,22 @@ The zeroth jets have the same positive norm and their difference tends to
 zero by dominated convergence in the reciprocal Sobolev weight. Biorthogonality gives
 1 ≤ ‖Λₜ − Λᵤ‖ ‖ψₜ‖, forcing the paired norm products to be unbounded. -/
 theorem Printed.spectralLineJet_uniformBiorthogonalBound_false :
-    ¬ Printed.spectralLineJet_uniformBiorthogonalBound := by sorry
+    ¬ Printed.spectralLineJet_uniformBiorthogonalBound := by
+  classical
+  intro h
+  obtain ⟨χ, hχ, hχ₁⟩ := spectralLineJet_rational_basepoint
+  obtain ⟨ε, hε, hsep⟩ := spectralLineJet_separation_of_printed h χ hχ
+  choose t u hne hgap ht hu using spectralLineJet_close_ordinates spectralLineJet_rational_critical_zero_count
+  choose i hi using fun n ↦ spectralLineJet_rational_zero_index χ hχ₁ (t n) (ht n)
+  choose j hj using fun n ↦ spectralLineJet_rational_zero_index χ hχ₁ (u n) (hu n)
+  have hlim : Filter.Tendsto (fun n ↦ t n - u n) Filter.atTop (nhds 0) :=
+    squeeze_zero_norm (fun n ↦ (hgap n).le) tendsto_one_div_add_atTop_nhds_zero_nat
+  have hdist := spectralLineJet_rational_phase_dist χ hχ₁ t u hlim i j hi hj
+  obtain ⟨n, hn⟩ := (hdist.eventually (eventually_lt_nhds hε)).exists
+  apply (hsep (i n) (j n) ?_).not_gt hn
+  intro heq
+  have hr := congrArg (fun v : SpectralLineJetIndex χ (1 / 2) 2 ↦ v.val.2.1) heq
+  exact hne n (by simpa only [hi, hj] using hr)
 
 /-- Paper: Theorem 10.3.1.1(3), p. 449. A test of left-translation weight
 ω⁻¹ is asserted to give an operator valued in the line quotient isotype ω. -/
@@ -98,7 +344,7 @@ open scoped NumberField.AdeleRing SchwartzMap Topology
 
 local notation "restrictNormOne(" F ")" =>
   (⟨(ideleClassNorm F).ker.subtype, continuous_subtype_val⟩ : C₁(F) →ₜ* C𝔽(F))
-local notation "logNorm(" F ")" => (fun g : C𝔽(F) ↦ Real.log ((ideleClassNorm F g).val : ℝ))
+local notation "logNorm(" F ")" => (logIdeleClassNorm F)
 local notation "W(" F ", " s ")" => CompactIntervalSobolev (μ𝔽(F)) logNorm(F) 0 0 s
 local notation "ρ(" F ", " hs ")" => hardySobolevTranslation (μ𝔽(F)) m𝔽(F) 0 0 _ h₀ hs
 local notation "N(" F ", " a ", " hs ")" => globalThetaSobolev F a h₀ hs

@@ -9,7 +9,7 @@ import RiemannMasullo.ForMathlib.Analysis.MellinTransform.Holomorphic
 import RiemannMasullo.ForMathlib.Analysis.MellinTransform.Gaussian
 import all RiemannMasullo.Ch03_IdelicZeta.Sec3b
 import all RiemannMasullo.AppC_LCTVS.Sec2a_part2
-import all RiemannMasullo.AppC_LCTVS.Sec2b
+import RiemannMasullo.AppC_LCTVS.Sec2b
 import all RiemannMasullo.Ch03_IdelicZeta.Sec2
 import all RiemannMasullo.AppC_LCTVS.Sec5b
 import all RiemannMasullo.AppA_AlgebraicNT.Sec3
@@ -1869,7 +1869,7 @@ open scoped TensorProduct
 section
 /-- The product of finitely many local tests belongs to the Schwartz–Bruhat space
 of the product group. -/
-private theorem schwartzBruhat_pi_test {ι : Type*} [Fintype ι] (G : ι → Type*)
+theorem schwartzBruhat_pi_test {ι : Type*} [Fintype ι] (G : ι → Type*)
     [∀ i, CommGroup (G i)] [∀ i, TopologicalSpace (G i)] [∀ i, IsTopologicalGroup (G i)]
     [∀ i, T2Space (G i)] [∀ i, LocallyCompactSpace (G i)] [∀ i, SecondCountableTopology (G i)]
     (f : ∀ i, SchwartzBruhat (G i)) : ∃ g : SchwartzBruhat (∀ i, G i),
@@ -2583,7 +2583,9 @@ private theorem locallyConstant_unitTranslate {K : Type*} [NormedField K] [Prope
   have h := hu ((↑g⁻¹ : K) * x)
   simpa only [mul_inv_rev, inv_inv, Units.val_mul, mul_assoc, Units.mul_inv_cancel_left] using h
 
-private theorem finiteTest_translate_locallyConstant (v : V) (f : ℬ(v.adicCompletion F)) :
+/-- Translating a Schwartz-Bruhat function on a finite completion by a unit is locally constant in
+the unit. -/
+theorem finiteTest_translate_locallyConstant (v : V) (f : ℬ(v.adicCompletion F)) :
     IsLocallyConstant (fun g : (v.adicCompletion F)ˣ ↦ schwartzBruhatUnitTranslate g f) := by
   let : ProperSpace (v.adicCompletion F) := properSpace_adicCompletion v
   have hU : IsOpen ((O(v)).units : Set (v.adicCompletion F)ˣ) := Submonoid.isOpen_units (Valued.isOpen_valuationSubring _)
@@ -3010,6 +3012,14 @@ private theorem finiteIntegralOnRight_eigen (v : V) (χ : PontryaginDual (v.adic
   exact (integral_congr_ae (ae_of_all _ e)).trans
     ((integral_const_mul (c g) _).trans (congrArg (c g * ·) (integral_mul_left_eq_self (μ := μ(v)) b (g⁻¹))))
 
+/-- For `0 < re z`, some eigendistribution for the twist `χ |·|^z` at a finite place evaluates every
+Schwartz-Bruhat function to its local zeta integral against that twist. -/
+theorem exists_finiteEigendistribution_eq_zetaIntegral (v : V)
+    (χ : PontryaginDual (v.adicCompletion F)ˣ) (z : ℂ) (hz : 0 < z.re) :
+    ∃ D ∈ schwartzBruhatEigendistributions (ft(χ,v,z)),
+      ∀ f : ℬ(v.adicCompletion F), D f = localIdelicZetaIntegral (μ(v)) fn(f) (ft(χ,v,z)) :=
+  ⟨finiteIntegralOnRight v χ z hz, finiteIntegralOnRight_eigen v χ z hz, fun _ ↦ rfl⟩
+
 private def FiniteGaussianOnRight : Prop :=
   ∀ (v : V) (χ : PontryaginDual (v.adicCompletion F)ˣ)
     (z : ℂ) (_hz : 0 < z.re),
@@ -3251,7 +3261,9 @@ private theorem abs_exp_sub_sum_le (t : ℝ) (M : ℕ) :
     _ = |t| ^ M / (M.factorial : ℝ) * Real.exp |t| := by
       rw [tsum_mul_left, hsum_abs.tsum_eq]
 
-private theorem realSchwartzBruhat_surjective (w : InfinitePlace F) (hw : w.IsReal) :
+/-- At a real place, every Schwartz-Bruhat function on the completion comes from a Schwartz
+function on `ℝ` through a continuous linear map. -/
+theorem realSchwartzBruhat_surjective (w : InfinitePlace F) (hw : w.IsReal) :
     ∃ Φ : SchwartzMap ℝ ℂ →L[ℂ] SchwartzBruhat (Multiplicative w.Completion),
       Surjective Φ ∧
         ∀ (f : SchwartzMap ℝ ℂ) (x : w.Completion),
@@ -3330,7 +3342,9 @@ private theorem local_euclideanSchwartzMonomialPartial_eq {m : ℕ} (α β : Fin
     rfl
   exact (hcast (List.length_map L) (fun i ↦ L (d.get i))).symm
 
-private theorem complexSchwartzBruhat_surjective (w : InfinitePlace F) (hw : w.IsComplex) :
+/-- At a complex place, every Schwartz-Bruhat function on the completion comes from a Schwartz
+function on `ℂ` through a continuous linear map. -/
+theorem complexSchwartzBruhat_surjective (w : InfinitePlace F) (hw : w.IsComplex) :
     ∃ Φ : SchwartzMap ℂ ℂ →L[ℂ] SchwartzBruhat (Multiplicative w.Completion),
       Surjective Φ ∧
         ∀ (f : SchwartzMap ℂ ℂ) (x : w.Completion),

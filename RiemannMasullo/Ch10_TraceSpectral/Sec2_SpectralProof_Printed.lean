@@ -147,7 +147,7 @@ private def fourierBandVectors
       rw [hψ, Pi.smul_apply, h₁ hout, smul_zero]
 
 local notation "C" => C𝔽(ℚ)
-local notation "logNorm" => (fun g : C ↦ Real.log ((ideleClassNorm ℚ g).val : ℝ))
+local notation "logNorm" => (logIdeleClassNorm ℚ)
 
 private theorem continuous_ratLogNorm : Continuous logNorm :=
   Real.continuousOn_log.comp_continuous
@@ -156,7 +156,7 @@ private theorem continuous_ratLogNorm : Continuous logNorm :=
 
 private def radialCharacter (r : ℝ) : PontryaginDual C where
   toFun g := Circle.exp (r * logNorm g)
-  map_one' := by simp
+  map_one' := by simp [logIdeleClassNorm]
   map_mul' g h := by
     change Circle.exp (r * Real.log (((ideleClassNorm ℚ (g * h)).val : ℝ≥0) : ℝ)) = _
     rw [map_mul (ideleClassNorm ℚ), Units.val_mul, NNReal.coe_mul, Real.log_mul

@@ -48,7 +48,7 @@ local notation "C𝔽" => IdeleClassGroup (𝓞 F) F
 local notation "μ𝔽" => ideleClassTamagawaMeasure F
 local notation "m𝔽" =>
   (⟨ideleClassNorm F, (isProperMap_ideleClassNorm F).continuous⟩ : C𝔽 →ₜ* ℝ≥0ˣ)
-local notation "logNorm" => (fun g : C𝔽 ↦ Real.log ((ideleClassNorm F g).val : ℝ))
+local notation "logNorm" => (logIdeleClassNorm F)
 local notation "hStrip(" hα ")" => (neg_nonpos.mpr hα |>.trans hα)
 local notation "W(" α ", " s ")" => CompactIntervalSobolev μ𝔽 logNorm (-α) α s
 local notation "Θ(" a ", " hα ", " hs ")" => globalThetaSobolev F a (hStrip(hα)) hs
@@ -636,8 +636,127 @@ private theorem spectralTruncatedConvolution_trace_tendsto_multiplier (X : Type*
   apply tendsto_iff_norm_sub_tendsto_zero.mpr
   simpa using hsquare.sqrt
 
+section
+
+private theorem sec4a_eventuallyEq_iteratedDeriv_const {c : ℝ} {s : Set ℝ} (hs : IsOpen s)
+    {q : ℝ → ℝ} (hq : EqOn q (fun _ ↦ c) s) (n : ℕ) :
+    EqOn (iteratedDeriv n q) (fun _ ↦ if n = 0 then c else 0) s := by
+  intro x hx
+  have heq : q =ᶠ[𝓝 x] fun _ ↦ c := Filter.eventuallyEq_iff_exists_mem.mpr ⟨s, hs.mem_nhds hx, hq⟩
+  rw [(heq.iteratedDeriv n).eq_of_nhds]
+  rcases n with _ | n
+  · simp
+  · simp [iteratedDeriv_const]
+
+/-- A sharp closed-band cutoff is admissible with width `1 / (2 * Λ²)` for outer radius at least two. -/
+theorem isModulatedCutoff_closedBand {G : Type*} [CommGroup G] [TopologicalSpace G]
+    [IsTopologicalGroup G] [T2Space G] [LocallyCompactSpace G]
+    [SecondCountableTopology G] [MeasurableSpace G] [BorelSpace G]
+    (m : G →ₜ* ℝ≥0ˣ) (Λ : ℝ) (hΛ : 2 ≤ Λ) :
+    let ε : ℝ := 1 / (2 * Λ ^ 2)
+    let ρ : G → ℝ := fun g ↦
+      if ((m g).val : ℝ) ∈ Icc Λ⁻¹ Λ then 1 else 0
+    IsModulatedCutoff m Λ ε ρ ∧ 0 < Λ⁻¹ + ε ∧ Λ⁻¹ + ε < Λ - ε := by
+  classical
+  intro ε ρ
+  have hΛpos : 0 < Λ := by linarith
+  have hεpos : 0 < ε := by positivity
+  have hΛinv_le_one : Λ⁻¹ ≤ 1 := inv_le_one_of_one_le₀ (by linarith)
+  have h2ε_lt : 2 * ε < Λ⁻¹ := by
+    dsimp [ε]
+    rw [show 2 * (1 / (2 * Λ ^ 2)) = (Λ ^ 2)⁻¹ by ring]
+    exact inv_strictAnti₀ (by positivity) (by nlinarith)
+  have hε_lt_inv : ε < Λ⁻¹ := by linarith
+  have h_sub_pos : 0 < Λ⁻¹ - ε := sub_pos.mpr hε_lt_inv
+  have h_left_lt_right : Λ⁻¹ + ε < Λ - ε := by
+    have hhalf : Λ⁻¹ ≤ 1 / 2 := by simpa only [one_div] using inv_anti₀ (by norm_num) hΛ
+    have h2ε_lt_one : 2 * ε < 1 := by linarith
+    linarith
+  have h_sub_lt : Λ⁻¹ - ε < Λ - ε := by linarith
+  refine ⟨⟨hΛpos, hεpos, h_sub_pos, h_sub_lt, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩,
+    by positivity, h_left_lt_right⟩
+  · intro x
+    dsimp [ρ]
+    split_ifs <;> norm_num
+  · intro x
+    dsimp [ρ]
+    split_ifs <;> norm_num
+  · apply IsGreatest.csSup_eq
+    refine ⟨⟨1, ?_⟩, forall_mem_range.mpr fun x ↦ ?_⟩
+    · dsimp [ρ]
+      rw [map_one, Units.val_one, NNReal.coe_one]
+      split_ifs with h1
+      · rfl
+      · exact False.elim (h1 ⟨hΛinv_le_one, by linarith⟩)
+    · dsimp [ρ]
+      split_ifs <;> norm_num
+  · let q : ℝ → ℝ := fun r ↦ if r ∈ Icc Λ⁻¹ Λ then 1 else 0
+    have hq0 : EqOn q (fun _ ↦ 0) (Iio Λ⁻¹) := fun r hr ↦ by
+      dsimp [q]; split_ifs with hmem; exact False.elim (not_le_of_gt hr hmem.1); rfl
+    have hq1 : EqOn q (fun _ ↦ 1) (Ioo Λ⁻¹ Λ) := fun r hr ↦ by
+      dsimp [q]; split_ifs with hmem; rfl; exact False.elim (hmem ⟨hr.1.le, hr.2.le⟩)
+    have hq2 : EqOn q (fun _ ↦ 0) (Ioi Λ) := fun r hr ↦ by
+      dsimp [q]; split_ifs with hmem; exact False.elim (not_le_of_gt hr hmem.2); rfl
+    refine ⟨q, {Λ⁻¹, Λ}, fun x ↦ rfl, ?_, ?_, ?_⟩
+    · intro c hc
+      simp only [Finset.coe_insert, Finset.coe_singleton, mem_insert_iff, mem_singleton_iff] at hc
+      rcases hc with rfl | rfl
+      · exact inv_pos.mpr hΛpos
+      · exact hΛpos
+    · intro r hr
+      rcases lt_trichotomy r Λ⁻¹ with hlt | rfl | hgt
+      · exact (contDiffOn_const.congr hq0).contDiffAt (isOpen_Iio.mem_nhds hlt) |>.contDiffWithinAt
+      · exact False.elim (hr.2 (by simp))
+      · rcases lt_trichotomy r Λ with hlt' | rfl | hgt'
+        · exact (contDiffOn_const.congr hq1).contDiffAt (isOpen_Ioo.mem_nhds ⟨hgt, hlt'⟩) |>.contDiffWithinAt
+        · exact False.elim (hr.2 (by simp))
+        · exact (contDiffOn_const.congr hq2).contDiffAt (isOpen_Ioi.mem_nhds hgt') |>.contDiffWithinAt
+    · intro c hc n
+      simp only [Finset.mem_insert, Finset.mem_singleton] at hc
+      rcases hc with hc_eq | hc_eq <;> rw [hc_eq]
+      · refine ⟨if n = 0 then 0 else 0, if n = 0 then 1 else 0, ?_, ?_⟩
+        · refine tendsto_const_nhds.congr' ?_
+          filter_upwards [self_mem_nhdsWithin] with y hy
+          exact (sec4a_eventuallyEq_iteratedDeriv_const isOpen_Iio hq0 n hy).symm
+        · refine tendsto_const_nhds.congr' ?_
+          filter_upwards [Ioo_mem_nhdsGT (show Λ⁻¹ < Λ by linarith)] with y hy
+          exact (sec4a_eventuallyEq_iteratedDeriv_const isOpen_Ioo hq1 n hy).symm
+      · refine ⟨if n = 0 then 1 else 0, if n = 0 then 0 else 0, ?_, ?_⟩
+        · refine tendsto_const_nhds.congr' ?_
+          filter_upwards [Ioo_mem_nhdsLT (show Λ⁻¹ < Λ by linarith)] with y hy
+          exact (sec4a_eventuallyEq_iteratedDeriv_const isOpen_Ioo hq1 n hy).symm
+        · refine tendsto_const_nhds.congr' ?_
+          filter_upwards [self_mem_nhdsWithin] with y hy
+          exact (sec4a_eventuallyEq_iteratedDeriv_const isOpen_Ioi hq2 n hy).symm
+  · intro x
+    dsimp [ρ]
+    have hpos : 0 < ((m x).val : ℝ) := NNReal.coe_pos.mpr (Units.zero_lt _)
+    rw [map_inv, Units.val_inv_eq_inv_val, NNReal.coe_inv]
+    congr 1
+    simp only [mem_Icc]
+    refine propext ⟨fun ⟨h1, h2⟩ ↦ ⟨?_, ?_⟩, fun ⟨h1, h2⟩ ↦ ⟨?_, ?_⟩⟩
+    · exact (le_inv_comm₀ (inv_pos.mpr hΛpos) hpos).mpr (by simpa only [inv_inv] using h2)
+    · exact (inv_le_comm₀ hpos hΛpos).mpr h1
+    · exact (inv_le_comm₀ hpos hΛpos).mp h2
+    · exact by simpa only [inv_inv] using (le_inv_comm₀ (inv_pos.mpr hΛpos) hpos).mp h1
+  · apply closure_minimal _
+      (isClosed_Icc.preimage (NNReal.continuous_coe.comp (Units.continuous_val.comp m.continuous)))
+    intro x hx
+    dsimp only [ρ] at hx ⊢
+    by_contra hnot
+    apply hx
+    change (if ((m x).val : ℝ) ∈ Icc Λ⁻¹ Λ then (1 : ℝ) else 0) = 0
+    split_ifs with hmem
+    · exact False.elim (hnot hmem)
+    · rfl
+  · intro x hx
+    dsimp [ρ]
+    split_ifs with hmem
+    · rfl
+    · exact False.elim (hmem ⟨by linarith [hx.1], by linarith [hx.2]⟩)
+
 /-- Expanding cutoffs extend to a contractive family converging strongly to the identity. -/
-private theorem spectralTruncatedConvolution_trace_tendsto_family
+theorem exists_stronglyConvergent_modulatedCutoffOperators
     (G : Type*) [CommGroup G] [TopologicalSpace G] [IsTopologicalGroup G] [T2Space G]
     [LocallyCompactSpace G] [SecondCountableTopology G] [MeasurableSpace G] [BorelSpace G] (m : G →ₜ* ℝ≥0ˣ) (ν : Measure G)
     (ε : ℝ → ℝ) (ρ : ℝ → G → ℝ)
@@ -696,6 +815,8 @@ private theorem spectralTruncatedConvolution_trace_tendsto_family
     · exact ContinuousLinearMap.norm_id_le
   · intro R hcut
     exact dite_eq_left hcut
+
+end
 
 /-- A uniformly bounded strongly null family kills a nuclear operator in trace norm. -/
 private theorem spectralTruncatedConvolution_trace_tendsto_null
@@ -804,7 +925,7 @@ theorem spectralTruncatedConvolution_trace_tendsto (φ : BruhatCompactSupport C�
       (∀ R, ‖P R‖ ≤ 1) ∧ (∀ u, Tendsto (fun R ↦ P R u) atTop (𝓝 u)) ∧
       ∀ R (hcut : IsModulatedCutoff m𝔽 R (ε R) (ρ R)), P R = M(hcut) := by
     with_unfolding_all
-      exact spectralTruncatedConvolution_trace_tendsto_family C𝔽 m𝔽
+      exact exists_stronglyConvergent_modulatedCutoffOperators C𝔽 m𝔽
         ((μ𝔽).withDensity fun g ↦ ENNReal.ofReal (intervalSobolevDensity (-α) α s (logNorm g))) ε ρ _hε _hρ
   obtain ⟨P, hPbound, hPstrong, hPagree⟩ := hfamily
   let J := (Θ₀).orthogonal.subtypeL.comp

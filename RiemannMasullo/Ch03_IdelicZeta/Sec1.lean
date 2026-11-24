@@ -922,10 +922,24 @@ local notation "Primes(" F ")" => HeightOneSpectrum (𝓞 F)
 
 variable (S : Finset (Primes(F)))
 
-local notation "projectedDiagonal" =>
+/-- The image of the diagonal S-units in the S-ideles, by which `SIdeleQuotient` is taken.
+Naming it keeps every elaborated term over the quotient and its instances small: spelled out,
+the subgroup is copied into each instance argument, and goals grow to hundreds of millions of
+nodes when unfolded, which `kabstract` (`rw`, `obtain`, `cases`, `generalize`) walks in full. -/
+abbrev sProjectedDiagonal : Subgroup (SAdeleRing F S)ˣ :=
   Subgroup.map (Units.map (RingHom.toMonoidHom (RingHom.comp (adeleProjection F S)
     (Subring.subtype (integralAdelesOutside F S)))))
     (MonoidHom.range (Units.map (RingHom.toMonoidHom (integralAdeleDiagonal F S))))
+
+/-- The diagonal embedding of the S-units into the S-ideles, whose range is
+`sProjectedDiagonal`. Named for the same reason: Chapters 2, 5 and 7 wrote it out through
+`unitAtS` notations, so every instance argument over it carried a copy. -/
+abbrev sUnitEmbedding : ((S : Set (Primes(F))).integer F)ˣ →* (SAdeleRing F S)ˣ :=
+  MonoidHom.comp (Units.map (RingHom.toMonoidHom (RingHom.comp (adeleProjection F S)
+    (Subring.subtype (integralAdelesOutside F S)))))
+    (Units.map (RingHom.toMonoidHom (integralAdeleDiagonal F S)))
+
+local notation "projectedDiagonal" => sProjectedDiagonal F S
 
 /-- Paper: Equation (3.1.2.1), p. 120. The group J_{F,S} is the quotient of the S-ideles
 by the projected diagonal S-units. As in §A.1, S specifies the finite places only. -/
@@ -938,7 +952,7 @@ theorem sIdeleQuotient_mk_eq_one (g : (SAdeleRing F S)ˣ) :
       ∃ u : ((S : Set (Primes(F))).integer F)ˣ, g = Units.map
         ((adeleProjection F S).comp (integralAdelesOutside F S).subtype).toMonoidHom
         (Units.map (integralAdeleDiagonal F S).toMonoidHom u) := by
-  rw [QuotientGroup.eq_one_iff, MonoidHom.map_range, MonoidHom.mem_range]
+  rw [QuotientGroup.eq_one_iff, sProjectedDiagonal, MonoidHom.map_range, MonoidHom.mem_range]
   exact exists_congr fun _ ↦ eq_comm
 
 /-- Paper: Equation (3.1.2.1), p. 120. The product of normalized absolute values in S
@@ -1322,7 +1336,7 @@ theorem sIdeleQuotient_hasNormTwistCharts : HasNormTwistCharts (sIdeleQuotientNo
   let d := p.comp (integralAdeleDiagonal F S)
   obtain ⟨hd, hc, _⟩ := sAdele_additive_quotient F S
   have : IsClosed (projectedDiagonal : Set (SAdeleRing F S)ˣ) := by
-    rw [MonoidHom.map_range]
+    rw [sProjectedDiagonal, MonoidHom.map_range]
     exact isClosed_range_unitsMap d.toMonoidHom hd hc
   have : LocallyCompactSpace (SAdeleRing F S)ˣ := (sIdeleGroup_description F S).2.2.1
   obtain ⟨σ, hσ⟩ := sIdeleQuotientNorm_exists_section F S
@@ -1560,7 +1574,7 @@ along insertion kills the projected diagonal S-units. -/
 theorem sIdeleRestriction_descent (c : unramifiedOutside F S) :
     projectedDiagonal ≤ (pullbackS(c.val)).ker := by
   classical
-  rw [MonoidHom.map_range]
+  rw [sProjectedDiagonal, MonoidHom.map_range]
   rintro _ ⟨u, rfl⟩
   let g := Units.map (integralAdeleDiagonal F S).toMonoidHom u
   let i := (integralAdelesOutside F S).subtype

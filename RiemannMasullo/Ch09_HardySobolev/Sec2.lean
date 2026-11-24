@@ -3076,6 +3076,29 @@ theorem intervalSobolevDensity_at_unit (a b s : ℝ) :
     intervalSobolevDensity a b s 0 = 1 := by
   simp [intervalSobolevDensity]
 
+/-- The weighted measure of `CompactIntervalSobolev`: `μ` with the density
+`intervalSobolevDensity a b s ∘ logNorm`, or its reciprocal when `dual`. Named so that the
+instance arguments of the space mention one constant: written out, the measure and `logNorm`
+are copied into each of them, and statements over the space grow to 10¹⁰–10¹¹ nodes as trees. -/
+abbrev intervalSobolevMeasure {A : Type*} [MeasurableSpace A] (μ : Measure A)
+    (logNorm : A → ℝ) (a b s : ℝ) (dual : Bool := false) : Measure A :=
+  μ.withDensity fun x ↦ ENNReal.ofReal
+    (if dual then (intervalSobolevDensity a b s (logNorm x))⁻¹
+     else intervalSobolevDensity a b s (logNorm x))
+
+/-- The logarithm of the idele class norm, the coordinate in which the Sobolev weights of
+Chapters 10–12 are taken. Named for the same reason as `intervalSobolevMeasure`. -/
+abbrev logIdeleClassNorm (F : Type*) [Field F] [NumberField F] :
+    NumberField.IdeleClassGroup (NumberField.RingOfIntegers F) F → ℝ :=
+  fun g ↦ Real.log ((ideleClassNorm F g).val : ℝ)
+
+/-- The logarithm of the norm on the S-idele quotient. Named for the same reason as
+`intervalSobolevMeasure`. -/
+abbrev logSIdeleQuotientNorm (F : Type*) [Field F] [NumberField F]
+    (S : Finset (IsDedekindDomain.HeightOneSpectrum (NumberField.RingOfIntegers F))) :
+    SIdeleQuotient F S → ℝ :=
+  fun g ↦ Real.log ((sIdeleQuotientNorm F S g).val : ℝ)
+
 /-- Paper: Proposition 9.2.1.8, p. 410. The compact-interval space has the positive
 endpoint density, and its dual model uses the reciprocal density.
 Deviation: Both spaces are realized as weighted L². The measure and logarithmic
@@ -3087,9 +3110,7 @@ weighted $L^2$ space.
 -/
 abbrev CompactIntervalSobolev {A : Type*} [MeasurableSpace A] (μ : Measure A)
     (logNorm : A → ℝ) (a b s : ℝ) (dual : Bool := false) :=
-  Lp ℂ 2 (μ.withDensity fun x ↦ ENNReal.ofReal
-    (if dual then (intervalSobolevDensity a b s (logNorm x))⁻¹
-     else intervalSobolevDensity a b s (logNorm x)))
+  Lp ℂ 2 (intervalSobolevMeasure μ logNorm a b s dual)
 
 /-- Paper: Definition 9.2.2.9, p. 416, with §10.2.1, p. 439. For the base interval {0} the
 weighted measure is the Sobolev measure of Definition 9.1.2.1, so the space is W^{s,2}(G).
