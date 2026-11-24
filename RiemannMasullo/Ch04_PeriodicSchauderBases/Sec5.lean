@@ -264,7 +264,7 @@ theorem modulatedPeriodization_deriv_tendstoUniformlyOn (f : E)
     (modulatedPeriodization_tendstoUniformlyOn m γ hm hms hγ (D^[r] f) C hC)
 
 /-- Bruhat differentiability of a fixed order is preserved by products. -/
-private theorem modulatedPeriodization_surjective_mul {A : Type*} [CommGroup A] [TopologicalSpace A]
+theorem isBruhatContDiff_mul {A : Type*} [CommGroup A] [TopologicalSpace A]
     [IsTopologicalGroup A] [T2Space A] [LocallyCompactSpace A] {p : ℕ} {f g : A → ℂ}
     (hf : IsBruhatContDiff p f) (hg : IsBruhatContDiff p g) :
     IsBruhatContDiff p (f * g) := by
@@ -398,7 +398,7 @@ private theorem modulatedPeriodization_surjective_cutoff {ρ : ℝ → ℂ}
     IsBruhatSmooth (fun x : G ↦ ρ (Real.log ((m x).val : ℝ)) * φ (q x)) := by
   let := modulatedCyclicSubgroup_closed m γ hγ
   intro p
-  exact modulatedPeriodization_surjective_mul
+  exact isBruhatContDiff_mul
     (modulatedPeriodization_surjective_logProfile m hρ p)
     (modulatedPeriodization_surjective_comp_mk Γ (schwartzBruhat_isBruhatSmooth φ p))
 
@@ -2365,7 +2365,7 @@ private theorem modulatedCompactSupportStage_periodization_equiv_surjective
     modulatedCompactSupportStage_periodization_equiv_sup_closed m γ hγ k hk
   let f₀ : G → ℂ := fun x ↦ ρc (Real.log ((m x).val : ℝ)) * φ (QuotientGroup.mk x)
   have hsm : IsBruhatSmooth f₀ := fun p ↦
-    modulatedPeriodization_surjective_mul (modulatedPeriodization_surjective_logProfile m hρs' p)
+    isBruhatContDiff_mul (modulatedPeriodization_surjective_logProfile m hρs' p)
       (modulatedPeriodization_surjective_comp_mk (Γ ⊔ k) (schwartzBruhat_isBruhatSmooth φ p))
   have hsupp : support f₀ ⊆ {x : G | Real.log ((m x).val : ℝ) ∈ Icc (c - L) (c + ε)} := by
     intro x hx

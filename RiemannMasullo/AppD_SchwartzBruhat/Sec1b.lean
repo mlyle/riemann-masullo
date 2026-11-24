@@ -1172,7 +1172,7 @@ theorem openCompactlyGeneratedSubgroups_colimit :
 
 omit [T2Space G] in
 /-- Every compact set is contained in an open compactly generated subgroup. -/
-private theorem exists_openCompactlyGeneratedSubgroup_contains {K : Set G} (hK : IsCompact K) :
+theorem exists_openCompactlyGeneratedSubgroup_contains {K : Set G} (hK : IsCompact K) :
     ∃ H : OpenCompactlyGeneratedSubgroups G, K ⊆ (H.val : Set G) := by
   obtain ⟨U, hU, hU₁⟩ := exists_compact_mem_nhds (1 : G)
   let H := Subgroup.closure (U ∪ K)
@@ -2879,7 +2879,7 @@ private theorem elementaryCoverZeroHom_continuous_isOpenMap {m n r : ℕ} {F : T
 
 /-- On a covered discrete fiber, a continuous homomorphism of elementary groups
 is represented in the target cover by a continuous affine map. -/
-private theorem contDiff_comp_elementaryHom {m n r m' n' r' : ℕ} {F F' : Type*}
+theorem contDiff_comp_elementaryHom {m n r m' n' r' : ℕ} {F F' : Type*}
     [AddCommGroup F] [TopologicalSpace F] [DiscreteTopology F]
     [AddCommGroup F'] [TopologicalSpace F'] [DiscreteTopology F'] [Finite F']
     {p : ℕ∞} (a : ElementaryLieGroup m n r F →+ ElementaryLieGroup m' n' r' F')
