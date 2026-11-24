@@ -64,9 +64,13 @@ consists of 1 and the single-zero base points, with the adelic subspace topology
 def sAdeleOrbitBasepoints : Set Aₛ :=
   Set.range (sAdeleOrbitBasepoint F S)
 
+/-- The index `none` gives the ordinary base point, since the projection is a ring hom. -/
+private theorem sAdeleOrbitBasepoint_none : sAdeleOrbitBasepoint F S none = 1 := by
+  simp [sAdeleOrbitBasepoint, adeleOrbitBasepoint]
+
 /-- Paper: Definition 8.2.0.1(1), p. 384. The ordinary base point lies in $Z_{F,S}$. -/
-theorem one_mem_sAdeleOrbitBasepoints : 1 ∈ sAdeleOrbitBasepoints F S := by
-  sorry
+theorem one_mem_sAdeleOrbitBasepoints : 1 ∈ sAdeleOrbitBasepoints F S :=
+  ⟨none, sAdeleOrbitBasepoint_none F S⟩
 
 /-- Paper: Definition 8.2.0.1(1), p. 384. The set $Z_F$ in (8.2.0.2)
 consists of 1 and the single-zero base points, with the adelic subspace topology. -/
@@ -86,7 +90,13 @@ def sAdeleFullOrbit (i : Option (InfinitePlace F ⊕ S)) : Set Aₛ :=
 the $S$-adeles that are units. -/
 theorem mem_sAdeleFullOrbit_none_iff (x : Aₛ) :
     x ∈ sAdeleFullOrbit F S none ↔ IsUnit x := by
-  sorry
+  rw [sAdeleFullOrbit, sAdeleOrbitBasepoint_none F S, MulAction.mem_orbit_iff]
+  simp only [Units.smul_def, smul_eq_mul, mul_one]
+  constructor
+  · rintro ⟨u, hu⟩
+    exact ⟨u, hu⟩
+  · rintro ⟨u, hu⟩
+    exact ⟨u, hu⟩
 
 /-- Paper: Definition 8.2.0.1(2), p. 384. The family in (8.2.0.4) consists of the
 global full-idele orbits with their adelic subspace topologies. -/
@@ -97,7 +107,14 @@ def adeleFullOrbit (i : Option (InfinitePlace F ⊕ HeightOneSpectrum (𝓞 F)))
 the adeles that are units. -/
 theorem mem_adeleFullOrbit_none_iff (x : 𝔸[F]) :
     x ∈ adeleFullOrbit F none ↔ IsUnit x := by
-  sorry
+  have h1 : adeleOrbitBasepoint F none = 1 := rfl
+  rw [adeleFullOrbit, h1, MulAction.mem_orbit_iff]
+  simp only [Units.smul_def, smul_eq_mul, mul_one]
+  constructor
+  · rintro ⟨u, hu⟩
+    exact ⟨u, hu⟩
+  · rintro ⟨u, hu⟩
+    exact ⟨u, hu⟩
 
 /-- Paper: Definition 8.2.0.1(3), p. 385. The S-local set $D_{F,S}$ in (8.2.0.5)
 is the union of the full-idele orbits with the adelic subspace topology. -/
@@ -109,7 +126,12 @@ set of translates of the special S-adeles by full ideles. -/
 theorem mem_sAdeleFullOrbitUnion_iff (x : Aₛ) :
     x ∈ sAdeleFullOrbitUnion F S ↔
       ∃ (g : 𝕀ₛ) (z : sAdeleOrbitBasepoints F S), g • z.val = x := by
-  sorry
+  simp only [sAdeleFullOrbitUnion, Set.mem_iUnion, sAdeleFullOrbit, MulAction.mem_orbit_iff]
+  constructor
+  · rintro ⟨i, g, hg⟩
+    exact ⟨g, ⟨_, i, rfl⟩, hg⟩
+  · rintro ⟨g, ⟨_, i, rfl⟩, hg⟩
+    exact ⟨i, g, hg⟩
 
 /-- Paper: Definition 8.2.0.1(3), p. 385. The global set $D_F$ in (8.2.0.5)
 is the union of the full-idele orbits with the adelic subspace topology. -/
@@ -121,7 +143,12 @@ set of translates of the special adeles by full ideles. -/
 theorem mem_adeleFullOrbitUnion_iff (x : 𝔸[F]) :
     x ∈ adeleFullOrbitUnion F ↔
       ∃ (g : 𝔸[F]ˣ) (z : adeleOrbitBasepoints F), g • z.val = x := by
-  sorry
+  simp only [adeleFullOrbitUnion, Set.mem_iUnion, adeleFullOrbit, MulAction.mem_orbit_iff]
+  constructor
+  · rintro ⟨i, g, hg⟩
+    exact ⟨g, ⟨_, i, rfl⟩, hg⟩
+  · rintro ⟨g, ⟨_, i, rfl⟩, hg⟩
+    exact ⟨i, g, hg⟩
 
 -- Read the full-group stability sentence on p. 385 with (8.2.0.3)–(8.2.0.5).
 -- The norm-one orbits in (8.2.0.6)–(8.2.0.8) are stable under the norm kernel.
@@ -136,7 +163,13 @@ is the image of the norm kernel in the S-adeles. -/
 theorem mem_sAdeleNormOneOrbit_none_iff (x : Aₛ) :
     x ∈ sAdeleNormOneOrbit F S none ↔
       ∃ g : 𝕀ₛ, sIdeleNorm F S g = 1 ∧ g.val = x := by
-  sorry
+  rw [sAdeleNormOneOrbit, sAdeleOrbitBasepoint_none F S, MulAction.mem_orbit_iff]
+  simp only [MulAction.subgroup_smul_def, Units.smul_def, smul_eq_mul, mul_one]
+  constructor
+  · rintro ⟨g, hg⟩
+    exact ⟨g, MonoidHom.mem_ker.mp g.property, hg⟩
+  · rintro ⟨g, hg, rfl⟩
+    exact ⟨⟨g, MonoidHom.mem_ker.mpr hg⟩, rfl⟩
 
 /-- Paper: Definition 8.2.0.2(1), p. 385. The family in (8.2.0.7) consists of the
 global norm-one orbits with their adelic subspace topologies. -/
@@ -148,7 +181,14 @@ def adeleNormOneOrbit (i : Option (InfinitePlace F ⊕ HeightOneSpectrum (𝓞 F
 image of the norm kernel in the adeles. -/
 theorem mem_adeleNormOneOrbit_none_iff (x : 𝔸[F]) :
     x ∈ adeleNormOneOrbit F none ↔ ∃ g : 𝔸[F]ˣ, ideleNorm F g = 1 ∧ g.val = x := by
-  sorry
+  have h1 : adeleOrbitBasepoint F none = 1 := rfl
+  rw [adeleNormOneOrbit, h1, MulAction.mem_orbit_iff]
+  simp only [MulAction.subgroup_smul_def, Units.smul_def, smul_eq_mul, mul_one]
+  constructor
+  · rintro ⟨g, hg⟩
+    exact ⟨g, MonoidHom.mem_ker.mp g.property, hg⟩
+  · rintro ⟨g, hg, rfl⟩
+    exact ⟨⟨g, MonoidHom.mem_ker.mpr hg⟩, rfl⟩
 
 /-- Paper: Definition 8.2.0.2(2), p. 385. The S-local set $D^1_{F,S}$ in (8.2.0.8)
 is the union of the norm-one orbits with the adelic subspace topology. -/
@@ -160,7 +200,12 @@ it is a norm-one translate of a special S-adele. -/
 theorem mem_sAdeleNormOneOrbitUnion_iff (x : Aₛ) :
     x ∈ sAdeleNormOneOrbitUnion F S ↔
       ∃ (g : Nₛ) (z : sAdeleOrbitBasepoints F S), g • z.val = x := by
-  sorry
+  simp only [sAdeleNormOneOrbitUnion, Set.mem_iUnion, sAdeleNormOneOrbit, MulAction.mem_orbit_iff]
+  constructor
+  · rintro ⟨i, g, hg⟩
+    exact ⟨g, ⟨_, i, rfl⟩, hg⟩
+  · rintro ⟨g, ⟨_, i, rfl⟩, hg⟩
+    exact ⟨i, g, hg⟩
 
 /-- Paper: Definition 8.2.0.2(2), p. 385. The global set $D^1_F$ in (8.2.0.8)
 is the union of the norm-one orbits with the adelic subspace topology. -/
@@ -172,7 +217,12 @@ it is a norm-one translate of a special adele. -/
 theorem mem_adeleNormOneOrbitUnion_iff (x : 𝔸[F]) :
     x ∈ adeleNormOneOrbitUnion F ↔
       ∃ (g : N₁) (z : adeleOrbitBasepoints F), g • z.val = x := by
-  sorry
+  simp only [adeleNormOneOrbitUnion, Set.mem_iUnion, adeleNormOneOrbit, MulAction.mem_orbit_iff]
+  constructor
+  · rintro ⟨i, g, hg⟩
+    exact ⟨g, ⟨_, i, rfl⟩, hg⟩
+  · rintro ⟨g, ⟨_, i, rfl⟩, hg⟩
+    exact ⟨i, g, hg⟩
 
 /-- Paper: Lemma 8.2.0.3(1), p. 385. The S-local orbit map applies the norm-one
 idele to the given special S-adele. -/
@@ -184,7 +234,7 @@ def sAdeleNormOneOrbitMap (gz : Nₛ × sAdeleOrbitBasepoints F S) :
 is given by the norm-one action. -/
 theorem sAdeleNormOneOrbitMap_val (g : Nₛ) (z : sAdeleOrbitBasepoints F S) :
     (sAdeleNormOneOrbitMap F S (g, z)).val = g • z.val := by
-  sorry
+  rfl
 
 /-- Paper: Lemma 8.2.0.3(2), p. 385. The global orbit map applies the norm-one
 idele to the given special adele. -/
@@ -195,7 +245,7 @@ def adeleNormOneOrbitMap (gz : N₁ × adeleOrbitBasepoints F) : adeleNormOneOrb
 given by the norm-one action. -/
 theorem adeleNormOneOrbitMap_val (g : N₁) (z : adeleOrbitBasepoints F) :
     (adeleNormOneOrbitMap F (g, z)).val = g • z.val := by
-  sorry
+  rfl
 
 /-- Paper: Lemma 8.2.0.3(1), p. 385. The adelic subspace topology on the S-local
 norm-one orbit union is the quotient topology of the S-local orbit map. -/

@@ -1280,16 +1280,13 @@ private theorem spectralStripMellinJet_norm_le_false_exists_zero
   norm_num
 
 /-- Paper: Theorem 10.3.2.1, (10.3.2.10)–(11), p. 455.
-The compact-character Mellin transform of the printed test is the quantity that the printed
-bound controls. At a prescribed frequency it does not vanish for a suitable test: take the
-test trivial on the norm-one subgroup, with norm profile a nonzero smooth bump multiplied by
-the inverse of the oscillation `r ↦ r ^ (i t)`, so that the Mellin integral at `shift(0, t)`
-becomes the integral of the bump against the multiplicative Haar measure, hence is nonzero.
+At any prescribed compact character and frequency, the Mellin integral is nonzero for some
+Bruhat test. The norm section identifies the full character with the product of the compact
+character and the radial oscillation. The inverse of this character times a smooth bump
+in the log norm gives a test whose Mellin integral is the norm-one Haar mass times the
+positive integral of the bump.
 The map `τ` is a section of the idelic norm, as on p. 455; without that the statement fails
-(for the constant map every test has Mellin value zero, #6741).
-Missing input: the construction of an element of `BruhatCompactSupport` from a norm profile
-on the idele class group of `ℚ`, and the identification of `positiveRealHaar` with Lebesgue
-measure in the logarithmic coordinate. -/
+(for the constant map every test has Mellin value zero, #6741). -/
 private theorem spectralStripMellinJet_norm_le_false_exists_mellin
     (τ : ℝ≥0ˣ →ₜ* C𝔽(ℚ)) (_hτ : Function.RightInverse τ (ideleClassNorm ℚ))
     (ω : PontryaginDual C₁(ℚ)) (t : ℝ) :
@@ -1297,7 +1294,44 @@ private theorem spectralStripMellinJet_norm_le_false_exists_mellin
       (∫ r : ℝ≥0ˣ, ((r.val : ℝ) : ℂ) ^ (shift(0, t)) *
         (∫ k : C₁(ℚ), (ω k : ℂ) * φ.val (τ r * k.val)
           ∂normOneIdeleClassTamagawaMeasure ℚ) ∂positiveRealHaar) ≠ 0 := by
-  sorry
+  obtain ⟨e, he⟩ := spectralPlancherel_exists_dualEquiv ℚ τ _hτ
+  let η := e (Multiplicative.ofAdd t, ω)
+  let B : ContDiffBump (0 : ℝ) := default
+  obtain ⟨φ, hφ⟩ := exists_characterNormTest (F := ℚ) η⁻¹ (fun y ↦ (B y : ℂ))
+    (Complex.ofRealCLM.contDiff.comp B.contDiff)
+    (B.hasCompactSupport.comp_left Complex.ofReal_zero)
+  let phase (r : ℝ≥0ˣ) := Circle.exp (t * Real.log (r.val : ℝ))
+  have htest (r : ℝ≥0ˣ) (k : C₁(ℚ)) : (ω k : ℂ) * φ.val (τ r * k.val) =
+      ((phase r)⁻¹ : Circle) * (B (Real.log (r.val : ℝ)) : ℂ) := by
+    have hn : ideleClassNorm ℚ (τ r * k.val) = r := by
+      rw [map_mul, _hτ r, MonoidHom.mem_ker.mp k.property, mul_one]
+    have hk : ω k * η⁻¹ (τ r * k.val) = (phase r)⁻¹ := by
+      change ω k * (e (Multiplicative.ofAdd t, ω) (τ r * k.val))⁻¹ = _
+      rw [he, mul_inv, mul_inv_cancel_left]
+    rw [hφ, hn, ← mul_assoc, ← Circle.coe_mul, hk]
+  have hphase (r : ℝ≥0ˣ) : ((r.val : ℝ) : ℂ) ^ (shift(0, t)) = (phase r : ℂ) := by
+    have hr := NNReal.coe_pos.mpr (Units.zero_lt r)
+    dsimp only [phase]
+    rw [Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr hr.ne'),
+      ← Complex.ofReal_log hr.le, Complex.ofReal_zero, zero_add, Circle.coe_exp,
+      Complex.ofReal_mul]
+    congr 1
+    ring
+  let ν := normOneIdeleClassTamagawaMeasure ℚ
+  let : CompactSpace C₁(ℚ) := (ideleClassGroup_finiteness ℚ).2.1
+  let : ν.IsHaarMeasure := (multiplicativeTamagawaMeasures_existsUnique ℚ).exists.choose_spec.2.2.2.1
+  have hmass : ν.real univ ≠ 0 :=
+    ENNReal.toReal_ne_zero.mpr ⟨NeZero.ne _, measure_ne_top _ _⟩
+  have hlog : (∫ r : ℝ≥0ˣ, (B (Real.log (r.val : ℝ)) : ℂ) ∂positiveRealHaar) =
+      ((∫ y : ℝ, B y : ℝ) : ℂ) := by
+    simpa only [sub_zero, mul_one, Complex.cpow_zero, zero_mul, Complex.exp_zero, one_mul,
+      integral_complex_ofReal] using grh_shift_integral (fun y ↦ (B y : ℂ))
+        (Complex.continuous_ofReal.comp B.continuous) (fun _ ↦ 1) (fun _ ↦ rfl) 0 0
+  refine ⟨φ, ?_⟩
+  simp_rw [htest, integral_const, hphase, mul_smul_comm, ← mul_assoc, ← Circle.coe_mul,
+    mul_inv_cancel, Circle.coe_one, one_mul]
+  rw [integral_smul, hlog, Complex.real_smul]
+  exact mul_ne_zero (Complex.ofReal_ne_zero.mpr hmass) (Complex.ofReal_ne_zero.mpr B.integral_pos.ne')
 
 /-- Paper: Theorem 10.3.2.1, (10.3.2.10)–(11), p. 455.
 Take F = ℚ, any spectral basepoint choice, a = 1/2, α = 3, s = 2 and N = 2, and test the
