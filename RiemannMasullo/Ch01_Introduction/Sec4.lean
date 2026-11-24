@@ -10,6 +10,7 @@ import RiemannMasullo.AppB_AnalyticNT.Sec4b
 import RiemannMasullo.External.Grh.Lemmas.AnalyticGoodHeightDisk
 import RiemannMasullo.External.Grh.Lemmas.LogLossGoodHeight
 import RiemannMasullo.Ch12_TraceGeometric.Sec5
+import Mathlib.Analysis.Complex.Poisson
 import Mathlib.Analysis.Calculus.BumpFunction.Normed
 import Mathlib.Analysis.Calculus.ContDiff.Convolution
 
@@ -19,6 +20,7 @@ import all RiemannMasullo.AppD_SchwartzBruhat.Sec3b
 import Mathlib.Analysis.Normed.Group.Tannery
 import RiemannMasullo.External.TauCeti.Analysis.SpecialFunctions.SmoothTransition
 import RiemannMasullo.External.TauCeti.MeasureTheory.Integral.NormRpow
+import RiemannMasullo.ForMathlib.Analysis.MellinTransform.Holomorphic
 
 /-! # From the trace formula to GRH
 
@@ -1543,12 +1545,169 @@ local notation "archSum(" χ ", " h ")" =>
 local notation "primeSum(" χ ", " h ")" =>
   (∑' p : V × ℕ, introTracePrimePower χ h p.1 p.2)
 
+/-- With the radial cutoff fixed, Fubini combines the local integral and the
+mollification into a single weighted Mellin integral. -/
+private theorem introTraceApprox_archimedean_differentiable_integral
+    {X : Type*} [MeasurableSpace X] (μ : Measure X) [SFinite μ] (A : X → ℂ) (t : X → ℝ)
+    (ρ : ℝ → ℝ) (hA : Measurable A) (ht : Measurable t) (hρ : Measurable ρ)
+    (hAi : Integrable A μ) (hρi : Integrable ρ) (B ε : ℝ)
+    (hB : ∀ x, A x ≠ 0 → t x ≤ B) (hε : ∀ u, ρ u ≠ 0 → -ε ≤ u) :
+    Differentiable ℂ (fun z ↦ ∫ x, A x * ∫ u, (ρ u : ℂ) *
+      introTracePower z (t x - u) ∂volume ∂μ) := by
+  let r (p : X × ℝ) := max 1 (t p.1 - p.2)
+  let f (p : X × ℝ) := A p.1 * (ρ p.2 : ℂ) * introTracePower 0 (t p.1 - p.2)
+  have hr : Measurable r := measurable_const.max (ht.comp measurable_fst |>.sub measurable_snd)
+  have hr1 (p : X × ℝ) : 1 ≤ r p := le_max_left _ _
+  have hrp (p : X × ℝ) : 0 < r p := zero_lt_one.trans_le (hr1 p)
+  have hf : Measurable f := by
+    have hp : Measurable (introTracePower 0) := by
+      unfold introTracePower
+      exact Measurable.ite measurableSet_Ioi (by fun_prop)
+        (Measurable.ite (measurableSet_singleton 1) measurable_const measurable_const)
+    exact ((hA.comp measurable_fst).mul ((hρ.comp measurable_snd).complex_ofReal)).mul
+      (hp.comp ((ht.comp measurable_fst).sub measurable_snd))
+  have hI (z : ℂ) : Integrable (fun p ↦ f p * (r p : ℂ) ^ z) (μ.prod volume) := by
+    let C := max 1 (B + ε) ^ |z.re|
+    have hdom := (hAi.norm.mul_prod hρi.norm).mul_const C
+    refine hdom.mono' (hf.mul (hr.complex_ofReal.pow_const _)).aestronglyMeasurable
+      (Eventually.of_forall fun p ↦ ?_)
+    by_cases ha : A p.1 = 0
+    · simp [f, ha]
+    by_cases hρ0 : ρ p.2 = 0
+    · simp [f, hρ0]
+    have hrle : r p ≤ max 1 (B + ε) := by
+      exact max_le_max le_rfl (by linarith [hB _ ha, hε _ hρ0])
+    have hpow : r p ^ z.re ≤ C :=
+      (Real.rpow_le_rpow_of_exponent_le (hr1 p) (le_abs_self _)).trans
+        (Real.rpow_le_rpow (hrp p).le hrle (abs_nonneg _))
+    have hp : ‖introTracePower 0 (t p.1 - p.2)‖ ≤ 1 := by
+      unfold introTracePower
+      split_ifs <;> norm_num [norm_div]
+    simp only [f, norm_mul, Complex.norm_real, Complex.norm_cpow_eq_rpow_re_of_pos (hrp p)]
+    calc
+      _ ≤ (‖A p.1‖ * ‖ρ p.2‖ * 1) * C := by gcongr
+      _ = _ := by simp
+  have han := analyticOnNhd_integral_mul_cpow_of_integrable (μ.prod volume)
+    f r hr hrp isOpen_univ (fun z _ ↦ hI z)
+  have hd : Differentiable ℂ (fun z : ℂ ↦ ∫ p, f p * (r p : ℂ) ^ z ∂μ.prod volume) :=
+    fun z ↦ (han z (mem_univ _)).differentiableAt
+  convert hd.comp differentiable_neg using 1
+  ext1 z
+  change _ = ∫ p, f p * (r p : ℂ) ^ (-z) ∂μ.prod volume
+  rw [integral_prod _ (hI (-z))]
+  apply integral_congr_ae
+  refine ae_of_all _ fun x ↦ ?_
+  dsimp only
+  rw [← integral_const_mul]
+  apply integral_congr_ae
+  refine ae_of_all _ fun u ↦ ?_
+  have hp (a : ℝ) : introTracePower z a =
+      introTracePower 0 a * ((max 1 a : ℝ) : ℂ) ^ (-z) := by
+    by_cases ha : 1 < a
+    · simp [introTracePower, ha, max_eq_right ha.le]
+    · simp [introTracePower, ha, max_eq_left (le_of_not_gt ha)]
+  simp only [f, r, hp (t x - u), mul_assoc]
+
 /-- Paper: §1.4.3, p. 29. Each fixed-cutoff archimedean integral is entire
 in the parameter.
 Deviation: The archimedean kernels use the corrected trace formula. -/
 theorem introTraceApprox_archimedean_differentiable (χ : U𝔽) (h ρ : ℕ → ℝ → ℝ)
     (_hA : IsIntroTraceApproximation h ρ) (n : ℕ) (w : InfinitePlace F) :
-    Differentiable ℂ (fun z ↦ introTraceArchimedean χ approx(h, ρ, n, z) w) := by sorry
+    Differentiable ℂ (fun z ↦ introTraceArchimedean χ approx(h, ρ, n, z) w) := by
+  classical
+  let : MeasurableSpace w.Completion := borel _
+  let : BorelSpace w.Completion := ⟨rfl⟩
+  let : SecondCountableTopology w.Completion :=
+    (InfinitePlace.Completion.isometry_extensionEmbedding w).isEmbedding.secondCountableTopology
+  let : BorelSpace w.Completionˣ := borelSpace_units_of_continuousInv₀ _
+  let : SecondCountableTopology w.Completionˣ := Units.isEmbedding_val₀.secondCountableTopology
+  let : LocallyCompactSpace w.Completionˣ :=
+    (IsOpenUnits.isOpenEmbedding_unitsVal (M := w.Completion)).locallyCompactSpace
+  let μ := infiniteLocalMultiplicativeTamagawaMeasure F w
+  let : μ.IsHaarMeasure := infiniteLocalMultiplicativeTamagawaMeasure_haar F w
+  let localClass := IdeleClassGroup.ofCompletion (𝓞 F) F w
+  let t (u : w.Completionˣ) : ℝ := ‖u.val‖ ^ w.mult
+  have ht : Continuous t := (continuous_norm.comp Units.continuous_val).pow _
+  have ht_norm (u : w.Completionˣ) :
+      N(IdeleClassGroup.ofCompletion (𝓞 F) F w u) = t u := by
+    rw [ideleClassNorm_ofCompletion, Units.val_pow_eq_pow_val, NNReal.coe_pow]
+    rfl
+  obtain ⟨hh, -, -, ε, -, hε⟩ := _hA
+  obtain ⟨hhc, hhK, hhS, -⟩ := hh n
+  obtain ⟨-, hρc, -, hρS, -⟩ := hε n
+  obtain ⟨B, hB⟩ := hhK.bddAbove
+  let K := t ⁻¹' tsupport (h n)
+  have hK_closed : IsClosed K := (isClosed_tsupport _).preimage ht
+  have hK_norm (u : w.Completionˣ) (hu : u ∈ K) : 1 < t u := hhS hu
+  have hK : IsCompact K := by
+    let S : Set w.Completion := (fun u : w.Completion ↦ ‖u‖ ^ w.mult) ⁻¹' tsupport (h n)
+    have hS1 {u : w.Completion} (hu : u ∈ S) : 1 < ‖u‖ ^ w.mult := hhS hu
+    have hScompact : IsCompact S := by
+      have he := InfinitePlace.Completion.isometry_extensionEmbedding w
+      have hball : IsCompact (Metric.closedBall (0 : w.Completion) B) := by
+        simpa only [← he.preimage_closedBall] using he.isClosedEmbedding.isCompact_preimage
+          (isCompact_closedBall (InfinitePlace.Completion.extensionEmbedding w 0) B)
+      refine hball.of_isClosed_subset ((isClosed_tsupport _).preimage (continuous_norm.pow _)) ?_
+      intro u hu
+      rw [mem_closedBall_zero_iff]
+      have hnorm : 1 ≤ ‖u‖ := by
+        by_contra! h
+        exact (not_lt_of_ge (pow_le_one₀ (norm_nonneg _) h.le)) (hS1 hu)
+      exact (le_self_pow₀ hnorm w.mult_ne_zero).trans (hB hu)
+    refine Units.isEmbedding_val₀.isInducing.isCompact_preimage' hScompact ?_
+    intro u hu
+    have hne : u ≠ 0 := by
+      intro hzero
+      have h := hS1 hu
+      rw [hzero, norm_zero, zero_pow w.mult_ne_zero] at h
+      exact (not_lt_of_ge zero_le_one) h
+    exact ⟨Units.mk0 u hne, rfl⟩
+  let a (u : w.Completionˣ) : ℂ :=
+    star (χ (localClass u) : ℂ) * (h n (t u) : ℂ) *
+      (Real.sqrt (t u) : ℂ) / ((‖1 - u.val‖ ^ w.mult : ℝ) : ℂ)
+  have hzero (u : w.Completionˣ) (hu : u ∉ K) : a u = 0 := by
+    have hh0 : h n (t u) = 0 := image_eq_zero_of_notMem_tsupport hu
+    simp [a, hh0]
+  have hχ : Continuous (fun u : w.Completionˣ ↦ (χ (localClass u) : ℂ)) :=
+    continuous_subtype_val.comp (χ.continuous.comp (continuous_ideleClass_ofCompletion F w))
+  have hden : Continuous (fun u : w.Completionˣ ↦ ((‖1 - u.val‖ ^ w.mult : ℝ) : ℂ)) :=
+    Complex.continuous_ofReal.comp
+      ((continuous_norm.comp (continuous_const.sub Units.continuous_val)).pow _)
+  have ha : Measurable a :=
+    ((hχ.star.measurable.mul ((hhc.continuous.comp ht).measurable.complex_ofReal)).mul
+      ((Real.continuous_sqrt.comp ht).measurable.complex_ofReal)).div hden.measurable
+  have hai : Integrable a μ := by
+    have hac : ContinuousOn a K := by
+      apply ContinuousOn.div
+      · exact ((hχ.star.mul (Complex.continuous_ofReal.comp (hhc.continuous.comp ht))).mul
+          (Complex.continuous_ofReal.comp (Real.continuous_sqrt.comp ht))).continuousOn
+      · exact hden.continuousOn
+      · intro u hu
+        apply Complex.ofReal_ne_zero.mpr
+        apply pow_ne_zero
+        rw [norm_ne_zero_iff, sub_ne_zero]
+        intro he
+        have hone : t u = 1 := by simp [t, ← he]
+        exact (ne_of_gt (hK_norm u hu)) hone
+    refine ((hac.integrableOn_compact hK).integrable_indicator hK_closed.measurableSet).congr ?_
+    refine ae_of_all _ fun u ↦ ?_
+    by_cases hu : u ∈ K
+    · exact indicator_of_mem hu _
+    · rw [indicator_of_notMem hu, hzero u hu]
+  have hρi : Integrable (ρ n) := hρc.continuous.integrable_of_hasCompactSupport
+    (isCompact_Icc.of_isClosed_subset (isClosed_tsupport _) hρS)
+  have hd := introTraceApprox_archimedean_differentiable_integral μ a t (ρ n)
+    ha ht.measurable hρc.continuous.measurable hai hρi B (ε n)
+    (fun u hu ↦ hB (show u ∈ K from not_not.mp (mt (hzero u) hu)))
+    (fun x hx ↦ (hρS (subset_tsupport _ hx)).1)
+  unfold introTraceArchimedean
+  refine (differentiable_const _).mul ?_
+  convert hd using 1
+  ext1 z
+  apply integral_congr_ae
+  refine ae_of_all _ fun u ↦ ?_
+  simp only [introTraceTest, introTraceApprox, ht_norm, a, t]
+  ring
 
 /-- The local multiplicative measure in either infinite-place coordinate has density
 the reciprocal normalized norm against its additive Tamagawa measure. -/
@@ -1858,14 +2017,14 @@ theorem introTraceApprox_rat_archimedean_tendsto_atTop (h ρ : ℕ → ℝ → �
   linarith
 
 open Classical in
-/-- The local character transfers to a measurable unitary multiplier in the archimedean
-coordinate. The chart preserves integrability and evaluates the local functional. -/
-private theorem introTraceApprox_archimedean_coordinate_continuousAt_one (χ : U𝔽) {E : Type*} [NormedField E] [MeasurableSpace E] [BorelSpace E]
+/-- The additive coordinate retains the value of the local character on every unit. -/
+private theorem introTraceArchimedean_coordinate_character (χ : U𝔽) {E : Type*} [NormedField E] [MeasurableSpace E] [BorelSpace E]
     (v : InfinitePlace F) (e : v.Completion ≃+* E) (hi : Isometry e)
     (ν : Measure E) (hν : ν.restrict {0}ᶜ = ν)
     (hμ : letI := instMeasurableSpaceCompletion_riemannMasullo F v
       infiniteLocalAdditiveTamagawaMeasure F v = ν.map e.symm) :
-    ∃ m : E → ℂ, Measurable m ∧ (∀ t, ‖m t‖ = 1) ∧ (χ = 1 → ∀ t, m t = 1) ∧ ContinuousAt m 1 ∧ m 1 = 1 ∧ ∀ f : ℝ → ℂ, Measurable f →
+    ∃ m : E → ℂ, (∀ u : v.Completionˣ, m (e u.val) = star (χ (IdeleClassGroup.ofCompletion (𝓞 F) F v u) : ℂ)) ∧
+    Measurable m ∧ (∀ t, ‖m t‖ = 1) ∧ (χ = 1 → ∀ t, m t = 1) ∧ ContinuousAt m 1 ∧ m 1 = 1 ∧ ∀ f : ℝ → ℂ, Measurable f →
     (Integrable archIntegrand(χ, f, v) (infiniteLocalMultiplicativeTamagawaMeasure F v) ↔
       Integrable (fun t : E ↦ m t * ((((‖t‖ ^ v.mult)⁻¹ : ℝ) : ℂ) *
         (f (‖t‖ ^ v.mult) * (Real.sqrt (‖t‖ ^ v.mult) : ℂ) / ((‖1 - t‖ ^ v.mult : ℝ) : ℂ)))) ν) ∧
@@ -1902,7 +2061,7 @@ private theorem introTraceApprox_archimedean_coordinate_continuousAt_one (χ : U
     change (m ∘ φ) 1 = _
     rw [hcomp]
     simp [ch]
-  refine ⟨m, hm, fun t ↦ by simp [m], ?_, hnear, hm1, ?_⟩
+  refine ⟨m, fun u ↦ congrFun hcomp u, hm, fun t ↦ by simp [m], ?_, hnear, hm1, ?_⟩
   · rintro rfl t
     by_cases ht : ∃ u, φ u = t
     · obtain ⟨u, rfl⟩ := ht
@@ -1952,6 +2111,24 @@ private theorem introTraceApprox_archimedean_coordinate_continuousAt_one (χ : U
       congr 1
       funext t
       ring
+
+open Classical in
+/-- The local character transfers to a measurable unitary multiplier in the archimedean
+coordinate. The chart preserves integrability and evaluates the local functional. -/
+private theorem introTraceApprox_archimedean_coordinate_continuousAt_one (χ : U𝔽) {E : Type*} [NormedField E] [MeasurableSpace E] [BorelSpace E]
+    (v : InfinitePlace F) (e : v.Completion ≃+* E) (hi : Isometry e)
+    (ν : Measure E) (hν : ν.restrict {0}ᶜ = ν)
+    (hμ : letI := instMeasurableSpaceCompletion_riemannMasullo F v
+      infiniteLocalAdditiveTamagawaMeasure F v = ν.map e.symm) :
+    ∃ m : E → ℂ, Measurable m ∧ (∀ t, ‖m t‖ = 1) ∧ (χ = 1 → ∀ t, m t = 1) ∧ ContinuousAt m 1 ∧ m 1 = 1 ∧ ∀ f : ℝ → ℂ, Measurable f →
+    (Integrable archIntegrand(χ, f, v) (infiniteLocalMultiplicativeTamagawaMeasure F v) ↔
+      Integrable (fun t : E ↦ m t * ((((‖t‖ ^ v.mult)⁻¹ : ℝ) : ℂ) *
+        (f (‖t‖ ^ v.mult) * (Real.sqrt (‖t‖ ^ v.mult) : ℂ) / ((‖1 - t‖ ^ v.mult : ℝ) : ℂ)))) ν) ∧
+    introTraceArchimedean χ f v =
+      (if v.IsReal then (1 / 2 : ℂ) else 1 / (2 * (Real.pi:ℂ))) * ∫ t : E, m t * ((((‖t‖ ^ v.mult)⁻¹ : ℝ) : ℂ) *
+        (f (‖t‖ ^ v.mult) * (Real.sqrt (‖t‖ ^ v.mult) : ℂ) / ((‖1 - t‖ ^ v.mult : ℝ) : ℂ))) ∂ν := by
+  obtain ⟨m, _, hm, hn, htriv, hc, h1, he⟩ := introTraceArchimedean_coordinate_character χ v e hi ν hν hμ
+  exact ⟨m, hm, hn, htriv, hc, h1, he⟩
 
 open Classical in
 /-- The local coordinate formula, with its trivial-character specialization. -/
@@ -2243,6 +2420,399 @@ private theorem introTraceApprox_archimedean_sub_shiftTwo_complexCoordinate (χ 
   exact ⟨m, hm, hnm, by
     simpa only [InfinitePlace.not_isReal_iff_isComplex.mpr hw, ite_false, hw.mult_eq_two,
       Real.sqrt_sq (norm_nonneg _)] using he⟩
+
+section
+
+open Complex Metric
+open scoped ComplexConjugate ENNReal
+
+private theorem introTraceArchimedean_poisson_nat {r a : ℝ} (ha : |a| < r) (k : ℕ) :
+    (2 * Real.pi)⁻¹ • (∫ θ in 0..2 * Real.pi,
+      ((r ^ 2 - a ^ 2) / ‖circleMap 0 r θ - (a : ℂ)‖ ^ 2) • (Circle.exp θ : ℂ) ^ k) =
+      ((a / r : ℝ) : ℂ) ^ k := by
+  have hr : 0 < r := (abs_nonneg a).trans_lt ha
+  let f : ℂ → ℂ := fun z ↦ (z / (r : ℂ)) ^ k
+  have hf : DiffContOnCl ℂ f (ball 0 r) := Differentiable.diffContOnCl (by dsimp [f]; fun_prop)
+  have hw : (a : ℂ) ∈ ball 0 r := by simpa [mem_ball, Complex.norm_real, Real.norm_eq_abs] using ha
+  have hp := hf.circleAverage_poissonKernel_smul' hw
+  simpa only [Real.circleAverage_def, sub_zero, norm_mul, Circle.norm_coe, mul_one, Complex.norm_real,
+    Real.norm_eq_abs, abs_of_pos hr, sq_abs, f, circleMap_zero, ← Circle.coe_exp,
+    mul_div_cancel_left₀ _ (Complex.ofReal_ne_zero.mpr hr.ne'), Complex.ofReal_div] using hp
+
+private theorem introTraceArchimedean_poisson_int {r a : ℝ} (ha : |a| < r) (n : ℤ) :
+    (2 * Real.pi)⁻¹ • (∫ θ in 0..2 * Real.pi,
+      ((r ^ 2 - a ^ 2) / ‖circleMap 0 r θ - (a : ℂ)‖ ^ 2) • (Circle.exp θ : ℂ) ^ n) =
+      ((a / r : ℝ) : ℂ) ^ n.natAbs := by
+  cases n with
+  | ofNat k => exact introTraceArchimedean_poisson_nat ha k
+  | negSucc k =>
+    have h := congrArg (starRingEnd ℂ) (introTraceArchimedean_poisson_nat ha (k+1))
+    simp only [Complex.real_smul, map_mul, Complex.conj_ofReal, ← intervalIntegral.intervalIntegral_conj,
+      map_pow, ← Complex.inv_eq_conj (Circle.norm_coe _), inv_pow] at h
+    simpa only [Int.natAbs_negSucc, zpow_negSucc, Complex.real_smul] using h
+
+private theorem introTraceArchimedean_poisson_exterior {r : ℝ} (hr : 1 < r) (n : ℤ) :
+    (2 * Real.pi)⁻¹ • (∫ θ in 0..2 * Real.pi,
+      (‖(1 : ℂ) - circleMap 0 r θ‖ ^ 2)⁻¹ • (Circle.exp θ : ℂ) ^ n) =
+      ((r⁻¹ ^ n.natAbs / (r ^ 2 - 1) : ℝ) : ℂ) := by
+  have h := introTraceArchimedean_poisson_int (r := r) (a := 1) (by simpa using hr) n
+  let g : ℝ → ℂ := fun θ ↦ (‖(1 : ℂ) - circleMap 0 r θ‖ ^ 2)⁻¹ • (Circle.exp θ : ℂ) ^ n
+  have hweighted : (r ^ 2 - 1) • ((2 * Real.pi)⁻¹ • (∫ θ in 0..2 * Real.pi, g θ)) =
+      ((r⁻¹ : ℝ) : ℂ) ^ n.natAbs := by
+    rw [smul_comm, ← intervalIntegral.integral_smul]
+    simpa only [g, smul_smul, ← div_eq_mul_inv, norm_sub_rev (1 : ℂ), Complex.ofReal_one,
+      one_pow, one_div] using h
+  have hne : r ^ 2 - 1 ≠ 0 := ne_of_gt (by nlinarith [sq_nonneg (r-1)])
+  calc
+    _ = (r ^ 2 - 1)⁻¹ • ((r ^ 2 - 1) • ((2 * Real.pi)⁻¹ • (∫ θ in 0..2 * Real.pi, g θ))) :=
+      (inv_smul_smul₀ hne _).symm
+    _ = _ := by rw [hweighted, Complex.real_smul]; push_cast; ring
+
+open scoped ENNReal
+
+private theorem introTraceArchimedean_plane_average (f : ℂ → ℂ) (hm : Measurable f) (hi : Integrable f) :
+    (∫ z, f z) = (2 * Real.pi) • ∫ r in Ioi (0:ℝ), r • Real.circleAverage f 0 r := by
+  let F (p : ℝ × ℝ) := p.1 • f (Complex.polarCoord.symm p)
+  have hpol : Measurable (fun p : ℝ × ℝ ↦ Complex.polarCoord.symm p) := by
+    simp only [Complex.polarCoord_symm_apply]
+    fun_prop
+  have hF : IntegrableOn F polarCoord.target := by
+    refine ⟨(measurable_fst.smul (hm.comp hpol)).aestronglyMeasurable, ?_⟩
+    apply hasFiniteIntegral_iff_eNorm.mpr
+    calc
+      (∫⁻ p in polarCoord.target, ‖F p‖ₑ) = ∫⁻ p in polarCoord.target,
+          ENNReal.ofReal p.1 • ‖f (Complex.polarCoord.symm p)‖ₑ := by
+        apply setLIntegral_congr_fun (measurableSet_Ioi.prod measurableSet_Ioo)
+        intro p hp
+        have hr : 0 < p.1 := hp.1
+        have hx : ‖p.1‖ₑ = ENNReal.ofReal p.1 := by
+          rw [← ofReal_norm p.1, Real.norm_eq_abs, abs_of_pos hr]
+        exact (eNorm_smul p.1 _).trans (congrArg (· * ‖f (Complex.polarCoord.symm p)‖ₑ) hx)
+      _ = ∫⁻ z, ‖f z‖ₑ := Complex.lintegral_comp_polarCoord_symm (fun z : ℂ ↦ ‖f z‖ₑ)
+      _ < ∞ := hasFiniteIntegral_iff_eNorm.mp hi.hasFiniteIntegral
+  have hp (r θ : ℝ) : Complex.polarCoord.symm (r,θ) = circleMap 0 r θ := by
+    simp [Complex.polarCoord_symm_apply, circleMap_zero, Complex.exp_mul_I]
+  have hcircle (r : ℝ) : (∫ θ in Ioo (-Real.pi) Real.pi, f (circleMap 0 r θ)) =
+      (2 * Real.pi) • Real.circleAverage f 0 r := by
+    have he := ((periodic_circleMap 0 r).comp f).intervalIntegral_add_eq 0 (-Real.pi)
+    rw [zero_add, show -Real.pi + 2 * Real.pi = Real.pi by ring,
+      intervalIntegral.integral_of_le (by linarith [Real.pi_pos] : -Real.pi ≤ Real.pi),
+      integral_Ioc_eq_integral_Ioo] at he
+    rw [Real.circleAverage_def, smul_inv_smul₀ (ne_of_gt Real.two_pi_pos)]
+    exact he.symm
+  rw [← Complex.integral_comp_polarCoord_symm, polarCoord_target]
+  change (∫ p in Ioi (0 : ℝ) ×ˢ Ioo (-Real.pi) Real.pi, F p ∂(volume.prod volume)) = _
+  rw [setIntegral_prod (μ := volume) (ν := volume) F hF, ← MeasureTheory.integral_smul]
+  apply setIntegral_congr_fun measurableSet_Ioi
+  intro r _
+  simp only [F, hp, MeasureTheory.integral_smul, hcircle, smul_comm r (2 * Real.pi)]
+
+/-- Angular integration of an exterior Fourier mode, with Euclidean area measure. -/
+private theorem introTraceArchimedean_plane_exterior (f : ℂ → ℂ) (b : ℝ → ℂ) (n : ℤ)
+    (hm : Measurable f) (hi : Integrable f)
+    (hb : ∀ r : ℝ, r ≤ 1 → 0 ≤ r → b r = 0)
+    (hs : ∀ r : ℝ, 0 < r → ∀ θ : ℝ, f (circleMap 0 r θ) =
+      b r * ((‖(1 : ℂ) - circleMap 0 r θ‖ ^ 2)⁻¹ • (Circle.exp θ : ℂ) ^ n)) :
+    (∫ z, f z) = (2 * Real.pi) • ∫ r in Ioi (1 : ℝ),
+      r • (b r * ((r⁻¹ ^ n.natAbs / (r ^ 2 - 1) : ℝ) : ℂ)) := by
+  have hc (r : ℝ) (hr : 0 < r) : Real.circleAverage f 0 r =
+      b r * ((r⁻¹ ^ n.natAbs / (r ^ 2 - 1) : ℝ) : ℂ) := by
+    rw [Real.circleAverage_def, show (fun θ ↦ f (circleMap 0 r θ)) = _ from funext (hs r hr)]
+    rw [intervalIntegral.integral_const_mul, Complex.real_smul, mul_left_comm]
+    by_cases h1 : 1 < r
+    · rw [← Complex.real_smul, introTraceArchimedean_poisson_exterior h1 n]
+    · simp [hb r (le_of_not_gt h1) hr.le]
+  rw [introTraceArchimedean_plane_average f hm hi]
+  congr 1
+  calc
+    _ = ∫ r in Ioi (0 : ℝ), r • (b r * ((r⁻¹ ^ n.natAbs / (r ^ 2 - 1) : ℝ) : ℂ)) :=
+      setIntegral_congr_fun measurableSet_Ioi fun r hr ↦ congrArg (r • ·) (hc r hr)
+    _ = _ := (setIntegral_eq_of_subset_of_forall_sdiff_eq_zero measurableSet_Ioi
+      (Ioi_subset_Ioi zero_le_one) fun r hr ↦ by
+        have hle : r ≤ 1 := le_of_not_gt hr.2
+        simp [hb r hle (le_of_lt hr.1)])
+
+/-- At a complex place, angular integration leaves the absolute value of the character's integer frequency. -/
+private theorem introTraceArchimedean_complex_radial (χ : U𝔽) (w : InfinitePlace F)
+    (hw : w.IsComplex) (f : ℝ → ℂ) (hf : Measurable f) (hz : ∀ x, x ≤ 1 → f x = 0)
+    (hi : Integrable archIntegrand(χ, f, w) (infiniteLocalMultiplicativeTamagawaMeasure F w)) :
+    let p := (complexHeckeCharacter_parameters χ w hw).exists.choose
+    introTraceArchimedean χ f w = 2 * ∫ r in Ioi (1 : ℝ),
+      star ((((r ^ 2 : ℝ) : ℂ)) ^ p.1) * f (r ^ 2) *
+        ((r⁻¹ ^ p.2.natAbs / (r ^ 2 - 1) : ℝ) : ℂ) := by
+  intro p
+  let e := InfinitePlace.Completion.ringEquivComplexOfIsComplex hw
+  have hν : (2 • (volume : Measure ℂ)).restrict {(0 : ℂ)}ᶜ = 2 • volume := by
+    simp [two_smul, Measure.restrict_add, restrict_compl_singleton]
+  obtain ⟨m, hmu, hm, -, -, -, -, hchart⟩ := introTraceArchimedean_coordinate_character χ w e
+    (InfinitePlace.Completion.isometryEquivComplexOfIsComplex hw).isometry (2 • volume) hν
+    (dite_eq_right (InfinitePlace.not_isReal_iff_isComplex.mpr hw))
+  let G (z : ℂ) := m z * ((((‖z‖ ^ 2)⁻¹ : ℝ) : ℂ) *
+    (f (‖z‖ ^ 2) * (‖z‖ : ℂ) / ((‖1 - z‖ ^ 2 : ℝ) : ℂ)))
+  have hGm : Measurable G := by dsimp [G]; fun_prop
+  obtain ⟨hGi, hv⟩ := hchart f hf
+  rw [if_neg (InfinitePlace.not_isReal_iff_isComplex.mpr hw)] at hv
+  simp only [hw.mult_eq_two, Real.sqrt_sq (norm_nonneg _)] at hv hGi hi
+  change introTraceArchimedean χ f w = (1 / (2 * (Real.pi : ℂ))) * ∫ z, G z ∂(2 • volume) at hv
+  have hG : Integrable G volume := by
+    have h : Integrable G (2 • volume) := hGi.mp hi
+    simpa only [two_smul, integrable_add_measure, and_self] using h
+  let b (r : ℝ) := star (((r ^ 2 : ℝ) : ℂ) ^ p.1) * f (r ^ 2) / (r : ℂ)
+  have hunit (r θ : ℝ) (hr : 0 < r) : m (circleMap 0 r θ) =
+      star (((r^2 : ℝ) : ℂ) ^ p.1) * (Circle.exp θ : ℂ) ^ (-p.2) := by
+    let z := circleMap 0 r θ
+    have hn : ‖z‖ = r := (norm_circleMap_zero _ _).trans (abs_of_pos hr)
+    have hne : z ≠ 0 := norm_ne_zero_iff.mp (hn.trans_ne hr.ne')
+    let u := Units.mk0 z hne
+    let v := Units.map e.symm.toMonoidHom u
+    have he : e v.val = z := e.apply_symm_apply _
+    have hh := hmu v
+    rw [he] at hh
+    have hp := (complexHeckeCharacter_parameters χ w hw).exists.choose_spec.2 u
+    change (χ (IdeleClassGroup.ofCompletion (𝓞 F) F w v) : ℂ) * _ ^ (0 : ℂ) = _ at hp
+    rw [Complex.cpow_zero, mul_one] at hp
+    change (χ (IdeleClassGroup.ofCompletion (𝓞 F) F w v) : ℂ) =
+      ((‖z‖ ^ 2 : ℝ) : ℂ) ^ p.1 * (z / (‖z‖ : ℂ)) ^ p.2 at hp
+    rw [hh, hp, hn]
+    have ha : z / (r : ℂ) = (Circle.exp θ : ℂ) := by
+      rw [show z = (r : ℂ) * (Circle.exp θ : ℂ) by simp [z, circleMap_zero, Circle.coe_exp],
+        mul_div_cancel_left₀ _ (Complex.ofReal_ne_zero.mpr hr.ne')]
+    rw [ha]
+    change conj (_ * _) = conj _ * _
+    rw [map_mul, map_zpow₀, ← Complex.inv_eq_conj (Circle.norm_coe _), inv_zpow, zpow_neg]
+  have hs (r : ℝ) (hr : 0 < r) (θ : ℝ) : G (circleMap 0 r θ) =
+      b r * ((‖(1 : ℂ) - circleMap 0 r θ‖ ^ 2)⁻¹ • (Circle.exp θ : ℂ) ^ (-p.2)) := by
+    dsimp only [G, b]
+    rw [hunit r θ hr, norm_circleMap_zero, abs_of_pos hr, Complex.real_smul]
+    push_cast
+    field_simp
+  have hvan (r : ℝ) (hr : r ≤ 1) : 0 ≤ r → b r = 0 := by
+    intro h0
+    have hsq : r ^ 2 ≤ 1 := by nlinarith [mul_nonneg (sub_nonneg.mpr hr) (by linarith : 0 ≤ 1+r)]
+    simp only [b, hz (r ^ 2) hsq, mul_zero, zero_div]
+  have hplane := introTraceArchimedean_plane_exterior G b (-p.2) hGm hG hvan hs
+  rw [hv, two_smul, integral_add_measure hG hG, hplane]
+  simp only [Complex.real_smul, Complex.ofReal_mul, Complex.ofReal_ofNat, Int.natAbs_neg]
+  have hpi : (Real.pi : ℂ) ≠ 0 := Complex.ofReal_ne_zero.mpr Real.pi_ne_zero
+  rw [show ∀ x : ℂ, 1 / (2 * (Real.pi : ℂ)) *
+        (2 * (Real.pi : ℂ) * x + 2 * (Real.pi : ℂ) * x) = 2 * x by intro x; field_simp; ring]
+  congr 1
+  apply setIntegral_congr_fun measurableSet_Ioi
+  intro r hr
+  dsimp only [b]
+  have hr' : (r : ℂ) ≠ 0 := Complex.ofReal_ne_zero.mpr (zero_lt_one.trans hr).ne'
+  field_simp
+
+private theorem introTraceArchimedean_exp_half_subst (g : ℝ → ℂ) :
+    (∫ r in Ioi (1 : ℝ), g r) =
+      ∫ t in Ioi (0 : ℝ), (Real.exp (t/2)/2) • g (Real.exp (t/2)) := by
+  let h (t : ℝ) := Real.exp (t / 2)
+  have him : h '' Ioi 0 = Ioi 1 := by
+    ext r
+    constructor
+    · rintro ⟨t, ht, rfl⟩
+      exact Real.one_lt_exp_iff.mpr (by linarith [show 0 < t from ht])
+    · intro hr
+      refine ⟨2 * Real.log r, mul_pos (by norm_num) (Real.log_pos hr), ?_⟩
+      dsimp [h]
+      rw [mul_div_cancel_left₀ _ (by norm_num : (2 : ℝ) ≠ 0), Real.exp_log (zero_lt_one.trans hr)]
+  rw [← him]
+  apply integral_image_eq_integral_deriv_smul_of_monotoneOn measurableSet_Ioi
+  · intro t _
+    simpa only [h, Function.comp_def, id_eq, div_eq_mul_inv, one_mul] using
+      (Real.hasDerivAt_exp (t / 2) |>.comp t ((hasDerivAt_id t).div_const 2)).hasDerivWithinAt
+  · exact fun x _ y _ hxy ↦ Real.exp_le_exp.mpr (div_le_div_of_nonneg_right hxy (by norm_num))
+
+private theorem introTraceArchimedean_gamma_density (a : ℂ) (ha : a.re = 0) (k : ℕ) (t : ℝ)
+    (ht : 0 < t) :
+    let r := Real.exp (t / 2)
+    (r : ℂ) * star ((((r ^ 2 : ℝ) : ℂ)) ^ a) * ((r⁻¹ ^ k / (r ^ 2 - 1) : ℝ) : ℂ) =
+      Complex.exp (-(1/2 + a + (k : ℂ)/2) * (t : ℂ)) / (1 - (Real.exp (-t) : ℝ)) := by
+  intro r
+  have hr0 : 0 < r := Real.exp_pos _
+  have hr1 : 1 < r := Real.one_lt_exp_iff.mpr (by linarith)
+  have hr2 : r ^ 2 = Real.exp t := by
+    dsimp only [r]
+    rw [sq, ← Real.exp_add, add_halves]
+  have hconj : conj a = -a := by apply Complex.ext <;> simp [ha]
+  have hcp : star (((r ^ 2 : ℝ) : ℂ) ^ a) = Complex.exp (-a * (t : ℂ)) := by
+    rw [hr2, Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr (Real.exp_pos t).ne'),
+      ← Complex.ofReal_log (Real.exp_pos _).le, Real.log_exp]
+    change conj (Complex.exp _) = _
+    rw [← Complex.exp_conj, map_mul, Complex.conj_ofReal, hconj, mul_comm]
+  have he : Complex.exp (-((t : ℂ)/2)) = (r : ℂ)⁻¹ := by
+    rw [Complex.exp_neg]
+    simp only [r, Complex.ofReal_exp, Complex.ofReal_div, Complex.ofReal_ofNat]
+  have hk : Complex.exp (-(1/2 + a + (k : ℂ)/2) * (t : ℂ)) =
+      (r : ℂ)⁻¹ * Complex.exp (-a * (t : ℂ)) * ((r : ℂ)⁻¹)^k := by
+    rw [show -(1/2 + a + (k : ℂ)/2) * (t : ℂ) =
+      -((t : ℂ)/2) + -a * (t : ℂ) + (k : ℂ) * -((t : ℂ)/2) by ring,
+      Complex.exp_add, Complex.exp_add, Complex.exp_nat_mul, he]
+  rw [hcp, hk, Real.exp_neg, ← hr2]
+  push_cast
+  have hr : (r : ℂ) ≠ 0 := Complex.ofReal_ne_zero.mpr hr0.ne'
+  have hd : (r : ℂ)^2 - 1 ≠ 0 := by exact_mod_cast ne_of_gt (by nlinarith [sq_nonneg (r-1)] : 0 < r^2-1)
+  field_simp
+
+/-- Paper: §1.4.1, p. 28, and Theorem B.4.2.2, p. 616. For a radial test supported
+above norm one the complex local trace term equals the negative digamma integral. -/
+private theorem introTraceArchimedean_complex_eq_neg_digamma (χ : U𝔽) (w : InfinitePlace F)
+    (hw : w.IsComplex) (f : ℝ → ℂ) (hf : Measurable f) (hz : ∀ x, x ≤ 1 → f x = 0)
+    (hi : Integrable archIntegrand(χ, f, w) (infiniteLocalMultiplicativeTamagawaMeasure F w)) :
+    let p := (complexHeckeCharacter_parameters χ w hw).exists.choose
+    introTraceArchimedean χ f w = -(∫ t in Ioi (0 : ℝ), heckeArchimedeanDigammaKernel 1
+      (1/2 + p.1 + (p.2.natAbs : ℂ)/2) (1/2 - p.1 + (p.2.natAbs : ℂ)/2)
+      (fun y ↦ f (Real.exp y)) t) := by
+  intro p
+  rw [introTraceArchimedean_complex_radial χ w hw f hf hz hi, introTraceArchimedean_exp_half_subst,
+    ← integral_const_mul, ← integral_neg]
+  apply setIntegral_congr_fun measurableSet_Ioi
+  intro t ht
+  let r := Real.exp (t/2)
+  have hr2 : r ^ 2 = Real.exp t := by dsimp [r]; rw [sq, ← Real.exp_add, add_halves]
+  have hφ0 : f (Real.exp 0) = 0 := by rw [Real.exp_zero]; exact hz 1 le_rfl
+  have hφn : f (Real.exp (-t)) = 0 := hz _ (Real.exp_le_one_iff.mpr (neg_nonpos.mpr (le_of_lt ht)))
+  have hden := introTraceArchimedean_gamma_density p.1
+    (complexHeckeCharacter_parameters χ w hw).exists.choose_spec.1 p.2.natAbs t ht
+  change (r : ℂ) * _ * _ = _ at hden
+  simp only [heckeArchimedeanDigammaKernel, hφ0, hφn, one_mul, mul_zero, zero_div, zero_mul, add_zero,
+    zero_sub, neg_neg, Complex.ofReal_one]
+  change 2 * ((r / 2) • (star (((r^2 : ℝ) : ℂ)^p.1) * f (r^2) * _)) = _
+  rw [Complex.real_smul, Complex.ofReal_div, Complex.ofReal_ofNat]
+  rw [show 2 * ((r : ℂ) / 2 * (star (((r^2 : ℝ) : ℂ)^p.1) * f (r^2) *
+      ((r⁻¹ ^ p.2.natAbs / (r ^ 2 - 1) : ℝ) : ℂ))) =
+      f (r^2) * ((r : ℂ) * star (((r^2 : ℝ) : ℂ)^p.1) *
+      ((r⁻¹ ^ p.2.natAbs / (r ^ 2 - 1) : ℝ) : ℂ)) by ring, hden, hr2]
+  ring
+
+/-- The even and odd real characters give the two sign averages in the real gamma factor. -/
+private theorem introTraceArchimedean_real_radial (χ : U𝔽) (w : InfinitePlace F)
+    (hw : w.IsReal) (f : ℝ → ℂ) (hf : Measurable f) (hz : ∀ x, x ≤ 1 → f x = 0)
+    (hi : Integrable archIntegrand(χ, f, w) (infiniteLocalMultiplicativeTamagawaMeasure F w)) :
+    let p := (realHeckeCharacter_parameters χ w hw).exists.choose
+    introTraceArchimedean χ f w = ∫ r in Ioi (1 : ℝ),
+      star ((r : ℂ) ^ p.1) * f r * (Real.sqrt r : ℂ) *
+        ((r⁻¹ ^ p.2.val / (r ^ 2 - 1) : ℝ) : ℂ) := by
+  intro p
+  let e := InfinitePlace.Completion.ringEquivRealOfIsReal hw
+  obtain ⟨m, hmu, -, -, -, -, -, hchart⟩ := introTraceArchimedean_coordinate_character χ w e
+    (InfinitePlace.Completion.isometryEquivRealOfIsReal hw).isometry volume
+    (restrict_compl_singleton (μ := volume) 0) (dite_eq_left hw)
+  let G (x : ℝ) := m x * (((|x|⁻¹ : ℝ) : ℂ) *
+    (f |x| * (Real.sqrt |x| : ℂ) / ((|1 - x| : ℝ) : ℂ)))
+  obtain ⟨hGi, hv⟩ := hchart f hf
+  have hG : Integrable G := by
+    simpa only [G, hw.mult_eq_one, pow_one, Real.norm_eq_abs] using (hGi.mp hi)
+  have hval : introTraceArchimedean χ f w = (1 / 2 : ℂ) * ∫ x, G x := by
+    simpa only [G, hw, ite_true, hw.mult_eq_one, pow_one, Real.norm_eq_abs] using hv
+  have hunit (x : ℝ) (hx : x ≠ 0) : m x = star (((|x| : ℝ) : ℂ) ^ p.1) *
+      (if 0 < x then 1 else (-1 : ℂ)) ^ p.2.val := by
+    let u := Units.mk0 x hx
+    let v := Units.map e.symm.toMonoidHom u
+    have hh := hmu v
+    rw [show e v.val = x from e.apply_symm_apply _] at hh
+    have hp := (realHeckeCharacter_parameters χ w hw).exists.choose_spec.2 u
+    change (χ (IdeleClassGroup.ofCompletion (𝓞 F) F w v) : ℂ) * _ ^ (0 : ℂ) = _ at hp
+    rw [Complex.cpow_zero, mul_one] at hp
+    change (χ (IdeleClassGroup.ofCompletion (𝓞 F) F w v) : ℂ) =
+      ((|x| : ℝ) : ℂ) ^ p.1 * (if 0 < x then 1 else (-1 : ℂ)) ^ p.2.val at hp
+    rw [hh, hp]
+    split <;> simp
+  have hneg : (∫ x in Iic (0 : ℝ), G x) = ∫ x in Ioi (0 : ℝ), G (-x) := by
+    simpa using (integral_comp_neg_Ioi 0 G).symm
+  rw [hval, ← integral_add_compl (s := Ioi (0 : ℝ)) measurableSet_Ioi hG, compl_Ioi, hneg,
+    ← integral_add hG.integrableOn hG.comp_neg.integrableOn, ← integral_const_mul]
+  have hsmall (r : ℝ) (hr : 0 < r) (hu : r ≤ 1) :
+      (1 / 2 : ℂ) * (G r + G (-r)) = 0 := by
+    simp only [G, abs_neg, abs_of_pos hr, hz r hu, zero_mul, zero_div, mul_zero, add_zero]
+  rw [setIntegral_eq_of_subset_of_forall_sdiff_eq_zero measurableSet_Ioi
+    (Ioi_subset_Ioi zero_le_one) (fun r hr ↦ hsmall r hr.1 (le_of_not_gt hr.2))]
+  apply setIntegral_congr_fun measurableSet_Ioi
+  intro r hr
+  have hr1 : 1 < r := hr
+  have h0 : 0 < r := zero_lt_one.trans hr1
+  have hminus : 0 ≤ 1 + r := by linarith
+  have habs : |1 - r| = r - 1 := by rw [abs_of_neg (sub_neg.mpr hr)]; ring
+  simp only [G, hunit r h0.ne', hunit (-r) (neg_ne_zero.mpr h0.ne'), h0, ite_true,
+    not_lt_of_ge (neg_nonpos.mpr h0.le), ite_false, abs_neg, abs_of_pos h0, habs,
+    sub_neg_eq_add, abs_of_nonneg hminus, one_pow, mul_one]
+  have hc : (r : ℂ) ≠ 0 := Complex.ofReal_ne_zero.mpr h0.ne'
+  have hm : (r : ℂ) - 1 ≠ 0 := by exact_mod_cast (sub_pos.mpr hr).ne'
+  have hp : 1 + (r : ℂ) ≠ 0 := by exact_mod_cast (by linarith : (1:ℝ) + r ≠ 0)
+  have hd : (r : ℂ)^2 - 1 ≠ 0 := by exact_mod_cast ne_of_gt (by nlinarith [sq_nonneg (r-1)] : 0 < r^2-1)
+  generalize hε : p.2 = ε
+  fin_cases ε <;> push_cast <;> norm_num <;> field_simp <;> ring
+
+/-- The parity sign average cancels one factor of the real digamma denominator. -/
+private theorem introTraceArchimedean_real_eq_neg_digamma (χ : U𝔽) (w : InfinitePlace F)
+    (hw : w.IsReal) (f : ℝ → ℂ) (hf : Measurable f) (hz : ∀ x, x ≤ 1 → f x = 0)
+    (hi : Integrable archIntegrand(χ, f, w) (infiniteLocalMultiplicativeTamagawaMeasure F w)) :
+    let p := (realHeckeCharacter_parameters χ w hw).exists.choose
+    introTraceArchimedean χ f w = -(∫ t in Ioi (0 : ℝ), heckeArchimedeanDigammaKernel (1/2)
+      ((1/2 + p.1 + p.2.val)/2) ((1/2 - p.1 + p.2.val)/2)
+      (fun y ↦ f (Real.exp y)) t) := by
+  intro p
+  rw [introTraceArchimedean_real_radial χ w hw f hf hz hi, introTraceArchimedean_exp_half_subst,
+    ← integral_neg]
+  apply setIntegral_congr_fun measurableSet_Ioi
+  intro t ht
+  let r := Real.exp (t/2)
+  have hr0 : 0 < r := Real.exp_pos _
+  have ha : p.1.re = 0 := (realHeckeCharacter_parameters χ w hw).exists.choose_spec.1
+  have hden := introTraceArchimedean_gamma_density (p.1/2) (by simp [ha]) p.2.val t ht
+  have hpow : (((r ^ 2 : ℝ) : ℂ)) ^ (p.1/2) = (r : ℂ)^p.1 := by
+    rw [Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr (pow_pos hr0 2).ne'),
+      Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr hr0.ne'), ← Complex.ofReal_log (sq_nonneg r),
+      ← Complex.ofReal_log hr0.le, Real.log_pow]
+    congr 1
+    push_cast
+    ring
+  change (r : ℂ) * star ((((r ^ 2 : ℝ) : ℂ)) ^ (p.1/2)) * _ = _ at hden
+  rw [hpow] at hden
+  have hroot : (Real.sqrt r : ℂ) = Complex.exp ((t : ℂ)/4) := by
+    rw [show Real.sqrt r = Real.exp ((t/2)/2) from (Real.exp_half _).symm, Complex.ofReal_exp]
+    congr 1; push_cast; ring
+  have he : (Real.sqrt r : ℂ) * Complex.exp (-(1/2 + p.1/2 + (p.2.val : ℂ)/2) * (t : ℂ)) =
+      Complex.exp (-((1/2 + p.1 + (p.2.val : ℂ))/2) * (t : ℂ)) := by
+    rw [hroot, ← Complex.exp_add]; congr 1; ring
+  have hφ0 : f (Real.exp 0) = 0 := by rw [Real.exp_zero]; exact hz 1 le_rfl
+  have hφn : f (Real.exp (-(1/2*t))) = 0 :=
+    hz _ (Real.exp_le_one_iff.mpr (by linarith [show 0 < t from ht]))
+  simp only [heckeArchimedeanDigammaKernel, hφ0, hφn, mul_zero, zero_mul, add_zero, zero_div,
+    zero_sub, mul_neg, neg_neg]
+  rw [show (1/2 : ℝ)*t = t/2 by ring]
+  change (r/2) • (star ((r : ℂ)^p.1) * f r * (Real.sqrt r : ℂ) * _) = _
+  rw [Complex.real_smul, Complex.ofReal_div, Complex.ofReal_ofNat]
+  rw [show (r : ℂ)/2 * (star ((r : ℂ)^p.1) * f r * (Real.sqrt r : ℂ) *
+      ((r⁻¹ ^ p.2.val / (r^2-1) : ℝ) : ℂ)) = (1/2 : ℂ) * f r * ((Real.sqrt r : ℂ) *
+      ((r : ℂ) * star ((r : ℂ)^p.1) * ((r⁻¹ ^ p.2.val / (r^2-1) : ℝ) : ℂ))) by ring,
+    hden, ← mul_div_assoc, he]
+  push_cast
+  ring
+
+open Classical in
+/-- Paper: §1.4.1, p. 28; Theorem B.4.2.2, p. 616. On an integrable test supported above
+norm one, the local trace integral equals the negative archimedean digamma term of the
+explicit formula. At a real place the two signs recover the parity of the local character.
+At a complex place the Poisson integral gives its absolute angular frequency. -/
+theorem introTraceArchimedean_eq_neg_digamma_of_supported_above_one (χ : U𝔽) (w : InfinitePlace F)
+    (f : ℝ → ℂ) (hf : Measurable f) (hz : ∀ x, x ≤ 1 → f x = 0)
+    (hi : Integrable archIntegrand(χ, f, w) (infiniteLocalMultiplicativeTamagawaMeasure F w)) :
+    introTraceArchimedean χ f w = -(if hw : w.IsReal then
+      let p := (realHeckeCharacter_parameters χ w hw).exists.choose
+      ∫ t in Ioi (0 : ℝ), heckeArchimedeanDigammaKernel (1/2)
+        ((1/2 + p.1 + p.2.val)/2) ((1/2 - p.1 + p.2.val)/2) (fun y ↦ f (Real.exp y)) t
+    else
+      let p := (complexHeckeCharacter_parameters χ w (InfinitePlace.not_isReal_iff_isComplex.mp hw)).exists.choose
+      ∫ t in Ioi (0 : ℝ), heckeArchimedeanDigammaKernel 1
+        (1/2 + p.1 + (p.2.natAbs : ℂ)/2) (1/2 - p.1 + (p.2.natAbs : ℂ)/2)
+        (fun y ↦ f (Real.exp y)) t) := by
+  split_ifs with hw
+  · exact introTraceArchimedean_real_eq_neg_digamma χ w hw f hf hz hi
+  · exact introTraceArchimedean_complex_eq_neg_digamma χ w
+      (InfinitePlace.not_isReal_iff_isComplex.mp hw) f hf hz hi
+
+end
 
 /-- The radial tail in the complex plane is integrable for exponents below minus two. -/
 private theorem introTraceApprox_archimedean_sub_shiftTwo_complexTail {d : ℝ} (hd : d < -2) :

@@ -4428,7 +4428,18 @@ private theorem sLocalStandardThetaTensor_exists_representative
 
 /-- Paper: Theorem 6.2.2.1(1), p. 299.
 The archimedean Schwartz–Bruhat space is a Fréchet space. -/
-private theorem infiniteSchwartzBruhat_frechet : IsFrechetTVS ℬ∞ := by sorry
+private theorem infiniteSchwartzBruhat_frechet : IsFrechetTVS ℬ∞ := by
+  classical
+  obtain ⟨e, -⟩ := archimedeanSchwartzBruhat_equiv (F := F)
+  apply frechet_of_equiv e
+  let E := SchwartzMap (mixedEmbedding.mixedSpace F) ℂ
+  have : (uniformity E).IsCountablyGenerated := by
+    rw [uniformity_eq_comap_nhds_zero E]
+    infer_instance
+  refine ⟨inferInstance, (schwartz_withSeminorms ℂ _ _).toPolynormableSpace,
+    UniformSpace.metrizableSpace, ?_⟩
+  rw [IsUniformAddGroup.rightUniformSpace_eq]
+  exact completeSpace_schwartzMap
 
 /-- Paper: Theorem 6.2.2.1(1), p. 299.
 An archimedean test tensored with the standard finite tests lies in the kernel of the
