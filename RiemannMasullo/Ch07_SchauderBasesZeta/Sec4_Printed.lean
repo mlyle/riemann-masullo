@@ -95,37 +95,40 @@ def Printed.spectralNuclearity_factorialNormalization : Prop :=
 local notation "ratZeroOrder" => MeromorphicOn.divisor (continuedCompletedHeckeL (F := ℚ) 1) univ
 local notation "ratWindow" => {z : ℂ // 0 < ratZeroOrder z ∧ |z.re - 1 / 2| < 1}
 
-/-- Paper: §1.4.3, p. 29. The completed L-function of the trivial rational character
-has infinitely many distinct positive-divisor zeros. Otherwise its smoothed spectral
-sum in the unit window would have a finite limit at parameter two, since each
-individual Mellin moment converges there. -/
+/-- Paper: §1.4.3, p. 29. Euler nonvanishing and reflection put all positive zeros
+of the rational completed zeta function in the unit window. -/
 private theorem factorialNormalization_window_infinite : Infinite ratWindow := by
-  classical
-  let m := ratZeroOrder
-  let Z := ratWindow
-  by_contra hn
-  let : Finite Z := not_infinite_iff_finite.mp hn
-  let : Fintype Z := Fintype.ofFinite Z
-  obtain ⟨h, ρ, hA⟩ := exists_introTraceApproximation
-  let f (n : ℕ) := introTraceApprox (h n) (ρ n) 2
-  let s (r : Z) := r.val - 1 / 2
-  have hlim (r : Z) : Tendsto (fun n ↦ (m r.val : ℂ) * introTraceMellin (f n) (s r)) atTop
-      (𝓝 ((m r.val : ℂ) * introTraceMellin (introTracePower 2) (s r))) := by
-    apply Filter.Tendsto.const_mul
-    apply (introTraceApprox_mellin_tendsto h ρ hA (s r)).tendsto_at
-    change (s r).re < (2 : ℂ).re
-    have hs := (abs_lt.mp r.property.2).2
-    dsimp [s]
-    norm_num
-    linarith
-  have hsum := tendsto_finsetSum Finset.univ (fun r _ ↦ hlim r)
-  let q := ∑ r : Z, (m r.val : ℂ) * introTraceMellin (introTracePower 2) (s r)
-  apply not_tendsto_nhds_of_tendsto_atBot (introTraceApprox_rat_spectral_tendsto_atBot h ρ hA) q.re
-  have hspec : Tendsto (fun n ↦ introTraceSpectralSum (F := ℚ) 1 (f n) 1) atTop (𝓝 q) := by
-    simpa only [introTraceSpectralSum, tsum_fintype] using hsum
-  exact Complex.continuous_re.continuousAt.tendsto.comp hspec
-
-
+  let L := continuedCompletedHeckeL (1 : U[ℚ])
+  let Z := {z : ℂ // 0 < ratZeroOrder z}
+  let : Infinite Z := introTrace_rat_positive_divisor_infinite
+  obtain ⟨hL, hEuler⟩ := continuedCompletedHeckeL_spec (1 : U[ℚ])
+  obtain ⟨ε, hε, hne, hfe⟩ :=
+    completedHeckeL_continuation_functionalEquation (1 : U[ℚ]) _ _ hL hEuler hL (by simpa using hEuler)
+  have hright (s : ℂ) (hs : 0 < meromorphicOrderAt L s) : s.re < 1 := by
+    by_cases hr : 0 < s.re
+    · exact completedHeckeL_continuation_zeros (1 : U[ℚ]) _ hL hEuler hr hs
+    · linarith
+  have hwindow (z : Z) : |z.val.re - 1 / 2| < (1 : ℝ) := by
+    have hz := z.property
+    change 0 < MeromorphicOn.divisor L univ z.val at hz
+    rw [MeromorphicOn.divisor_apply hL.meromorphicOn (mem_univ _)] at hz
+    have hpos : 0 < meromorphicOrderAt L z.val := by
+      cases he : meromorphicOrderAt L z.val with
+      | top => simp
+      | coe k =>
+        rw [he, WithTop.untop₀_coe] at hz
+        exact_mod_cast hz
+    have href := meromorphicOrderAt_comp_of_deriv_ne_zero (f := L)
+      (show AnalyticAt ℂ (fun s : ℂ ↦ 1 - s) z.val by fun_prop)
+      (show deriv (fun s : ℂ ↦ 1 - s) z.val ≠ 0 by simp)
+    rw [show L ∘ (fun s : ℂ ↦ 1 - s) = ε * L from funext hfe,
+      meromorphicOrderAt_mul_of_ne_zero (hε.analyticAt z.val) (hne z.val)] at href
+    have hu := hright z.val hpos
+    have hl := hright (1 - z.val) (href ▸ hpos)
+    rw [Complex.sub_re, Complex.one_re] at hl
+    exact abs_lt.mpr ⟨by linarith, by linarith⟩
+  exact Infinite.of_injective (fun z : Z ↦ (⟨z.val, z.property, hwindow z⟩ : ratWindow))
+    (fun _ _ h ↦ Subtype.ext (congrArg (fun w : ratWindow ↦ w.val) h))
 
 /-- A compact rectangle contains only finitely many points of the completed divisor. -/
 private theorem factorialNormalization_unbounded_height (M : ℝ) :

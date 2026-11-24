@@ -4295,6 +4295,190 @@ theorem infiniteStandardThetaMellinAverage_apply (χ : PontryaginDual Iₛ(S)) (
   (exists_infiniteStandardThetaMellinAverage χ).choose_spec f x
 
 /-- Paper: Theorem 6.2.2.1(1), p. 299.
+A multi-index geometric telescope: if for every shift `m` the weighted sums
+`∑ₖ (∏ᵢ aᵢ ^ kᵢ) · B (m + k)` over `k : ι → ℕ` vanish, then `B` vanishes. One
+applies `(1 - aᵢ Tᵢ)` once in each coordinate. -/
+private theorem telescope_zero_pi {ι : Type*} [Fintype ι] (a : ι → ℂ) (B : (ι → ℕ) → ℂ)
+    (h : ∀ m, HasSum (fun k : ι → ℕ ↦ (∏ i, a i ^ k i) * B (m + k)) 0) : B = 0 := by
+  have one : ∀ (a : ℂ) (B : ℕ → ℂ), (∀ m, HasSum (fun k : ℕ ↦ a ^ k * B (m + k)) 0) → B = 0 := by
+    intro a B h
+    funext m
+    have h1 := (h (m + 1)).mul_left a
+    have h0 := h m
+    rw [← hasSum_nat_add_iff' 1] at h0
+    simp only [Finset.range_one, Finset.sum_singleton, pow_zero, one_mul, add_zero] at h0
+    have e : (fun k : ℕ ↦ a ^ (k + 1) * B (m + (k + 1))) =
+        fun k ↦ a * (a ^ k * B (m + 1 + k)) := by
+      funext k; rw [pow_succ]; ring_nf
+    rw [e] at h0
+    have := h0.unique h1
+    simp only [mul_zero] at this
+    simpa using this
+  refine Fintype.induction_empty_option
+    (P := fun ι _ ↦ ∀ (a : ι → ℂ) (B : (ι → ℕ) → ℂ),
+      (∀ m, HasSum (fun k : ι → ℕ ↦ (∏ i, a i ^ k i) * B (m + k)) 0) → B = 0) ?_ ?_ ?_ ι a B h
+  · intro α β _ e ih a B h
+    let _ : Fintype α := Fintype.ofEquiv β e.symm
+    let E : (α → ℕ) ≃ (β → ℕ) := e.arrowCongr (Equiv.refl ℕ)
+    have hadd : ∀ m k, E m + E k = E (m + k) := fun _ _ ↦ rfl
+    have hB := ih (a ∘ e) (B ∘ E) fun m ↦ by
+      have h' := E.hasSum_iff.mpr (h (E m))
+      convert h' using 2 with k
+      simp only [Function.comp_apply, hadd]
+      congr 1
+      exact Fintype.prod_equiv e _ _ fun _ ↦ by simp [E, Equiv.arrowCongr_apply]
+    funext m
+    have := congrFun hB (E.symm m)
+    simp only [Function.comp_apply, Equiv.apply_symm_apply] at this
+    exact this
+  · intro a B h
+    funext m
+    have := (h m).unique (hasSum_fintype _)
+    have hd : ∀ d : PEmpty → ℕ, m + d = m := fun _ ↦ funext fun i ↦ i.elim
+    rw [Fintype.sum_unique, hd] at this
+    show B m = 0
+    simpa using this.symm
+  · intro α _ ih a B h
+    let F : (Option α → ℕ) ≃ ℕ × (α → ℕ) := Equiv.piOptionEquivProd
+    have hadd : ∀ c m' (p : ℕ × (α → ℕ)),
+        F.symm (c, m') + F.symm p = F.symm (c + p.1, m' + p.2) := by
+      intro c m' p; funext i; cases i <;> rfl
+    have hfam : ∀ c m', HasSum (fun q : (α → ℕ) × ℕ ↦
+        (∏ i, a (some i) ^ q.1 i) * (a none ^ q.2 * B (F.symm (c + q.2, m' + q.1)))) 0 := by
+      intro c m'
+      have h1 := F.symm.hasSum_iff.mpr (h (F.symm (c, m')))
+      have h2 := (Equiv.prodComm _ _).hasSum_iff.mpr h1
+      convert h2 using 2 with q
+      simp only [Function.comp_apply, Equiv.prodComm_apply, Prod.fst_swap, Prod.snd_swap, hadd,
+        Fintype.prod_option]
+      simp only [F, Equiv.piOptionEquivProd, Equiv.coe_fn_symm_mk]
+      simp only [Prod.fst_swap, Prod.snd_swap]
+      ring
+    let B' : ℕ → (α → ℕ) → ℂ := fun c k' ↦ ∑' n, a none ^ n * B (F.symm (c + n, k'))
+    have hB' : ∀ c, B' c = 0 := by
+      intro c
+      refine ih (fun i ↦ a (some i)) (B' c) fun m' ↦ ?_
+      refine (hfam c m').prod_fiberwise fun k ↦ ?_
+      have hs := (hfam c m').summable.prod_factor k
+      convert hs.hasSum using 1
+      simp only [B', ← tsum_mul_left]
+    funext m
+    have hm : m = F.symm (m none, fun i ↦ m (some i)) := by funext i; cases i <;> rfl
+    rw [hm]
+    refine congrFun (one (a none) (fun n ↦ B (F.symm (n, fun i ↦ m (some i))))
+      fun c ↦ ?_) (m none)
+    have hs := (hfam c (fun i ↦ m (some i))).summable.prod_factor 0
+    simp only [Pi.zero_apply, pow_zero, Finset.prod_const_one, one_mul, add_zero] at hs
+    have := hs.hasSum
+    rwa [show (∑' n, a none ^ n * B (F.symm (c + n, fun i ↦ m (some i)))) = 0 from
+      congrFun (hB' c) _] at this
+
+/-- Paper: Theorem 6.2.2.1(1), p. 299.
+Unfolding: the S-local homogeneous theta transform of a test, integrated over the norm-one
+classes `J₁(S) = Nₛ(S) / (S-units)` against the S-local norm-one character of `ω`, is a fixed
+nonzero multiple of the integral over the norm-one S-ideles `Nₛ(S)` of the test itself against
+any character `χ` of the S-ideles that restricts on `Nₛ(S)` to that norm-one character. The sum
+over S-units in theta is absorbed by the quotient. -/
+private theorem sLocalHomogeneousTheta_unfold {ω : PontryaginDual C₁}
+    (hω : NormOneCharacterUnramifiedOutside ω S) (χ : PontryaginDual Iₛ(S))
+    (hχ : ∀ (g : Nₛ(S)) (y : J₁(S)), y.val = QuotientGroup.mk g.val →
+      χ g.val = sLocalNormOneCharacter S ω hω y) :
+    ∃ c : ℂ, c ≠ 0 ∧ ∀ (φ : ℬₛ(S)) (g : Iₛ(S)),
+      sLocalHomogeneousAdelicThetaLinearMap F S (sLocalNormOneCharacter S ω hω) φ
+          (QuotientGroup.mk g) =
+        c * ∫ h : Nₛ(S), φ (Multiplicative.ofAdd (g * h.val).val) * (χ h.val : ℂ)
+          ∂sNormOneIdeleTamagawaMeasure F S := by sorry
+
+open Classical in
+/-- Paper: Theorem 6.2.2.1(1), p. 299.
+Fibre formula: for an archimedean test `f` tensored with the standard finite tests, the
+integral over the norm-one S-ideles against `χ` is a geometric series in the archimedean
+Mellin average. The weights `a v` and the archimedean translations `t v` are chosen once,
+independently of the test. At a place `v` of `S` where the finite restriction of the
+character is ramified, the standard finite test is supported on the units, so only
+valuation zero contributes and the weight is zero. At an unramified place the standard
+test is the indicator of the local integers, the weight has modulus one, and the `k`-th
+shell is translated by an archimedean idele of norm `q_v ^ k`. For each S-idele `y` there
+are a point `z` and a nonzero constant `c` giving the series at `y`. -/
+private theorem sLocalStandardThetaTensor_fibre_hasSum {ω : PontryaginDual C₁}
+    (hω : NormOneCharacterUnramifiedOutside ω S) (χ : PontryaginDual Iₛ(S))
+    (hχ : ∀ (g : Nₛ(S)) (y : J₁(S)), y.val = QuotientGroup.mk g.val →
+      χ g.val = sLocalNormOneCharacter S ω hω y) :
+    let d := sIdeleRestriction F S hω.choose
+    ∃ (a : S → ℂ) (t : S → I∞),
+      (∀ v : S, if ∀ u : (L(v.val))ˣ, u ∈ U(v.val) → sLocalFiniteRestriction v d u = 1
+        then ‖a v‖ = 1 else a v = 0) ∧
+      (∀ v, ((infiniteIdeleNorm F (t v)).val : ℝ) = v.val.asIdeal.absNorm) ∧
+      ∀ y : Iₛ(S), ∃ (z : I∞) (c : ℂ), c ≠ 0 ∧ ∀ (f : ℬ∞) (x : I∞), HasSum
+        (fun k : S → ℕ ↦ c * ((∏ v, a v ^ k v) *
+          infiniteStandardThetaMellinAverage χ f ((∏ v, t v ^ k v) * (z * x))))
+        (∫ h : Nₛ(S), sLocalStandardThetaTensor d f
+          (Multiplicative.ofAdd (archInsert(S) x * y * h.val).val) * (χ h.val : ℂ)
+          ∂sNormOneIdeleTamagawaMeasure F S) := by sorry
+
+/-- Paper: Theorem 6.2.2.1(1), p. 299.
+For trivial S-integer Picard group, every class of the S-local homogeneous theta quotient
+has a representative of the form `f` tensored with the standard finite tests. -/
+private theorem sLocalStandardThetaTensor_exists_representative
+    (hPic : Subsingleton Picₛ(S)) {ω : PontryaginDual C₁}
+    (hω : NormOneCharacterUnramifiedOutside ω S) :
+    ∀ y : Θₛω(S, sLocalNormOneCharacter S ω hω), ∃ f : ℬ∞,
+      (Kₛω(S, sLocalNormOneCharacter S ω hω)).mkQ
+        (sLocalStandardThetaTensor (sIdeleRestriction F S hω.choose) f) = y := by sorry
+
+/-- Paper: Theorem 6.2.2.1(1), p. 299.
+The archimedean Schwartz–Bruhat space is a Fréchet space. -/
+private theorem infiniteSchwartzBruhat_frechet : IsFrechetTVS ℬ∞ := by sorry
+
+/-- Paper: Theorem 6.2.2.1(1), p. 299.
+An archimedean test tensored with the standard finite tests lies in the kernel of the
+S-local homogeneous theta map exactly when its archimedean Mellin average vanishes
+identically. The character on the S-ideles restricts on the norm-one S-ideles to the
+S-local norm-one character of ω. -/
+private theorem sLocalStandardThetaTensor_mem_ker_iff {ω : PontryaginDual C₁}
+    (hω : NormOneCharacterUnramifiedOutside ω S) (χ : PontryaginDual Iₛ(S))
+    (hχ : ∀ (g : Nₛ(S)) (y : J₁(S)), y.val = QuotientGroup.mk g.val →
+      χ g.val = sLocalNormOneCharacter S ω hω y) (f : ℬ∞) :
+    sLocalStandardThetaTensor (sIdeleRestriction F S hω.choose) f ∈
+        Kₛω(S, sLocalNormOneCharacter S ω hω) ↔
+      f ∈ (infiniteStandardThetaMellinAverage χ).ker := by
+  obtain ⟨c₀, hc₀, hu⟩ := sLocalHomogeneousTheta_unfold hω χ hχ
+  obtain ⟨a, t, -, -, hs⟩ := sLocalStandardThetaTensor_fibre_hasSum hω χ hχ
+  rw [LinearMap.mem_ker, LinearMap.mem_ker]
+  constructor
+  · intro hk
+    obtain ⟨z, c, hc, hz⟩ := hs 1
+    ext x₀
+    have hB := telescope_zero_pi a
+      (fun m ↦ infiniteStandardThetaMellinAverage χ f ((∏ v, t v ^ m v) * x₀)) fun m ↦ by
+        have h0 := hz f (z⁻¹ * ((∏ v, t v ^ m v) * x₀))
+        have hv := hu (sLocalStandardThetaTensor (sIdeleRestriction F S hω.choose) f)
+          (archInsert(S) (z⁻¹ * ((∏ v, t v ^ m v) * x₀)) * 1)
+        rw [hk, ContinuousMap.zero_apply, eq_comm, mul_eq_zero] at hv
+        rw [hv.resolve_left hc₀] at h0
+        convert (h0.mul_left c⁻¹) using 1
+        · funext k
+          rw [← mul_assoc c⁻¹, inv_mul_cancel₀ hc, one_mul, mul_inv_cancel_left]
+          congr 2
+          rw [← mul_assoc, ← Finset.prod_mul_distrib]
+          simp [pow_add, mul_comm]
+        · simp
+    simpa using congrFun hB 0
+  · intro hm
+    ext q
+    induction q using QuotientGroup.induction_on with
+    | H g =>
+      rw [hu, ContinuousMap.zero_apply]
+      obtain ⟨z, c, -, hz⟩ := hs g
+      have hx : ∀ x, infiniteStandardThetaMellinAverage χ f x = 0 := fun x ↦ by
+        simpa using DFunLike.congr_fun hm x
+      have h1 := hz f 1
+      simp only [hx, mul_zero] at h1
+      have h2 := h1.unique hasSum_zero
+      simp only [map_one, one_mul] at h2
+      exact (congrArg (c₀ * ·) h2).trans (mul_zero c₀)
+
+/-- Paper: Theorem 6.2.2.1(1), p. 299.
 Tensoring with the standard finite test identifies the local homogeneous quotient with
 the archimedean quotient by the kernel of the archimedean Mellin average.
 Deviation: This kernel uses the character orientation of §5.2 and the single norm fibre
@@ -4308,7 +4492,71 @@ theorem sLocalStandardThetaTensor_quotient_equiv
     let χS := sLocalNormOneCharacter S ω hω
     let K := (infiniteStandardThetaMellinAverage χ).ker
     ∃ e : (ℬ∞ ⧸ K) ≃L[ℂ] Θₛω(S, χS), ∀ f : ℬ∞,
-      e (K.mkQ f) = (Kₛω(S, χS)).mkQ (sLocalStandardThetaTensor c f) := by sorry
+      e (K.mkQ f) = (Kₛω(S, χS)).mkQ (sLocalStandardThetaTensor c f) := by
+  intro c χS K
+  let (v : S) : ProperSpace (v.val.adicCompletion F) := properSpace_adicCompletion v.val
+  let (w : InfinitePlace F) : SecondCountableTopology w.Completion :=
+    (InfinitePlace.Completion.isometry_extensionEmbedding w).isEmbedding.secondCountableTopology
+  let : SecondCountableTopology (Multiplicative (InfiniteAdeleRing F)) :=
+    inferInstanceAs (SecondCountableTopology ((w : InfinitePlace F) → w.Completion))
+  let : SecondCountableTopology (Multiplicative (SAdeleRing F S)) := inferInstanceAs
+    (SecondCountableTopology (((w : InfinitePlace F) → w.Completion) ×
+      ((v : S) → v.val.adicCompletion F)))
+  let : T2Space (Multiplicative (InfiniteAdeleRing F)) :=
+    inferInstanceAs (T2Space ((w : InfinitePlace F) → w.Completion))
+  let : T2Space (Multiplicative (SAdeleRing F S)) := inferInstanceAs
+    (T2Space (((w : InfinitePlace F) → w.Completion) × ((v : S) → v.val.adicCompletion F)))
+  let : LocallyCompactSpace (Multiplicative (InfiniteAdeleRing F)) :=
+    inferInstanceAs (LocallyCompactSpace ((w : InfinitePlace F) → w.Completion))
+  let : LocallyCompactSpace (Multiplicative (SAdeleRing F S)) := inferInstanceAs
+    (LocallyCompactSpace (((w : InfinitePlace F) → w.Completion) ×
+      ((v : S) → v.val.adicCompletion F)))
+  let : T2Space ℬ∞ := schwartzBruhat_t2
+  let : T2Space ℬₛ(S) := schwartzBruhat_t2
+  let P : ℬ∞ →ₗ[ℂ] Θₛω(S, χS) := (Kₛω(S, χS)).mkQ ∘ₗ sLocalStandardThetaTensor c
+  have hsurj : Function.Surjective P := sLocalStandardThetaTensor_exists_representative _hPic hω
+  have hPc : Continuous P := by
+    let e := (sAdeleSchwartz_inductiveTensor_equiv F S).choose
+    let W := FinestLocallyConvex (⨂[ℂ] v : S, ℬ(L(v.val)))
+    let g : W := ⨂ₜ[ℂ] v : S, finiteStandardGaussian v.val (sLocalFiniteRestriction v c)
+    let : PolynormableSpace ℂ W := (finestLocallyConvex_withSeminorms _).toPolynormableSpace
+    let : T2Space W := finestLocallyConvex_t2 _
+    have ht : Continuous fun f : ℬ∞ ↦ e (f ⊗ₜ[ℂ] g) :=
+      ((continuous_inductiveTensor_iff (e : InductiveTensor ℬ∞ W →L[ℂ] ℬₛ(S)).toLinearMap).mp
+        e.continuous).2 g
+    exact (Kₛω(S, χS)).isOpenQuotientMap_mkQ.continuous.comp ht
+  let Pc : ℬ∞ →L[ℂ] Θₛω(S, χS) := ⟨P, hPc⟩
+  have hPo : IsOpenMap P := isOpenMap_of_surjective_toLF
+    (sLocalHomogeneousThetaSpace_lf (F := F) (S := S) χS)
+    (X := fun _ ↦ ℬ∞) (fun _ ↦ infiniteSchwartzBruhat_frechet)
+    (fun _ ↦ ContinuousLinearMap.id ℂ ℬ∞) (fun _ ↦ Set.Subset.rfl)
+    (fun x ↦ ⟨0, x, rfl⟩) Pc hsurj
+  have hP : IsOpenQuotientMap P := ⟨hsurj, hPc, hPo⟩
+  have hker : K = LinearMap.ker P := by
+    ext f
+    exact (sLocalStandardThetaTensor_mem_ker_iff hω χ _hχ f).symm.trans
+      (Submodule.Quotient.mk_eq_zero _).symm
+  let L : (ℬ∞ ⧸ K) ≃ₗ[ℂ] Θₛω(S, χS) :=
+    (Submodule.quotEquivOfEq _ _ hker).trans (P.quotKerEquivOfSurjective hP.surjective)
+  have hL : ∀ f, L (K.mkQ f) = P f := fun _ ↦ rfl
+  have hK := K.isOpenQuotientMap_mkQL
+  have hcont : Continuous L := by
+    rw [hK.isQuotientMap.continuous_iff]
+    exact hP.continuous.congr fun f ↦ (hL f).symm
+  have hopen : IsOpenMap L := by
+    intro U hU
+    have himg : L '' U = P '' (K.mkQ ⁻¹' U) := by
+      ext y
+      constructor
+      · rintro ⟨u, hu, rfl⟩
+        obtain ⟨f, rfl⟩ := K.mkQ_surjective u
+        exact ⟨f, hu, (hL f).symm⟩
+      · rintro ⟨f, hf, rfl⟩
+        exact ⟨K.mkQ f, hf, hL f⟩
+    rw [himg]
+    exact hP.isOpenMap _ (hU.preimage K.mkQL.continuous)
+  exact ⟨⟨L, hcont, (L.toEquiv.toHomeomorphOfContinuousOpen hcont hopen).symm.continuous⟩,
+    hL⟩
 
 /-- Paper: Theorem 6.2.2.1, p. 298.
 For trivial S-integer Picard group, the archimedean test space maps continuously,

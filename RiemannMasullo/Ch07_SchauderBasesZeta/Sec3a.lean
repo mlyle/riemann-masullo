@@ -3694,37 +3694,66 @@ private theorem orbitalQuotient_kernel_of_coefficients {E U I J : Type*}
 -- TODO(paper-gap): In (7.3.1.19) use the inverse uniformizers at the unramified
 -- places above p for the generators of Chapter 4. At a ramified place Weil's
 -- unit average vanishes on the isotype, and its principal value is the identity.
-/-- Paper: Theorem 7.3.1.6(2)–(3), p. 345.
-Any enumeration of the Fourier functionals gives an unconditional basis of the strong dual.
-With the same enumeration, its biorthogonal vectors are an absolute basis of the quotient. -/
-theorem sLocalFourierOrbital_bases
-    (p : Vℚ) (ω : PontryaginDual J₁)
-    (_hS : IsSaturatedPlaceSet S) (_hp : (Sₚ(p)).Nonempty) (_hPic : PicTrivial) (σ : ℕ ≃ Idx(p, ω)) :
-    ∃ (D : Idx(p, ω) → StrongDual ℂ (Q(p, ω))) (ψ : Idx(p, ω) → Q(p, ω))
-      (ev : ℕ → StrongDual ℂ (StrongDual ℂ (Q(p, ω)))),
-      (∀ (n : ℕ) (ℓ : StrongDual ℂ (Q(p, ω))), ev n ℓ = ℓ (ψ (σ n))) ∧
-      (∀ (j : Idx(p, ω)) (x : Θₛ(ω)), D j (π(p, ω) x) =
-        sLocalOrbitalFourierJet (F := F) (S := S) (T := Sₚ(p)) (ω := ω) j x) ∧
-      let e := ψ ∘ σ
-      let d := D ∘ σ
-      IsSchauderBasis d ev ∧ SchauderBasis.IsUnconditional d ev ∧
-        IsSchauderBasis e d ∧ SchauderBasis.IsAbsolute e d := by
+/-- The primary generators have positive log-periods commensurate with the log of
+the residue cardinality of the rational prime. -/
+private theorem sLocalOrbitalDifferenceGenerator_periods (p : Vℚ) (ω : PontryaginDual J₁) :
+    (∀ k, 1 < (mGroup (sLocalOrbitalDifferenceGenerator p ω k)).val) ∧
+    ∃ a : ℝ, 0 < a ∧ ∀ i, ∃ r : ℚ,
+      Real.log ((mGroup (sLocalOrbitalDifferenceGenerator p ω i)).val : ℝ) = (r : ℝ) * a := by
   classical
   let m := mGroup
-  let hm := (sLocalOrbital_modulation (F := F) (S := S)).1
-  let hs := (sLocalOrbital_modulation (F := F) (S := S)).2
-  let γ := sLocalOrbitalDifferenceGenerator p ω
-  let Λ := List.ofFn γ
-  let J := ModelIndex(p, ω)
-  obtain ⟨ι, hι⟩ := sLocalOrbitalModelIndex_equiv p ω
-  let σ₀ := σ.trans ι.symm
+  let γ := sLocalOrbitalDifferenceGenerator (F := F) (S := S) p ω
   have hgen (k : Fin _) : 1 < (m (γ k)).val := by
-    have hN := sLocalOrbitalDifferenceGenerator_norm p ω k
+    have hN := sLocalOrbitalDifferenceGenerator_norm (F := F) (S := S) p ω k
     apply NNReal.coe_lt_coe.mp
     rw [NNReal.coe_one]
     change 1 < ((mₛ (γ k)).val : ℝ)
     rw [hN]
-    exact_mod_cast HeightOneSpectrum.one_lt_absNorm (sLocalOrbitalActiveEquiv p ω k).val.val
+    exact_mod_cast HeightOneSpectrum.one_lt_absNorm (sLocalOrbitalActiveEquiv (F := F) (S := S) p ω k).val.val
+  have hcomm :
+      ∃ a : ℝ, 0 < a ∧ ∀ i, ∃ r : ℚ, Real.log ((m (γ i)).val : ℝ) = (r : ℝ) * a := by
+    have hpN : (1 : ℝ) < p.asIdeal.absNorm := by exact_mod_cast HeightOneSpectrum.one_lt_absNorm p
+    refine ⟨_, Real.log_pos hpN, fun i ↦ ?_⟩
+    let v := sLocalOrbitalActiveEquiv (F := F) (S := S) p ω i
+    refine ⟨(v.val.val.asIdeal.inertiaDeg (𝓞 ℚ) : ℕ), ?_⟩
+    change Real.log ((mₛ (sLocalOrbitalDifferenceGenerator (F := F) (S := S) p ω i)).val : ℝ) = _
+    rw [sLocalOrbitalDifferenceGenerator_norm (F := F) (S := S) p ω i, Rat.cast_natCast]
+    exact sLocalOrbitalPrimary_log_norm (F := F) (S := S) p v.val.val (Finset.mem_filter.mp v.property).2.1
+  exact ⟨hgen, hcomm⟩
+
+open Classical in
+/-- The norm-weighted Fourier comparison identifies the primary and periodic quotients.
+The change from a logarithmic moment to a Fourier jet is the reflection sign divided
+by the total mass of the norm-one fiber. -/
+private theorem sLocalOrbital_periodicFourierComparison (p : Vℚ) (ω : PontryaginDual J₁)
+    (_hS : IsSaturatedPlaceSet S) (_hp : (Sₚ(p)).Nonempty) (_hPic : PicTrivial) (σ : ℕ ≃ Idx(p, ω))
+    (hgen : ∀ k, 1 < (mGroup (sLocalOrbitalDifferenceGenerator (F := F) (S := S) p ω k)).val)
+    (hcomm : ∃ a : ℝ, 0 < a ∧ ∀ i, ∃ r : ℚ,
+      Real.log ((mGroup (sLocalOrbitalDifferenceGenerator (F := F) (S := S) p ω i)).val : ℝ) = (r : ℝ) * a) :
+    let m := mGroup
+    let hm := (sLocalOrbital_modulation (F := F) (S := S)).1
+    let hs := (sLocalOrbital_modulation (F := F) (S := S)).2
+    let γ := sLocalOrbitalDifferenceGenerator (F := F) (S := S) p ω
+    let U := H₀(ω⁻¹) ⧸ (modulatedIsotypicDifferenceProduct m hm hs ω⁻¹ univ
+      ordConnected_univ (mem_univ (0 : ℝ)) (List.ofFn γ)).range
+    let d (j : ModelIndex(p, ω)) : StrongDual ℂ U :=
+      modulatedQuotientLogMoment m hm hs ω⁻¹ γ hgen μorb j
+    let mass : ℂ := (sLocalNormOneQuotientMeasure F S).real univ
+    mass ≠ 0 ∧ ∃ (ι : ModelIndex(p, ω) ≃ Idx(p, ω)) (T : Q(p, ω) ≃L[ℂ] U),
+      (∀ j, (ι j).val = ((circleToComplex).comp j.val.1⁻¹, j.val.2)) ∧
+      ∀ j x, sLocalOrbitalFourierJet (ι j) x =
+        (mass⁻¹ * (-1 : ℂ) ^ j.val.2) * d j (T (π(p, ω) x)) := by
+  classical
+  let m := mGroup
+  let hm := (sLocalOrbital_modulation (F := F) (S := S)).1
+  let hs := (sLocalOrbital_modulation (F := F) (S := S)).2
+  let γ := sLocalOrbitalDifferenceGenerator (F := F) (S := S) p ω
+  let Λ := List.ofFn γ
+  let J := ModelIndex(p, ω)
+  let idx := sLocalOrbitalModelIndex_equiv (F := F) (S := S) p ω
+  let ι := idx.choose
+  have hι := idx.choose_spec
+  let σ₀ := σ.trans ι.symm
   have hΛgen : ∀ g ∈ Λ, 1 < (m g).val := by
     intro g hg
     obtain ⟨k, rfl⟩ := List.mem_ofFn.mp hg
@@ -3737,28 +3766,17 @@ theorem sLocalFourierOrbital_bases
     simp [Λ, γ] at hlen
     have hk₀ := k.isLt
     simp [hlen] at hk₀
-  have hcomm :
-      ∃ a : ℝ, 0 < a ∧ ∀ i, ∃ r : ℚ, Real.log ((m (γ i)).val : ℝ) = (r : ℝ) * a := by
-    have hpN : (1 : ℝ) < p.asIdeal.absNorm := by exact_mod_cast HeightOneSpectrum.one_lt_absNorm p
-    refine ⟨_, Real.log_pos hpN, fun i ↦ ?_⟩
-    let v := sLocalOrbitalActiveEquiv p ω i
-    refine ⟨(v.val.val.asIdeal.inertiaDeg (𝓞 ℚ) : ℕ), ?_⟩
-    change Real.log ((mₛ (sLocalOrbitalDifferenceGenerator p ω i)).val : ℝ) = _
-    rw [sLocalOrbitalDifferenceGenerator_norm p ω i, Rat.cast_natCast]
-    exact sLocalOrbitalPrimary_log_norm p v.val.val (Finset.mem_filter.mp v.property).2.1
   let R₀ := (modulatedIsotypicDifferenceProduct m hm hs ω⁻¹ univ ordConnected_univ
     (mem_univ (0 : ℝ)) Λ).range
   let Rint := (modulatedIsotypicDifferenceProduct m hm hs ω⁻¹ I₋ ordConnected_Ioi hI₋ Λ).range
   let U := H₀(ω⁻¹) ⧸ R₀
   let d (j : J) : StrongDual ℂ U := modulatedQuotientLogMoment m hm hs ω⁻¹ γ hgen μorb j
   let hBasis := modulatedQuotientLogMoment_bases m hm hs ω⁻¹ γ hgen μorb hcomm σ₀
-  let ψ₀ := hBasis.choose
   have hb := hBasis.choose_spec.1
-  have ha := hBasis.choose_spec.2.1
-  let hComparison := sLocalOrbital_intervalQuotient ω⁻¹ Λ hΛ hΛgen
+  let hComparison := sLocalOrbital_intervalQuotient (F := F) (S := S) ω⁻¹ Λ hΛ hΛgen
   let E := hComparison.choose
   have hE := hComparison.choose_spec
-  let hFourier := sLocalOrbital_shiftedFourier ω
+  let hFourier := sLocalOrbital_shiftedFourier (F := F) (S := S) ω
   let A := hFourier.choose
   have hA := hFourier.choose_spec
   let C : Θₛ(ω) →L[ℂ] U := E.symm.toContinuousLinearMap.comp (Rint.mkQL.comp A)
@@ -3772,8 +3790,8 @@ theorem sLocalFourierOrbital_bases
     have hgv := (hE v).choose_spec.1
     have hEg := (hE v).choose_spec.2
     let v' : sLocalDecayIsotype univ ω⁻¹ := ⟨v.val,
-      (sLocalOrbital_isotype_eq univ (mem_univ (0 : ℝ)) ω⁻¹) ▸ v.property⟩
-    let hLift := primaryAllExponents_fourier_lift ω⁻¹ v'
+      (sLocalOrbital_isotype_eq (F := F) (S := S) univ (mem_univ (0 : ℝ)) ω⁻¹) ▸ v.property⟩
+    let hLift := primaryAllExponents_fourier_lift (F := F) (S := S) ω⁻¹ v'
     let f := hLift.choose
     have hf := hLift.choose_spec
     have hfg : A ((Kₛ(ω)).mkQ f) = g := by
@@ -3791,7 +3809,7 @@ theorem sLocalFourierOrbital_bases
     have hEg := (hE v).choose_spec.2
     have hmem : g - A x ∈ Rint :=
       (Submodule.Quotient.eq Rint).mp (hEg.symm.trans ((congrArg E hv).trans (hC x)))
-    have hz := sLocalOrbital_logMoment_difference_zero p ω j (g - A x) hmem
+    have hz := sLocalOrbital_logMoment_difference_zero (F := F) (S := S) p ω j (g - A x) hmem
     have hI : ∀ y : H₋(ω⁻¹), Integrable
         (fun u ↦ y.val.val u * (j.val.1 u : ℂ) * (logNorm u : ℂ)^j.val.2) μorb :=
       fun y ↦ primaryDecay_logMoment_integrable I₋ hI₋ (by constructor <;> norm_num)
@@ -3822,16 +3840,16 @@ theorem sLocalFourierOrbital_bases
         sLocalHomogeneousAdelicThetaLinearMap F S ω⁻¹ (sAdeleSchwartzFourier f) g :=
       (congrArg (fun u : Θₛ(ω) ↦ (A u).val.val g) hf.symm).trans (hA f g)
     exact (congrArg (fun u : Θₛ(ω) ↦ sLocalOrbitalFourierJet (ι j) u) hf.symm).trans
-      ((sLocalOrbital_shiftedFourierJet p ω j (ι j) (hι j) f (A x) hy).trans
+      ((sLocalOrbital_shiftedFourierJet (F := F) (S := S) p ω j (ι j) (hι j) f (A x) hy).trans
         (congrArg (s j * ·) (hcoord j x).symm))
-  have hF₁ := sLocalHomogeneousThetaSpace_frechet ω
+  have hF₁ := sLocalHomogeneousThetaSpace_frechet (F := F) (S := S) ω
   have hF₂ := (modulatedIsotypicDifferenceProduct_quotient.{_, 0} m hm hs ω⁻¹ Λ hΛgen).2.2
   let : TopologicalSpace.MetrizableSpace (Θₛ(ω)) := hF₁.choose_spec.2.1
   let : TopologicalSpace.MetrizableSpace U := hF₂.choose_spec.2.1
   let : IsTopologicalAddGroup U := hF₂.choose
   have hKer : C.ker = Rₚ(p, ω) :=
     orbitalQuotient_kernel_of_coefficients C (Rₚ(p, ω)) (fun i x ↦ sLocalOrbitalFourierJet i x)
-      d ι s hsne (sLocalOrbitalFourierJet_commonKer p ω _hS _hp _hPic) hjet σ₀ _ hb
+      d ι s hsne (sLocalOrbitalFourierJet_commonKer (F := F) (S := S) p ω _hS _hp _hPic) hjet σ₀ _ hb
   have hOpen : IsOpenMap C :=
     isOpenMap_of_surjective_toLF (isLFSpace_of_isFrechetTVS hF₂)
       (X := fun _ ↦ Θₛ(ω)) (fun _ ↦ hF₁) (fun _ ↦ ContinuousLinearMap.id ℂ _)
@@ -3840,20 +3858,284 @@ theorem sLocalFourierOrbital_bases
     (hOpen.isQuotientMap C.continuous hCsurj) (Rₚ(p, ω)) hKer
   let T := hQuot.choose
   have hT := hQuot.choose_spec
+  refine ⟨hmass, ι, T, hι, fun j x ↦ ?_⟩
+  exact (hjet j x).trans (congrArg (fun y : U ↦ s j * d j y) (hT x).symm)
+
+/-- Paper: Theorem 7.3.1.6(2)–(3), p. 345.
+Any enumeration of the Fourier functionals gives an unconditional basis of the strong dual.
+With the same enumeration, its biorthogonal vectors are an absolute basis of the quotient. -/
+theorem sLocalFourierOrbital_bases
+    (p : Vℚ) (ω : PontryaginDual J₁)
+    (_hS : IsSaturatedPlaceSet S) (_hp : (Sₚ(p)).Nonempty) (_hPic : PicTrivial) (σ : ℕ ≃ Idx(p, ω)) :
+    ∃ (D : Idx(p, ω) → StrongDual ℂ (Q(p, ω))) (ψ : Idx(p, ω) → Q(p, ω))
+      (ev : ℕ → StrongDual ℂ (StrongDual ℂ (Q(p, ω)))),
+      (∀ (n : ℕ) (ℓ : StrongDual ℂ (Q(p, ω))), ev n ℓ = ℓ (ψ (σ n))) ∧
+      (∀ (j : Idx(p, ω)) (x : Θₛ(ω)), D j (π(p, ω) x) =
+        sLocalOrbitalFourierJet (F := F) (S := S) (T := Sₚ(p)) (ω := ω) j x) ∧
+      let e := ψ ∘ σ
+      let d := D ∘ σ
+      IsSchauderBasis d ev ∧ SchauderBasis.IsUnconditional d ev ∧
+        IsSchauderBasis e d ∧ SchauderBasis.IsAbsolute e d := by
+  classical
+  let m := mGroup
+  let hm := (sLocalOrbital_modulation (F := F) (S := S)).1
+  let hs := (sLocalOrbital_modulation (F := F) (S := S)).2
+  let γ := sLocalOrbitalDifferenceGenerator (F := F) (S := S) p ω
+  let J := ModelIndex(p, ω)
+  have hgen := (sLocalOrbitalDifferenceGenerator_periods p ω).1
+  have hcomm := (sLocalOrbitalDifferenceGenerator_periods p ω).2
+  let cmp := sLocalOrbital_periodicFourierComparison p ω _hS _hp _hPic σ hgen hcomm
+  let ι := cmp.2.choose
+  let T := cmp.2.choose_spec.choose
+  have hjet := cmp.2.choose_spec.choose_spec.2
+  let σ₀ := σ.trans ι.symm
+  let U := H₀(ω⁻¹) ⧸ (modulatedIsotypicDifferenceProduct m hm hs ω⁻¹ univ
+    ordConnected_univ (mem_univ (0 : ℝ)) (List.ofFn γ)).range
+  let d (j : J) : StrongDual ℂ U := modulatedQuotientLogMoment m hm hs ω⁻¹ γ hgen μorb j
+  let mass : ℂ := (sLocalNormOneQuotientMeasure F S).real univ
+  let s (j : J) : ℂ := mass⁻¹ * (-1 : ℂ)^j.val.2
+  have hsne (j : J) : s j ≠ 0 := mul_ne_zero (inv_ne_zero cmp.1) (pow_ne_zero _ (by norm_num))
+  let hBasis := modulatedQuotientLogMoment_bases m hm hs ω⁻¹ γ hgen μorb hcomm σ₀
+  let ψ₀ := hBasis.choose
+  have hb := hBasis.choose_spec.1
+  have ha := hBasis.choose_spec.2.1
   let D (j : Idx(p, ω)) : StrongDual ℂ (Q(p, ω)) :=
     s (ι.symm j) • (d (ι.symm j)).comp T.toContinuousLinearMap
   let ψ (j : Idx(p, ω)) : Q(p, ω) := (s (ι.symm j))⁻¹ • T.symm (ψ₀ (ι.symm j))
   let ev (n : ℕ) : StrongDual ℂ (StrongDual ℂ (Q(p, ω))) :=
     ContinuousLinearMap.applyₗ ℂ (RingHom.id ℂ) (ψ (σ n))
   refine ⟨D, ψ, ev, fun _ _ ↦ rfl, fun j x ↦ ?_, ?_⟩
-  · calc
-      _ = s (ι.symm j) * d (ι.symm j) (T (π(p, ω) x)) := rfl
-      _ = s (ι.symm j) * d (ι.symm j) (C x) := congrArg (fun u ↦ s (ι.symm j) * d (ι.symm j) u) (hT x)
-      _ = _ := (hjet (ι.symm j) x).symm.trans
-        (congrArg (fun i ↦ sLocalOrbitalFourierJet i x) (ι.apply_symm_apply j))
+  · exact (hjet (ι.symm j) x).symm.trans
+      (congrArg (fun i ↦ sLocalOrbitalFourierJet i x) (ι.apply_symm_apply j))
   · have h := orbitalQuotient_rescale_basis T (ψ₀ ∘ σ₀) (d ∘ σ₀) hb ha
       (s ∘ σ₀) (fun n ↦ hsne (σ₀ n))
     exact sLocalOrbital_dual_of_absolute p ω _hS _hp _hPic (ψ ∘ σ) (D ∘ σ) h.1 h.2
+
+/-- Rescale and transport a prescribed biorthogonal family and its seminorm. -/
+private theorem orbitalQuotient_rescale_biorthogonal {I J E Q U : Type*}
+    [AddCommGroup Q] [Module ℂ Q] [TopologicalSpace Q]
+    [AddCommGroup U] [Module ℂ U] [TopologicalSpace U]
+    (π : E → Q) (hπ : Surjective π) (ι : J ≃ I) (T : Q ≃L[ℂ] U)
+    (s : J → ℂ) (hs : ∀ j, s j ≠ 0) (d : J → StrongDual ℂ U)
+    (jet : I → E → ℂ) (hjet : ∀ j x, jet (ι j) x = s j * d j (T (π x)))
+    (ψ : I → Q) [DecidableEq I] (hψ : ∀ i j x, π x = ψ j → jet i x = if i = j then 1 else 0)
+    (q : Seminorm ℂ Q) (hq : Continuous q) :
+    ∃ (η : J → U) (q' : Seminorm ℂ U), (∀ j, d j (η j) = 1) ∧
+      (∀ i j, i ≠ j → d i (η j) = 0) ∧ Continuous q' ∧
+      ∀ j, q' (η j) = ‖s j‖ * q (ψ (ι j)) := by
+  classical
+  let η (j : J) := s j • T (ψ (ι j))
+  have coord (i j : J) : s i * d i (T (ψ (ι j))) = if i = j then 1 else 0 := by
+    obtain ⟨x, hx⟩ := hπ (ψ (ι j))
+    calc
+      _ = s i * d i (T (π x)) := congrArg (fun y ↦ s i * d i (T y)) hx.symm
+      _ = jet (ι i) x := (hjet i x).symm
+      _ = _ := by simpa only [ι.apply_eq_iff_eq] using hψ (ι i) (ι j) x hx
+  refine ⟨η, q.comp T.symm.toLinearMap, fun j ↦ ?_, fun i j hn ↦ ?_, hq.comp T.symm.continuous, fun j ↦ ?_⟩
+  · simpa only [η, map_smul, smul_eq_mul, eq_self, ite_true] using coord j j
+  · have h := coord i j
+    simp only [hn, ↓reduceIte] at h
+    simp [η, (mul_eq_zero.mp h).resolve_left (hs i)]
+  · change q (T.symm (s j • T (ψ (ι j)))) = _
+    rw [map_smul, T.symm_apply_apply, map_smul_eq_mul]
+
+/-- Two character lattices agreeing at one point also agree after opposite integer shifts. -/
+private theorem orbitalFourierLattice_reflect_shift {a b : Circle} (P l t u : ℝ) (m₀ n₀ n : ℤ)
+    (h : a * Circle.exp (-((n₀ : ℝ) * P - t) * l) = b * Circle.exp (((m₀ : ℝ) * P - u) * l)) :
+    a * Circle.exp (-((n : ℝ) * P - t) * l) =
+      b * Circle.exp ((((m₀ + n₀ - n : ℤ) : ℝ) * P - u) * l) := by
+  have h₀ := congrArg (· * Circle.exp (((n₀ : ℝ) - n) * P*l)) h
+  simp only [mul_assoc, ← Circle.exp_add] at h₀
+  convert h₀ using 3 <;> push_cast <;> ring
+
+/-- The model index inverts the unitary character of an orbital lattice point. -/
+private theorem sLocalOrbital_lattice_inverse_character (χ : PontryaginDual Jₛ) (v : S) (t : ℝ) (n : ℤ)
+    (ξ : PontryaginDual Jₛ) (hξ : (circleToComplex).comp ξ⁻¹ = lattice(χ, v, t, n)) (x : Jₛ) :
+    ξ x = (χ x)⁻¹ * Circle.exp (-((n : ℝ) * period(v) - t) * logNorm x) := by
+  let b := (n : ℝ) * period(v) - t
+  have hpos : 0 < ((mₛ x).val : ℝ) := NNReal.coe_pos.mpr (Units.zero_lt _)
+  have h := DFunLike.congr_fun hξ x
+  change (((ξ x)⁻¹ : Circle) : ℂ) = (χ x : ℂ) * (((mₛ x).val : ℝ) : ℂ) ^ ((b : ℂ) * Complex.I) at h
+  have hb : (((mₛ x).val : ℝ) : ℂ) ^ ((b : ℂ) * Complex.I) =
+      (Circle.exp (b * logNorm x) : ℂ) := by
+    rw [Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr hpos.ne'), ← Complex.ofReal_log hpos.le,
+      Circle.coe_exp]
+    congr 1
+    push_cast
+    ring
+  rw [hb] at h
+  have he : (ξ x)⁻¹ = χ x * Circle.exp (b * logNorm x) := Circle.ext h
+  have hi := congrArg Inv.inv he
+  simpa only [inv_inv, mul_inv, ← Circle.exp_neg, neg_mul] using hi
+
+
+open Classical in
+/-- Reflection and translation of the lattice index preserve a fixed polynomial
+degree, uniformly over all moment orders at that character. -/
+private theorem sLocalOrbital_modelFrequency_growth (p : Vℚ) (ω : PontryaginDual J₁) (χ : PontryaginDual Jₛ)
+    (v : S) (t : ℝ) (n₀ : ℤ) (j₀ : Idx(p, ω)) (hj₀ : j₀.val.1 = lattice(χ, v, t, n₀))
+    (hv₀ : v ∈ sLocalFinitePolePlaces j₀.val.1)
+    (k : Fin (Fintype.card (sLocalOrbitalActivePlaces p ω)))
+    (hk : (sLocalOrbitalActiveEquiv p ω k).val = v)
+    (ι : ModelIndex(p, ω) ≃ Idx(p, ω)) (hι : ∀ j, (ι j).val = ((circleToComplex).comp j.val.1⁻¹, j.val.2))
+    (X : PontryaginDual Jₛ) (a : ℝ) (freq : ℤ → PontryaginDual Jₛ)
+    (hf : ∀ n x, freq n x = X x * Circle.exp (((n : ℝ) * period(v) - a) * logNorm x))
+    (hfr : range freq = modulatedCyclicAnnihilatorFiber mGroup ω⁻¹ (sLocalOrbitalDifferenceGenerator p ω k))
+    (N : ModelIndex(p, ω) → ℝ) (e : ℕ) (B : ℝ) (hB : 0 < B)
+    (hbound : ∀ (n : ℤ) j, j.val.1 = freq n → N j ≤ B * (1 + |(n : ℝ)|) ^ e) :
+    ∃ C : ℝ, 0 < C ∧ ∀ (n : ℤ) (j : Idx(p, ω)), j.val.1 = lattice(χ, v, t, n) →
+      N (ι.symm j) ≤ C * (1 + |(n : ℝ)|) ^ e := by
+  classical
+  have hgen₀ := ((sLocalOrbitalFinitePole_iff ω v j₀.val.1 j₀.property.1).mp hv₀).2
+  have hjc (j : Idx(p, ω)) :
+      j.val.1 = (circleToComplex).comp (ι.symm j).val.1⁻¹ := by
+    have hh := congrArg Prod.fst (hι (ι.symm j))
+    exact (congrArg (fun z : Idx(p, ω) ↦ z.val.1) (ι.apply_symm_apply j).symm).trans hh
+  have hmem : (ι.symm j₀).val.1 ∈ modulatedCyclicAnnihilatorFiber mGroup ω⁻¹ (sLocalOrbitalDifferenceGenerator p ω k) := by
+    apply (mem_modulatedCyclicAnnihilatorFiber_iff mGroup ω⁻¹ (sLocalOrbitalDifferenceGenerator p ω k) _).mpr
+    refine ⟨?_, sLocalOrbitalModelIndex_restrict p ω (ι.symm j₀)⟩
+    change (ι.symm j₀).val.1 (sLocalOrbitalInsert (sLocalOrbitalActiveEquiv p ω k).val
+      (sLocalOrbitalUniformizer (sLocalOrbitalActiveEquiv p ω k).val))⁻¹ = 1
+    rw [hk, map_inv]
+    apply Circle.ext
+    rw [hjc j₀] at hgen₀
+    exact hgen₀
+  have hfound : ∃ m₀ : ℤ, freq m₀ = (ι.symm j₀).val.1 := Set.mem_range.mp (hfr.symm ▸ hmem)
+  let m₀ := hfound.choose
+  have hm₀ := hfound.choose_spec
+  have hmodel (n : ℤ) (j : Idx(p, ω)) (hj : j.val.1 = lattice(χ, v, t, n)) :
+      (ι.symm j).val.1 = freq (m₀ + n₀ - n) := by
+    apply ContinuousMonoidHom.ext
+    intro x
+    have h₀ := sLocalOrbital_lattice_inverse_character χ v t n₀ (ι.symm j₀).val.1 ((hjc j₀).symm.trans hj₀) x
+    have h := sLocalOrbital_lattice_inverse_character χ v t n (ι.symm j).val.1 ((hjc j).symm.trans hj) x
+    have href := (DFunLike.congr_fun hm₀ x).trans h₀
+    rw [hf] at href
+    exact (h.trans (orbitalFourierLattice_reflect_shift _ _ _ _ m₀ n₀ n href.symm)).trans (hf _ _).symm
+  let b : ℝ := |((m₀ + n₀ : ℤ) : ℝ)|
+  have hcost (n : ℤ) : 1 + |((m₀ + n₀ - n : ℤ) : ℝ)| ≤ (1 + b) * (1 + |(n : ℝ)|) := by
+    rw [Int.cast_sub]
+    have hab := abs_sub (((m₀ + n₀ : ℤ) : ℝ)) (n : ℝ)
+    change |(((m₀ + n₀ : ℤ) : ℝ)) - n| ≤ b + |(n : ℝ)| at hab
+    nlinarith [mul_nonneg (show 0 ≤ b from abs_nonneg _) (abs_nonneg (n : ℝ))]
+  have hbpos : 0 < 1 + b := by
+    dsimp [b]
+    positivity
+  refine ⟨B * (1 + b) ^ e, by positivity, fun n j hj ↦ ?_⟩
+  have h := hbound (m₀ + n₀ - n) (ι.symm j) (hmodel n j hj)
+  have hpow := pow_le_pow_left₀ (by positivity : 0 ≤ 1 + |((m₀ + n₀ - n : ℤ) : ℝ)|) (hcost n) e
+  rw [mul_pow] at hpow
+  exact (h.trans (mul_le_mul_of_nonneg_left hpow hB.le)).trans_eq (mul_assoc _ _ _).symm
+
+open Classical in
+/-- The periodic growth estimate transported across the norm-weighted Fourier comparison.
+The Fourier normalization has constant norm on each primary pole block. -/
+private theorem sLocalFourierOrbital_growth_of_periodic
+    (p : Vℚ) (χ : PontryaginDual Jₛ) (ω : PontryaginDual J₁)
+    (v : S) (t : ℝ)
+    (_hS : IsSaturatedPlaceSet S) (_hp : (Sₚ(p)).Nonempty) (_hPic : PicTrivial)
+    (_hv : v.val ∈ Sₚ(p))
+    (ψ : Idx(p, ω) → Q(p, ω))
+    (_hψ : ∀ (i j : Idx(p, ω)) (x : Θₛ(ω)), π(p, ω) x = ψ j →
+      sLocalOrbitalFourierJet (F := F) (S := S) (T := Sₚ(p)) (ω := ω) i x = if i = j then 1 else 0)
+    (q : Seminorm ℂ Q(p, ω)) (_hq : Continuous q) :
+    ∃ d : ℕ, ∃ C : ℝ, 0 < C ∧
+      ∀ (n : ℤ) (j : Idx(p, ω)), j.val.1 = lattice(χ, v, t, n) →
+        v ∈ sLocalFinitePolePlaces (F := F) (S := S) j.val.1 → q (ψ j) ≤ C * (1 + |(n : ℝ)|) ^ d := by
+  classical
+  by_cases hex : ∃ (n : ℤ) (j : Idx(p, ω)), j.val.1 = lattice(χ, v, t, n) ∧ v ∈ sLocalFinitePolePlaces j.val.1
+  swap
+  · exact ⟨0, 1, one_pos, fun n j h hj ↦ (hex ⟨n, j, h, hj⟩).elim⟩
+  obtain ⟨n₀, j₀, hj₀, hv₀⟩ := hex
+  rcases sLocalOrbitalIndex_enumerable_or_empty (F := F) (S := S) p ω _hS _hp _hPic with hσ | ⟨hE, -⟩
+  swap
+  · exact (hE.false j₀).elim
+  obtain ⟨σ⟩ := hσ
+  let m := mGroup
+  let hm := (sLocalOrbital_modulation (F := F) (S := S)).1
+  let hs := (sLocalOrbital_modulation (F := F) (S := S)).2
+  let γ := sLocalOrbitalDifferenceGenerator (F := F) (S := S) p ω
+  let J := ModelIndex(p, ω)
+  have hgen := (sLocalOrbitalDifferenceGenerator_periods p ω).1
+  have hcomm := (sLocalOrbitalDifferenceGenerator_periods p ω).2
+  let cmp := sLocalOrbital_periodicFourierComparison (F := F) (S := S) p ω _hS _hp _hPic σ hgen hcomm
+  have hmass := cmp.1
+  let ι := cmp.2.choose
+  let T := cmp.2.choose_spec.choose
+  have hι := cmp.2.choose_spec.choose_spec.1
+  have hjet := cmp.2.choose_spec.choose_spec.2
+  let mass : ℂ := (sLocalNormOneQuotientMeasure F S).real univ
+  let s (j : J) : ℂ := mass⁻¹ * (-1 : ℂ) ^ j.val.2
+  have hsne (j : J) : s j ≠ 0 := mul_ne_zero (inv_ne_zero hmass) (pow_ne_zero _ (by norm_num))
+  let U := H₀(ω⁻¹) ⧸ (modulatedIsotypicDifferenceProduct m hm hs ω⁻¹ univ
+    ordConnected_univ (mem_univ (0 : ℝ)) (List.ofFn γ)).range
+  let d (j : J) : StrongDual ℂ U := modulatedQuotientLogMoment m hm hs ω⁻¹ γ hgen μorb j
+  have hcoord (j : J) (x : Θₛ(ω)) : sLocalOrbitalFourierJet (ι j) x =
+      s j * d j (T (π(p, ω) x)) := hjet j x
+  let fam := orbitalQuotient_rescale_biorthogonal
+    (π(p, ω)) (Rₚ(p, ω)).mkQ_surjective ι T s hsne d (fun i x ↦ sLocalOrbitalFourierJet i x)
+    hcoord ψ _hψ q _hq
+  let η := fam.choose
+  let q' := fam.choose_spec.choose
+  have diag := fam.choose_spec.choose_spec.1
+  have off := fam.choose_spec.choose_spec.2.1
+  have hq' := fam.choose_spec.choose_spec.2.2.1
+  have hsemin := fam.choose_spec.choose_spec.2.2.2
+  have semin (j : J) : q' (η j) = ‖mass⁻¹‖ * q (ψ (ι j)) := by
+    have habs : ‖s j‖ = ‖mass⁻¹‖ := by
+      change ‖mass⁻¹ * (-1 : ℂ) ^ j.val.2‖ = ‖mass⁻¹‖
+      rw [norm_mul, norm_pow, norm_neg, norm_one, one_pow, mul_one]
+    exact (hsemin j).trans (congrArg (fun a ↦ a * q (ψ (ι j))) habs)
+  have hur := ((sLocalOrbitalFinitePole_iff (F := F) (S := S) ω v j₀.val.1 j₀.property.1).mp hv₀).1
+  let av : sLocalOrbitalActivePlaces (F := F) (S := S) p ω := ⟨v, Finset.mem_filter.mpr ⟨Finset.mem_univ _, _hv, hur⟩⟩
+  let k := (sLocalOrbitalActiveEquiv (F := F) (S := S) p ω).symm av
+  have hk : (sLocalOrbitalActiveEquiv (F := F) (S := S) p ω k).val = v :=
+    congrArg Subtype.val ((sLocalOrbitalActiveEquiv (F := F) (S := S) p ω).apply_symm_apply av)
+  have hL : Real.log ((m (γ k)).val : ℝ) = Real.log (v.val.asIdeal.absNorm : ℝ) := by
+    change Real.log ((mₛ (sLocalOrbitalDifferenceGenerator (F := F) (S := S) p ω k)).val : ℝ) = _
+    rw [sLocalOrbitalDifferenceGenerator_norm, hk]
+  obtain ⟨τ, hτ⟩ := sIdeleQuotientNorm_exists_section F S
+  obtain ⟨X, _, _, hX, _⟩ := exists_modulatedCyclicCharacter_lifts m (γ k) τ hτ (hgen k)
+  choose t₀ ht₀ using fun (i : Fin _) (η' : PontryaginDual m.toMonoidHom.ker) ↦
+    (existsUnique_modulatedCharacterPhase m (γ i) (hgen i) (X η')).exists
+  let bound := modulatedQuotientLogMoment_biorthogonal_growth m hm hs ω⁻¹ γ hgen X hX
+    t₀ ht₀ μorb hcomm η diag off q' hq'
+  let e := bound.choose
+  let B := (bound.choose_spec k).choose
+  have hB := (bound.choose_spec k).choose_spec.1
+  have hbound := (bound.choose_spec k).choose_spec.2
+  let freq (n : ℤ) : PontryaginDual Jₛ :=
+    ((PontryaginDual.map (⟨QuotientGroup.mk' (Subgroup.zpowers (γ k)), QuotientGroup.continuous_mk⟩ :
+      Jₛ →ₜ* (Jₛ ⧸ Subgroup.zpowers (γ k))) (modulatedCyclicCharacter m (γ k) (hgen k)
+        X (t₀ k) (ht₀ k) (ω⁻¹, n))))⁻¹
+  have hf (n : ℤ) (x : Jₛ) : freq n x = X ω⁻¹ x * Circle.exp (((n : ℝ) * period(v) - t₀ k ω⁻¹) * logNorm x) := by
+    calc
+      _ = X ω⁻¹ x * Circle.exp (-((t₀ k ω⁻¹ - 2 * Real.pi * (n : ℝ) / Real.log ((m (γ k)).val : ℝ)) *
+            Real.log ((m x).val : ℝ))) := by
+        change (modulatedCyclicCharacter m (γ k) (hgen k) X (t₀ k) (ht₀ k) (ω⁻¹, n)
+          (QuotientGroup.mk x))⁻¹ = _
+        rw [modulatedCyclicCharacter_mk, Circle.exp_neg, mul_inv, inv_inv]
+      _ = _ := by
+        rw [hL]
+        congr 2
+        change -((t₀ k ω⁻¹ - 2 * Real.pi * (n : ℝ) / Real.log (v.val.asIdeal.absNorm : ℝ)) *
+          logNorm x) = ((n : ℝ) * period(v) - t₀ k ω⁻¹) * logNorm x
+        ring
+  have hfr := (modulatedPeriodicFrequency_bijective m hm hs ω⁻¹ γ hgen X hX t₀ ht₀ k).2
+  change range freq = _ at hfr
+  let hres := sLocalOrbital_modelFrequency_growth p ω χ v t n₀ j₀ hj₀ hv₀ k hk ι hι (X ω⁻¹) (t₀ k ω⁻¹)
+    freq hf hfr (fun j ↦ q' (η j)) e B hB hbound
+  let C := hres.choose
+  have hC := hres.choose_spec.1
+  have hscale := hres.choose_spec.2
+  have hnorm : 0 < ‖mass⁻¹‖ := norm_pos_iff.mpr (inv_ne_zero hmass)
+  refine ⟨e, C / ‖mass⁻¹‖, div_pos hC hnorm, fun n j hj _ ↦ ?_⟩
+  have heq : ‖mass⁻¹‖ * q (ψ j) = q' (η (ι.symm j)) :=
+    (congrArg (fun i : Idx(p, ω) ↦ ‖mass⁻¹‖ * q (ψ i)) (ι.apply_symm_apply j).symm).trans (semin _).symm
+  have h := heq.le.trans (hscale n j hj)
+  calc
+    q (ψ j) ≤ (C * (1 + |(n : ℝ)|) ^ e) / ‖mass⁻¹‖ := (le_div_iff₀ hnorm).mpr (by simpa only [mul_comm (q (ψ j))] using h)
+    _ = _ := by ring
 
 end PrimaryBases
 
@@ -3880,7 +4162,8 @@ theorem sLocalFourierOrbital_biorthogonal_growth
     (q : Seminorm ℂ Q(p, ω)) (_hq : Continuous q) :
     ∃ d : ℕ, ∃ C : ℝ, 0 < C ∧
       ∀ (n : ℤ) (j : Idx(p, ω)), j.val.1 = lattice(χ, v, t, n) →
-        v ∈ sLocalFinitePolePlaces (F := F) (S := S) j.val.1 → q (ψ j) ≤ C * (1 + |(n : ℝ)|) ^ d := by sorry
+        v ∈ sLocalFinitePolePlaces (F := F) (S := S) j.val.1 → q (ψ j) ≤ C * (1 + |(n : ℝ)|) ^ d :=
+  sLocalFourierOrbital_growth_of_periodic p χ ω v t _hS _hp _hPic _hv ψ _hψ q _hq
 
 /-- Uniform vertical decay restricts to rapid decay on an affine lattice. -/
 private theorem sLocalOrbitalFourierJet_lattice_schwartz_rapidSamples (G : ℂ → ℂ)
