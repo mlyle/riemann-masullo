@@ -119,4 +119,3 @@ theorem rational_diagonal_eq_wide_of_isEmpty_exterior
   exact sub_eq_zero.mp (hh.unique (hasSum_zero ..))
 
 end RiemannMasullo.StripNuclearity
-

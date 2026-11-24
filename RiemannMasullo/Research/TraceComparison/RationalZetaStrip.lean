@@ -83,4 +83,3 @@ theorem rational_radial_diagonal_eq_weil_of_riemannHypothesis (hrh : RiemannHypo
     (α:=1/2) le_rfl hs U hU hm).2
 
 end RiemannMasullo.StripNuclearity
-
