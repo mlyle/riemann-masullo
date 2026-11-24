@@ -3,6 +3,8 @@ module
 public import RiemannMasullo.Ch01_Introduction.Sec4
 public import RiemannMasullo.Ch10_TraceSpectral.Sec2
 import RiemannMasullo.Ch07_SchauderBasesZeta.Sec1b
+import Mathlib.Analysis.Calculus.InverseFunctionTheorem.Deriv
+import Mathlib.RingTheory.RootsOfUnity.Complex
 import Mathlib.Analysis.SpecialFunctions.ImproperIntegrals
 import Mathlib.MeasureTheory.Integral.Asymptotics
 import Mathlib.MeasureTheory.Function.L2Space
@@ -113,6 +115,17 @@ private theorem centeredLogThetaLift_energy (χ : PontryaginDual (IdeleClassGrou
   rw [Complex.norm_exp, Real.exp_le_one_iff]
   simpa using (show x / 2 ≤ 0 by linarith)
 
+private theorem centeredLogThetaLift_homogeneous_mellin (χ : PontryaginDual C𝔽) (τ : ℝ≥0ˣ →ₜ* I𝔽)
+    (hτ : RightInverse τ (ideleNorm F)) (f : adelePolarSubspace F) (w : ℂ) :
+    let ω := χ.comp (⟨(ideleClassNorm F).ker.subtype, continuous_subtype_val⟩ : C₁ →ₜ* C𝔽)
+    homogeneousThetaMellinIntegral τ ω f.val (ideleClassNormTwist χ w) =
+      globalThetaMellinIntegral f.val (ideleClassNormTwist χ w) := by
+  intro ω
+  obtain ⟨hf, hF⟩ := (mem_adelePolarSubspace _).mp f.property
+  obtain ⟨hhom, hglob⟩ := (exists_globalPolarThetaMellin χ τ hτ).choose_spec f w
+  have he := congrFun (globalThetaMellinIntegral_eq_continuation_of_vanishing f.val hf hF) (ideleClassNormTwist χ w)
+  exact hhom.symm.trans (hglob.trans he.symm)
+
 private theorem centeredLogThetaLift_homogeneous_zero (χ : PontryaginDual C𝔽) (τ : ℝ≥0ˣ →ₜ* I𝔽)
     (hτ : RightInverse τ (ideleNorm F)) (f : adelePolarSubspace F) {w : ℂ}
     (hz : 0 < meromorphicOrderAt (continuedCompletedHeckeL χ) w) :
@@ -127,9 +140,7 @@ private theorem centeredLogThetaLift_homogeneous_zero (χ : PontryaginDual C𝔽
   have hzero : Zf w = 0 := by
     by_contra hn
     exact (hz.trans_le ((le_max_right ..).trans ho)).ne (ha.meromorphicNFAt.meromorphicOrderAt_eq_zero_iff.mpr hn).symm
-  obtain ⟨hhom, hglob⟩ := (exists_globalPolarThetaMellin χ τ hτ).choose_spec f w
-  have he := congrFun (globalThetaMellinIntegral_eq_continuation_of_vanishing f.val hf hF) (ideleClassNormTwist χ w)
-  exact hhom.symm.trans (hglob.trans (he.symm.trans hzero))
+  exact (centeredLogThetaLift_homogeneous_mellin χ τ hτ f w).trans hzero
 
 private theorem centeredLogThetaLift_haar_exp (v : ℝ≥0ˣ → ℂ) (hi : Integrable v positiveRealHaar) :
     let e : ℝ ≃ₜ ℝ≥0ˣ := Real.expOrderIso.toHomeomorph.trans (Nonneg.unitsHomeomorphPos ℝ).symm
@@ -149,15 +160,14 @@ private theorem centeredLogThetaLift_haar_exp (v : ℝ≥0ˣ → ℂ) (hi : Inte
   rw [hmap] at hi ⊢
   exact ⟨e.measurableEmbedding.integrable_map_iff.mp hi, (e.measurableEmbedding.integral_map v).symm⟩
 
-private theorem centeredLogThetaLift_zero_moment (χ : PontryaginDual C𝔽) (τ : ℝ≥0ˣ →ₜ* I𝔽)
-    (hτ : RightInverse τ (ideleNorm F)) (f : adelePolarSubspace F) {z : ℂ}
-    (hz : 0 < meromorphicOrderAt (continuedCompletedHeckeL χ) (z + 1 / 2)) :
+private theorem centeredLogThetaLift_mellin_moment (χ : PontryaginDual C𝔽) (τ : ℝ≥0ˣ →ₜ* I𝔽)
+    (hτ : RightInverse τ (ideleNorm F)) (f : adelePolarSubspace F) (z : ℂ) :
     let ω := χ.comp (⟨(ideleClassNorm F).ker.subtype, continuous_subtype_val⟩ : C₁ →ₜ* C𝔽)
     let e : ℝ ≃ₜ ℝ≥0ˣ := Real.expOrderIso.toHomeomorph.trans (Nonneg.unitsHomeomorphPos ℝ).symm
     let g (x : ℝ) : C𝔽 := QuotientGroup.mk (τ (e x))
     let u (x : ℝ) := homogeneousAdelicTheta ω f.val (g x) * (χ (g x) : ℂ) * Complex.exp ((x : ℂ) / 2)
     Integrable (fun x ↦ u x * Complex.exp (z * (x : ℂ))) ∧
-      ∫ x, u x * Complex.exp (z * (x : ℂ)) = 0 := by
+      ∫ x, u x * Complex.exp (z * (x : ℂ)) = globalThetaMellinIntegral f.val (ideleClassNormTwist χ (z + 1 / 2)) := by
   intro ω e g u
   let w := z + 1 / 2
   let v (t : ℝ≥0ˣ) := homogeneousAdelicTheta ω f.val (QuotientGroup.mk (τ t)) *
@@ -184,10 +194,24 @@ private theorem centeredLogThetaLift_zero_moment (χ : PontryaginDual C𝔽) (τ
     change homogeneousAdelicTheta ω f.val (g x) * ideleClassNormTwist χ w (g x) = _
     rw [hc, hp]
     simp only [u, mul_assoc]
-  have hsum : ∫ t, v t ∂positiveRealHaar = 0 := centeredLogThetaLift_homogeneous_zero χ τ hτ f hz
+  have hsum : ∫ t, v t ∂positiveRealHaar = globalThetaMellinIntegral f.val (ideleClassNormTwist χ w) :=
+    centeredLogThetaLift_homogeneous_mellin χ τ hτ f w
   obtain ⟨hvi, hvs⟩ := centeredLogThetaLift_haar_exp v hi
   refine ⟨hvi.congr (ae_of_all _ hlog), ?_⟩
   exact (integral_congr_ae (ae_of_all _ fun x ↦ (hlog x).symm)).trans (hvs.trans hsum)
+
+private theorem centeredLogThetaLift_zero_moment (χ : PontryaginDual C𝔽) (τ : ℝ≥0ˣ →ₜ* I𝔽)
+    (hτ : RightInverse τ (ideleNorm F)) (f : adelePolarSubspace F) {z : ℂ}
+    (hz : 0 < meromorphicOrderAt (continuedCompletedHeckeL χ) (z + 1 / 2)) :
+    let ω := χ.comp (⟨(ideleClassNorm F).ker.subtype, continuous_subtype_val⟩ : C₁ →ₜ* C𝔽)
+    let e : ℝ ≃ₜ ℝ≥0ˣ := Real.expOrderIso.toHomeomorph.trans (Nonneg.unitsHomeomorphPos ℝ).symm
+    let g (x : ℝ) : C𝔽 := QuotientGroup.mk (τ (e x))
+    let u (x : ℝ) := homogeneousAdelicTheta ω f.val (g x) * (χ (g x) : ℂ) * Complex.exp ((x : ℂ) / 2)
+    Integrable (fun x ↦ u x * Complex.exp (z * (x : ℂ))) ∧
+      ∫ x, u x * Complex.exp (z * (x : ℂ)) = 0 := by
+  obtain ⟨hi, he⟩ := centeredLogThetaLift_mellin_moment χ τ hτ f z
+  exact ⟨hi, he.trans ((centeredLogThetaLift_homogeneous_mellin χ τ hτ f _).symm.trans
+    (centeredLogThetaLift_homogeneous_zero χ τ hτ f hz))⟩
 
 private theorem hiddenThetaCost_dual_weight {α β s R : ℝ} (h : 0 < α + β) (hs : 0 ≤ s) (hR : 0 ≤ R) :
     let d := intervalSobolevDensity (-α) α s
@@ -770,6 +794,186 @@ private theorem thetaKernel_sum_defects_le (S : Finset ℂ) (e : ℝ) (he : e < 
   rw [Finset.sum_neg_distrib] at hsum
   linarith
 
+private theorem thetaKernel_split_local_zero (F : ℂ → ℂ) (w : ℂ) (m : ℕ) (hm : 0 < m)
+    (hf : AnalyticAt ℂ F w) (ho : analyticOrderAt F w = m) :
+    ∃ p : Fin m → ℂ → ℂ, (∀ i, Tendsto (p i) (𝓝 0) (𝓝 w)) ∧
+      ∀ᶠ c in 𝓝[≠] (0 : ℂ), Injective (fun i ↦ p i c) ∧ ∀ i, F (p i c) = c := by
+  obtain ⟨A, hA, ha, hfac⟩ := hf.analyticOrderAt_eq_natCast.mp ho
+  let v (z : ℂ) := (A z / A w) ^ ((m : ℂ)⁻¹)
+  have hz : A w / A w = 1 := div_self ha
+  have hv := ((Complex.hasStrictDerivAt_cpow_const (c := (m : ℂ)⁻¹)
+    (show A w / A w ∈ Complex.slitPlane by rw [hz]; exact Complex.one_mem_slitPlane))).comp w
+      (hA.hasStrictDerivAt.div_const (A w))
+  let f (z : ℂ) := (z - w) * v z
+  have hf' : HasStrictDerivAt f 1 w := by
+    have hs : HasStrictDerivAt (fun z : ℂ ↦ z - w) 1 w := (hasStrictDerivAt_id w).sub_const w
+    simpa [f, v, ha, Function.comp_def, Pi.mul_def] using hs.mul hv
+  have hf0 : f w = 0 := by simp [f]
+  let inv := hf'.localInverse f 1 w one_ne_zero
+  have hinv : inv 0 = w := by
+    have h := (hf'.eventually_left_inverse one_ne_zero).self_of_nhds
+    simpa only [inv, hf0] using h
+  have ht : Tendsto inv (𝓝 0) (𝓝 w) := by
+    have h : Tendsto inv (𝓝 (f w)) (𝓝 (inv (f w))) := (hf'.to_localInverse one_ne_zero).hasDerivAt.continuousAt.tendsto
+    simpa only [hf0, hinv] using h
+  have hright : ∀ᶠ z in 𝓝 (0 : ℂ), f (inv z) = z := by
+    simpa only [inv, hf0] using hf'.eventually_right_inverse one_ne_zero
+  have hformula : ∀ᶠ z in 𝓝 (0 : ℂ), F (inv z) = z ^ m * A w := by
+    filter_upwards [ht.eventually hfac, hright] with z hF hR
+    calc
+      F (inv z) = (f (inv z)) ^ m * A w := by
+        rw [hF]
+        simp only [f, v, mul_pow, Complex.cpow_nat_inv_pow _ hm.ne', smul_eq_mul]
+        field_simp
+      _ = _ := by rw [hR]
+  let ζ := Complex.exp (2 * Real.pi * Complex.I / m)
+  have hζ : IsPrimitiveRoot ζ m := Complex.isPrimitiveRoot_exp _ hm.ne'
+  let y (i : Fin m) (c : ℂ) := ζ ^ i.val * ((c / A w) ^ ((m : ℂ)⁻¹))
+  have hmp : 0 < ((m : ℂ)⁻¹).re := by simpa using (inv_pos.mpr (Nat.cast_pos.mpr hm : 0 < (m : ℝ)))
+  have ht0 (i : Fin m) : Tendsto (y i) (𝓝 0) (𝓝 0) := by
+    have hv0 := (Complex.continuousAt_cpow_const_of_re_pos (z := 0) (Or.inl (by simp)) hmp).tendsto
+    have hn : (m : ℂ)⁻¹ ≠ 0 := inv_ne_zero (Nat.cast_ne_zero.mpr hm.ne')
+    have hlim : Tendsto (fun c : ℂ ↦ c / A w) (𝓝 0) (𝓝 0) := by
+      simpa using (continuous_id.div_const (A w)).continuousAt (x := (0 : ℂ)) |>.tendsto
+    simpa [y, Complex.zero_cpow hn] using (hv0.comp hlim).const_mul (ζ ^ i.val)
+  refine ⟨fun i c ↦ inv (y i c), fun i ↦ ht.comp (ht0 i), ?_⟩
+  have he : ∀ᶠ c in 𝓝 (0 : ℂ), ∀ i : Fin m, f (inv (y i c)) = y i c ∧
+      F (inv (y i c)) = (y i c)^m * A w :=
+    Filter.eventually_all.mpr fun i ↦ (ht0 i).eventually (hright.and hformula)
+  filter_upwards [he.filter_mono nhdsWithin_le_nhds, self_mem_nhdsWithin] with c hc hc0
+  have hy : (c / A w) ^ ((m : ℂ)⁻¹) ≠ 0 := Complex.cpow_ne_zero_iff.mpr (Or.inl (div_ne_zero hc0 ha))
+  constructor
+  · intro i j h
+    have hij := congrArg f h
+    rw [(hc i).1, (hc j).1] at hij
+    exact Fin.ext (hζ.pow_inj i.isLt j.isLt (mul_right_cancel₀ hy hij))
+  · intro i
+    rw [(hc i).2]
+    change (ζ ^ i.val * ((c / A w) ^ ((m : ℂ)⁻¹))) ^ m * A w = c
+    rw [mul_pow, ← pow_mul, Nat.mul_comm i.val m, pow_mul, hζ.pow_eq_one,
+      one_pow, one_mul, Complex.cpow_nat_inv_pow _ hm.ne', div_mul_cancel₀ _ ha]
+
+private theorem thetaKernel_split_finite_zeros {ι : Type*} [Fintype ι] (w : ι → ℂ) (hw : Injective w)
+    (m : ι → ℕ) (hm : ∀ i, 0 < m i) (F : ℂ → ℂ) (hF : ∀ i, AnalyticAt ℂ F (w i))
+    (htop : ∀ i, analyticOrderAt F (w i) ≠ ⊤)
+    (ho : ∀ i, (m i : ℕ∞) ≤ analyticOrderAt F (w i)) :
+    ∃ p : (Σ i, Fin (m i)) → ℂ → ℂ, (∀ i, Tendsto (p i) (𝓝 0) (𝓝 (w i.1))) ∧
+      ∀ᶠ c in 𝓝[≠] (0 : ℂ), Injective (fun i ↦ p i c) ∧ ∀ i, F (p i c) = c := by
+  let n (i : ι) := (analyticOrderAt F (w i)).toNat
+  have hn (i : ι) : analyticOrderAt F (w i) = n i := (ENat.natCast_toNat (htop i)).symm
+  have hmn (i : ι) : m i ≤ n i := by exact_mod_cast (ho i).trans_eq (hn i)
+  choose p hp hpt using fun i ↦ thetaKernel_split_local_zero F (w i) (n i) ((hm i).trans_le (hmn i)) (hF i) (hn i)
+  let q (i : Σ i, Fin (m i)) := p i.1 (Fin.castLE (hmn i.1) i.2)
+  have hq (i : Σ i, Fin (m i)) : Tendsto (q i) (𝓝 0) (𝓝 (w i.1)) := hp _ _
+  refine ⟨q, hq, ?_⟩
+  have hsep (i j : Σ i, Fin (m i)) :
+      ∀ᶠ c in 𝓝 (0 : ℂ), i.1 ≠ j.1 → q i c ≠ q j c := by
+    by_cases h : i.1 = j.1
+    · exact Eventually.of_forall fun _ h' ↦ (h' h).elim
+    have hlim := (hq i).sub (hq j)
+    have hne := hlim.eventually (eventually_ne_nhds (sub_ne_zero.mpr (hw.ne h)))
+    exact hne.mono fun _ h' _ ↦ sub_ne_zero.mp h'
+  have hsep' := Filter.eventually_all.mpr fun i ↦ Filter.eventually_all.mpr (hsep i)
+  filter_upwards [hsep'.filter_mono nhdsWithin_le_nhds, Filter.eventually_all.mpr hpt] with c hdiff hsame
+  refine ⟨?_, fun i ↦ (hsame i.1).2 _⟩
+  rintro ⟨i, k⟩ ⟨j, l⟩ he
+  by_cases h : i = j
+  · subst j
+    have he' := (hsame i).1 he
+    have hkl : k = l := Fin.ext (congrArg (fun j : Fin (n i) ↦ j.val) he')
+    rw [hkl]
+  · exact False.elim (hdiff ⟨i,k⟩ ⟨j,l⟩ h he)
+
+private theorem thetaKernel_multiple_distance {ι : Type*} [Fintype ι] (w : ι → ℂ) (hw : Injective w)
+    (hr : ∀ i, 1 / 2 < (w i).re) (m : ι → ℕ) (hm : ∀ i, 0 < m i)
+    (u : ℝ → ℂ) (hu : MemLp u 2 (volume.restrict (Iic (0 : ℝ))))
+    (F : ℂ → ℂ) (hF : AnalyticOnNhd ℂ F univ) (ho : ∀ i, (m i : ℕ∞) ≤ analyticOrderAt F (w i))
+    (hI : ∀ z : ℂ, 1 / 2 < z.re → IntegrableOn (fun x : ℝ ↦ u x * Complex.exp ((z - 1 / 2) * x)) (Iic 0))
+    (hZ : ∀ z : ℂ, 1 / 2 < z.re → F z = z * ∫ x in Iic (0 : ℝ), u x * Complex.exp ((z - 1 / 2) * x)) :
+    1 - (∏ i, (‖1 - w i‖ / ‖w i‖) ^ m i) ^ 2 ≤
+      ∫ x in Iic (0 : ℝ), ‖Complex.exp ((x : ℂ) / 2) - u x‖ ^ 2 := by
+  classical
+  by_cases h1 : F 1 = 0
+  · have h := thetaKernel_halfLine_distance {1} u hu (by simp; norm_num) (by
+      intro z hz
+      rw [Finset.mem_singleton.mp hz]
+      simpa [hZ 1 (by norm_num)] using h1)
+    simp at h
+    exact (sub_le_self _ (sq_nonneg _)).trans h
+  have ht (i : ι) : analyticOrderAt F (w i) ≠ ⊤ := by
+    intro hz
+    have he := (AnalyticOnNhd.analyticOrderAt_eq_top_iff_eq_zero (w i) (fun z ↦ hF z (mem_univ z))).mp hz
+    exact h1 (congrFun he 1)
+  obtain ⟨p, hp, hpc⟩ := thetaKernel_split_finite_zeros w hw m hm F (fun i ↦ hF _ (mem_univ _)) ht ho
+  let h (x : ℝ) := Complex.exp ((x : ℂ) / 2)
+  let μ := volume.restrict (Iic (0 : ℝ))
+  have hh : MemLp h 2 μ := by
+    apply (memLp_two_iff_integrable_sq_norm (show Continuous h by dsimp [h]; fun_prop).aestronglyMeasurable).2
+    have he (x : ℝ) : ‖h x‖ ^ 2 = Real.exp x := by
+      simp [h, Complex.norm_exp, ← Real.exp_nat_mul]
+      ring
+    simp only [he]
+    simpa [μ, IntegrableOn] using integrableOn_exp_mul_Iic (by norm_num : (0 : ℝ) < 1) 0
+  have hnorm (v : ℝ → ℂ) (hv : MemLp v 2 μ) :
+      (∫ x, ‖v x‖ ^ 2 ∂μ) = ‖hv.toLp v‖ ^ 2 := by
+    rw [← inner_self_eq_norm_sq (𝕜 := ℂ), L2.inner_def, ← integral_re (L2.integrable_inner _ _)]
+    apply integral_congr_ae
+    filter_upwards [hv.coeFn_toLp] with x hx
+    simp only [inner_self_eq_norm_sq, hx]
+  let b (z : ℂ) := ‖1 - z‖ / ‖z‖
+  have hb (i : Σ i, Fin (m i)) : Tendsto (fun c ↦ b (p i c)) (𝓝 0) (𝓝 (b (w i.1))) := by
+    have hn : w i.1 ≠ 0 := fun he ↦ by have := hr i.1; simp [he] at this; linarith
+    exact ((tendsto_const_nhds.sub (hp i)).norm.div (hp i).norm (norm_ne_zero_iff.mpr hn))
+  have hl := (tendsto_finsetProd Finset.univ fun i _ ↦ hb i).pow 2
+  have hl' := (tendsto_const_nhds (x := (1 : ℝ))).sub hl
+  have herr : Tendsto (fun c : ℂ ↦ ‖hh.toLp h - (hu.toLp u - c • hh.toLp h)‖ ^ 2)
+      (𝓝 0) (𝓝 (‖hh.toLp h - hu.toLp u‖ ^ 2)) := by
+    simpa using (show Continuous (fun c : ℂ ↦ ‖hh.toLp h - (hu.toLp u - c • hh.toLp h)‖ ^ 2) by fun_prop).continuousAt (x := 0) |>.tendsto
+  have hpos : ∀ᶠ c in 𝓝 (0 : ℂ), ∀ i, 1 / 2 < (p i c).re :=
+    Filter.eventually_all.mpr fun i ↦ ((Complex.continuous_re.tendsto _).comp (hp i)).eventually (lt_mem_nhds (hr i.1))
+  have hle : ∀ᶠ c in 𝓝[≠] (0 : ℂ), 1 - (∏ i, b (p i c)) ^ 2 ≤
+      ‖hh.toLp h - (hu.toLp u - c • hh.toLp h)‖ ^ 2 := by
+    filter_upwards [hpc, hpos.filter_mono nhdsWithin_le_nhds] with c hc hcp
+    let e : (Σ i, Fin (m i)) ↪ ℂ := ⟨fun i ↦ p i c, hc.1⟩
+    let S := Finset.univ.map e
+    let v := u - c • h
+    have hv : MemLp v 2 μ := hu.sub (hh.const_smul c)
+    have hSr (z : ℂ) (hz : z ∈ S) : 1 / 2 < z.re := by
+      obtain ⟨i, _, rfl⟩ := Finset.mem_map.mp hz
+      exact hcp i
+    have hSm (z : ℂ) (hz : z ∈ S) : (∫ x in Iic (0 : ℝ), v x * Complex.exp ((z - 1 / 2) * x)) = 0 := by
+      obtain ⟨i, _, rfl⟩ := Finset.mem_map.mp hz
+      let z := p i c
+      have hrz : 0 < z.re := by linarith [hcp i]
+      have hn : z ≠ 0 := fun h ↦ by simp [h] at hrz
+      have he (x : ℝ) : v x * Complex.exp ((z - 1 / 2) * x) =
+          u x * Complex.exp ((z - 1 / 2) * x) - c * Complex.exp (z * x) := by
+        change (u x - c * Complex.exp ((x : ℂ) / 2)) * _ = _
+        rw [sub_mul, mul_assoc, ← Complex.exp_add]
+        congr 3
+        ring
+      change (∫ x in Iic (0 : ℝ), v x * Complex.exp ((z - 1 / 2) * x)) = 0
+      simp only [he]
+      rw [integral_sub (hI z (hcp i)) ((integrableOn_exp_mul_complex_Iic hrz 0).const_mul c),
+        integral_const_mul, integral_exp_mul_complex_Iic hrz 0]
+      have ha := (hc.2 i).symm.trans (hZ z (hcp i))
+      change c = z * _ at ha
+      rw [ha]
+      simp only [Complex.ofReal_zero, mul_zero, Complex.exp_zero, one_div]
+      field_simp
+      simp
+    have hbound := thetaKernel_halfLine_distance S v hv hSr hSm
+    change _ ≤ ∫ x, ‖(h - v) x‖ ^ 2 ∂μ at hbound
+    rw [hnorm (h - v) (hh.sub hv), MemLp.toLp_sub hh hv] at hbound
+    have hvL : hv.toLp v = hu.toLp u - c • hh.toLp h := rfl
+    rw [hvL] at hbound
+    simpa only [S, Finset.prod_map, Function.Embedding.coeFn_mk, e, b] using hbound
+  have hlim := le_of_tendsto_of_tendsto_of_frequently (hl'.mono_left nhdsWithin_le_nhds)
+    (herr.mono_left nhdsWithin_le_nhds) hle.frequently
+  change _ ≤ ∫ x, ‖(h - u) x‖ ^ 2 ∂μ
+  rw [hnorm (h - u) (hh.sub hu), MemLp.toLp_sub hh hu]
+  simpa only [Fintype.prod_sigma, Finset.prod_const, Finset.card_univ, Fintype.card_fin, b] using hlim
+
 /-- For any finite set of distinct right-hand completed Hecke zeros, the squared half-line
 error of a supported polar-free lift from the centered indicator is at least one minus the
 product of their squared Blaschke factors at one. -/
@@ -795,6 +999,62 @@ theorem centeredLogThetaLift_finite_zero_distance (χ : PontryaginDual C𝔽)
   simpa only [hiddenThetaCost, neg_zero, hw, mul_one, Real.sq_sqrt (integral_nonneg (fun _ ↦ sq_nonneg _))]
     using thetaKernel_halfLine_distance S u hu (fun ρ hρ ↦ (hS ρ hρ).1) hm
 
+/-- A supported polar-free lift obeys the finite Blaschke bound with multiplicity.
+Each exponent may be any positive integer up to the completed Hecke zero order. -/
+theorem centeredLogThetaLift_finite_zero_distance_with_multiplicity (χ : PontryaginDual C𝔽)
+    (σ : ℝ≥0ˣ →ₜ* I𝔽) (hσ : RightInverse σ (ideleNorm F)) (f : adelePolarSubspace F)
+    (hsupp : ∀ x : ℝ, 0 < x → centeredLogThetaLift χ σ f x = 0)
+    (S : Finset ℂ) (m : ℂ → ℕ) (hS : ∀ ρ ∈ S, 1 / 2 < ρ.re ∧ 0 < m ρ ∧
+      (m ρ : WithTop ℤ) ≤ meromorphicOrderAt (continuedCompletedHeckeL χ) ρ) :
+    1 - (∏ ρ ∈ S, (‖1 - ρ‖ / ‖ρ‖) ^ m ρ) ^ 2 ≤
+      hiddenThetaCost 0 0 0 (fun x ↦ Complex.exp ((x : ℂ) / 2) - centeredLogThetaLift χ σ f x) ^ 2 := by
+  let u := centeredLogThetaLift χ σ f
+  obtain ⟨hc, hi⟩ := centeredLogThetaLift_energy χ σ hσ f (α := 0) (s := 0) le_rfl le_rfl 0
+  have hw (x : ℝ) : intervalSobolevDensity 0 0 0 x = 1 := by simp [intervalSobolevDensity]
+  have hu : MemLp u 2 (volume.restrict (Iic (0 : ℝ))) :=
+    (memLp_two_iff_integrable_sq_norm hc.aestronglyMeasurable).mpr
+      (by simpa only [IntegrableOn, u, neg_zero, hw, mul_one] using hi)
+  let Z (s : ℂ) := globalThetaMellinIntegral f.val (ideleClassNormTwist χ s)
+  let G (s : ℂ) := s * Z s
+  obtain ⟨hf, hF⟩ := (mem_adelePolarSubspace _).mp f.property
+  have hZa (s : ℂ) : AnalyticAt ℂ Z s :=
+    (globalThetaMellinIntegral_entire_of_vanishing f.val hf hF χ).analyticAt s
+  have hGa (s : ℂ) : AnalyticAt ℂ G s := analyticAt_id.fun_mul (hZa s)
+  have hord (i : S) : (m i : ℕ∞) ≤ analyticOrderAt G i := by
+    have hn : (i : ℂ) ≠ 0 := by
+      intro h
+      have hr := (hS i i.property).1
+      simp [h] at hr
+      linarith
+    have hG : meromorphicOrderAt G i = meromorphicOrderAt Z i :=
+      meromorphicOrderAt_mul_of_ne_zero (g := id) analyticAt_id hn
+    have hbound : (m i : WithTop ℤ) ≤ meromorphicOrderAt G i :=
+      (hS i i.property).2.2.trans (((le_max_right _ _).trans
+        ((isLeast_globalThetaMellinIntegral_orders χ i).2 ⟨f, rfl⟩)).trans_eq hG.symm)
+    rw [(hGa i).meromorphicOrderAt_eq] at hbound
+    cases h : analyticOrderAt G i with
+    | top => simp
+    | coe k =>
+      change (m i : WithTop ℤ) ≤ (analyticOrderAt G i).map (fun n : ℕ ↦ (n : ℤ)) at hbound
+      simpa [h] using hbound
+  have ht (z : ℂ) :
+      Integrable (fun x : ℝ ↦ u x * Complex.exp ((z - 1 / 2) * x)) ∧
+        (∫ x in Iic (0 : ℝ), u x * Complex.exp ((z - 1 / 2) * x)) = Z z := by
+    obtain ⟨hit, hzt⟩ := centeredLogThetaLift_mellin_moment χ σ hσ f (z - 1 / 2)
+    refine ⟨hit, ?_⟩
+    rw [setIntegral_eq_integral_of_forall_compl_eq_zero (by
+      intro x hx; dsimp only [u]; rw [hsupp x (lt_of_not_ge hx), zero_mul])]
+    change (∫ x : ℝ, u x * Complex.exp ((z - 1 / 2) * x)) =
+      globalThetaMellinIntegral f.val (ideleClassNormTwist χ ((z - 1 / 2) + 1 / 2)) at hzt
+    simpa only [sub_add_cancel, Z] using hzt
+  have h := thetaKernel_multiple_distance (fun i : S ↦ (i : ℂ)) Subtype.val_injective
+    (fun i ↦ (hS i i.property).1) (fun i ↦ m i.val) (fun i ↦ (hS i i.property).2.1)
+    u hu G (fun s _ ↦ hGa s) hord (fun z _ ↦ (ht z).1.integrableOn)
+    (fun z _ ↦ congrArg (z * ·) (ht z).2.symm)
+  rw [Finset.prod_coe_sort S (fun ρ ↦ (‖1 - ρ‖ / ‖ρ‖) ^ m ρ)] at h
+  simpa only [hiddenThetaCost, neg_zero, hw, mul_one,
+    Real.sq_sqrt (integral_nonneg (fun _ ↦ sq_nonneg _)), u] using h
+
 /-- A single polar-free lift of half-line error less than one bounds the sum of normalized
 real-part displacements over all distinct completed Hecke zeros to the right of the line. -/
 theorem centeredLogThetaLift_right_zero_sum (χ : PontryaginDual C𝔽)
@@ -816,6 +1076,79 @@ theorem centeredLogThetaLift_right_zero_sum (χ : PontryaginDual C𝔽)
       (centeredLogThetaLift_finite_zero_distance χ σ hσ f ho S hS)
     simpa [S, d] using h
   have hd (ρ : Z) : 0 ≤ d ρ := div_nonneg (by linarith [ρ.property.1]) (sq_nonneg _)
+  exact ⟨summable_of_sum_le hd hfin, (summable_of_sum_le hd hfin).tsum_le_of_sum_le hfin⟩
+
+private theorem thetaKernel_sum_multiplicities_le (S : Finset ℂ) (m : ℂ → ℕ) (e : ℝ) (he : e < 1)
+    (hS : ∀ w ∈ S, 1 / 2 < w.re ∧ 0 < m w)
+    (h : 1 - (∏ w ∈ S, (‖1 - w‖ / ‖w‖) ^ m w) ^ 2 ≤ e) :
+    ∑ w ∈ S, (m w : ℝ) * ((2 * w.re - 1) / ‖w‖ ^ 2) ≤ - Real.log (1 - e) := by
+  let b (w : ℂ) := (‖1 - w‖ / ‖w‖) ^ 2
+  have hr (w : ℂ) : ((‖1 - w‖ / ‖w‖) ^ m w) ^ 2 = b w ^ m w := by
+    change ((‖1 - w‖ / ‖w‖) ^ m w) ^ 2 = ((‖1 - w‖ / ‖w‖) ^ 2) ^ m w
+    rw [← pow_mul, Nat.mul_comm, pow_mul]
+  have hp : 1 - e ≤ ∏ w ∈ S, b w ^ m w := by
+    have h' : 1 - e ≤ (∏ w ∈ S, (‖1 - w‖ / ‖w‖) ^ m w) ^ 2 := by linarith
+    rwa [← Finset.prod_pow, show (fun w : ℂ ↦ ((‖1 - w‖ / ‖w‖) ^ m w) ^ 2) = _ from funext hr] at h'
+  have hpos := (sub_pos.mpr he).trans_le hp
+  have hb (w : ℂ) (hw : w ∈ S) : 0 < b w := by
+    refine (sq_nonneg _).lt_of_ne' ?_
+    intro heq
+    change b w = 0 at heq
+    have hz := Finset.prod_ne_zero_iff.mp hpos.ne' w hw
+    exact hz (by rw [heq, zero_pow (hS w hw).2.ne'])
+  have hlog := Real.log_le_log (sub_pos.mpr he) hp
+  rw [Real.log_prod (fun w hw ↦ pow_ne_zero _ (hb w hw).ne')] at hlog
+  simp only [Real.log_pow] at hlog
+  have hsum : ∑ w ∈ S, (m w : ℝ) * ((2 * w.re - 1) / ‖w‖ ^ 2) ≤
+      ∑ w ∈ S, -((m w : ℝ) * Real.log (b w)) := by
+    apply Finset.sum_le_sum
+    intro w hw
+    rw [← thetaKernel_factor_defect w (hS w hw).1, ← mul_neg]
+    apply mul_le_mul_of_nonneg_left _ (Nat.cast_nonneg _)
+    change 1 - b w ≤ -Real.log (b w)
+    linarith [Real.log_le_sub_one_of_pos (hb w hw)]
+  rw [Finset.sum_neg_distrib] at hsum
+  linarith
+
+/-- If one supported polar-free lift has squared error below one, the normalized
+displacements of right-hand completed Hecke zeros are summable with their orders.
+Their total is at most the negative logarithm of one minus the squared error. -/
+theorem centeredLogThetaLift_right_zero_sum_with_multiplicity (χ : PontryaginDual C𝔽)
+    (σ : ℝ≥0ˣ →ₜ* I𝔽) (hσ : RightInverse σ (ideleNorm F)) (f : adelePolarSubspace F)
+    (ho : ∀ x : ℝ, 0 < x → centeredLogThetaLift χ σ f x = 0)
+    (he : hiddenThetaCost 0 0 0 (fun x ↦ Complex.exp ((x : ℂ) / 2) - centeredLogThetaLift χ σ f x) ^ 2 < 1) :
+    let Z := {ρ : ℂ // 1 / 2 < ρ.re ∧ 0 < meromorphicOrderAt (continuedCompletedHeckeL χ) ρ}
+    let m (ρ : Z) := (meromorphicOrderAt (continuedCompletedHeckeL χ) ρ.val).untop₀.toNat
+    let d (ρ : Z) := (m ρ : ℝ) * ((2 * ρ.val.re - 1) / ‖ρ.val‖ ^ 2)
+    Summable d ∧ ∑' ρ : Z, d ρ ≤ - Real.log (1 -
+      hiddenThetaCost 0 0 0 (fun x ↦ Complex.exp ((x : ℂ) / 2) - centeredLogThetaLift χ σ f x) ^ 2) := by
+  intro Z m d
+  let e := hiddenThetaCost 0 0 0 (fun x ↦ Complex.exp ((x : ℂ) / 2) - centeredLogThetaLift χ σ f x) ^ 2
+  let L := continuedCompletedHeckeL χ
+  let n (w : ℂ) := (meromorphicOrderAt L w).untop₀.toNat
+  have hmult (ρ : Z) : 0 < n ρ.val ∧ (n ρ.val : WithTop ℤ) = meromorphicOrderAt L ρ.val := by
+    have hfinite : meromorphicOrderAt L ρ.val ≠ ⊤ := by
+      apply (continuedCompletedHeckeL_spec χ).1.meromorphicOn.meromorphicOrderAt_ne_top_of_isPreconnected
+        isPreconnected_univ (x := 2) (mem_univ _) (mem_univ _)
+      intro ht
+      have hp : 0 < meromorphicOrderAt L 2 := ht ▸ WithTop.coe_lt_top (0 : ℤ)
+      have hbad := completedHeckeL_continuation_zeros χ L (continuedCompletedHeckeL_spec χ).1
+        (continuedCompletedHeckeL_spec χ).2 (by norm_num : 0 < (2 : ℂ).re) hp
+      norm_num at hbad
+    obtain ⟨k, hk⟩ := WithTop.ne_top_iff_exists.mp hfinite
+    have hk' : (0 : ℤ) < k := by exact_mod_cast (ρ.property.2.trans_eq hk.symm)
+    simp only [n, ← hk, WithTop.untop₀_coe]
+    exact ⟨by omega, by exact_mod_cast Int.toNat_of_nonneg hk'.le⟩
+  have hfin (T : Finset Z) : ∑ ρ ∈ T, d ρ ≤ -Real.log (1 - e) := by
+    let S := T.map (Function.Embedding.subtype _)
+    have hs (w : ℂ) (hw : w ∈ S) : 1 / 2 < w.re ∧ 0 < n w ∧
+        (n w : WithTop ℤ) ≤ meromorphicOrderAt L w := by
+      obtain ⟨ρ, _, rfl⟩ := Finset.mem_map.mp hw
+      exact ⟨ρ.property.1, (hmult ρ).1, (hmult ρ).2.le⟩
+    have h := thetaKernel_sum_multiplicities_le S n e he (fun w hw ↦ ⟨(hs w hw).1, (hs w hw).2.1⟩)
+      (centeredLogThetaLift_finite_zero_distance_with_multiplicity χ σ hσ f ho S n hs)
+    simpa [S, d, m, n, L] using h
+  have hd (ρ : Z) : 0 ≤ d ρ := mul_nonneg (Nat.cast_nonneg _) (div_nonneg (by linarith [ρ.property.1]) (sq_nonneg _))
   exact ⟨summable_of_sum_le hd hfin, (summable_of_sum_le hd hfin).tsum_le_of_sum_le hfin⟩
 
 /-- At a completed Hecke zero ρ to the right of the central line, a polar-free theta lift
