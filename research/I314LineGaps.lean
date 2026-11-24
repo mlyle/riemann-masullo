@@ -1405,7 +1405,7 @@ private theorem strip_polynomial_ratio (χ : PontryaginDual C₁ → PontryaginD
       rw [(spectralConvolution_mellin_integrable _ _ _).2] at h
       change L (i z) (A v) = nuclearityTestMellin (χ z.val.val.1) φ (pt(b(z),t(z))) * L (i z) v at h
       change L (i z) (A v) = e * L (i z) v
-      exact h.trans (congrArg (fun ω ↦ nuclearityTestMellin (χ ω) φ (pt(b(z),t(z))) * L (i z) v) z.property.1)
+      exact h.trans (congrArg (fun θ ↦ nuclearityTestMellin (χ θ) φ (pt(b(z),t(z))) * L (i z) v) z.property.1)
     have hw : z.val ≠ w.val := fun eq ↦ p.property (Subtype.ext eq)
     have ht := strip_pair_probe A x L hb _ j hji hw ⟨0,z.property.2⟩ ⟨0,w.property.2⟩ e he
     change ‖e‖*(‖L (i z)‖/Δ p) ≤ B
@@ -1444,10 +1444,10 @@ private theorem strip_spacing_of_ratio (χ : PontryaginDual C₁ → PontryaginD
     apply hBd (χ η) (b(z)) (t(z)) (b(w)) (t(w)) (abs_le.mpr z.val.property.1) (abs_le.mpr w.val.property.1)
     · have H := MemLp.coeFn_toLp (spectralStripJet_memLp χ hα (le_of_lt (zero_lt_one.trans hs)) (j z))
       change _ =ᵐ[_] spectralZeroJet (χ z.val.val.1) (b(z)) (t(z)) 0 at H
-      exact H.trans (.of_forall fun y ↦ congrArg (fun ω ↦ spectralZeroJet (χ ω) (b(z)) (t(z)) 0 y) z.property.1)
+      exact H.trans (.of_forall fun y ↦ congrArg (fun θ ↦ spectralZeroJet (χ θ) (b(z)) (t(z)) 0 y) z.property.1)
     · have H := MemLp.coeFn_toLp (spectralStripJet_memLp χ hα (le_of_lt (zero_lt_one.trans hs)) (j w))
       change _ =ᵐ[_] spectralZeroJet (χ w.val.val.1) (b(w)) (t(w)) 0 at H
-      exact H.trans (.of_forall fun y ↦ congrArg (fun ω ↦ spectralZeroJet (χ ω) (b(w)) (t(w)) 0 y) w.property.1)
+      exact H.trans (.of_forall fun y ↦ congrArg (fun θ ↦ spectralZeroJet (χ θ) (b(w)) (t(w)) 0 y) w.property.1)
   have hCp : 0 < C+1 := by linarith
   refine ⟨(c/((C+1)*B))^n, pow_pos (div_pos hc (mul_pos hCp hB)) _, k*n, fun z w hne ↦ ?_⟩
   apply strip_power_gap hCp hB hc (by positivity) (norm_nonneg _) hn
