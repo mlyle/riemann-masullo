@@ -18,6 +18,9 @@ public import RiemannMasullo.ForMathlib.Analysis.Distribution.SchwartzSpace.Comp
 public import RiemannMasullo.ForMathlib.Topology.Algebra.Module.StrongDualQuotient
 import Mathlib.Analysis.Distribution.SchwartzSpace.CompactSupport
 import Mathlib.Geometry.Manifold.PartitionOfUnity
+import RiemannMasullo.ForMathlib.Analysis.Distribution.TestFunction.CoordinatePlane
+import RiemannMasullo.ForMathlib.Analysis.Distribution.TestFunction.Schwartz
+import RiemannMasullo.ForMathlib.Analysis.LocallyConvex.Completion
 import Mathlib.LinearAlgebra.Dual.Lemmas
 import RiemannMasullo.ForMathlib.NumberTheory.NumberField.Completion.FinitePlace
 import Mathlib.Analysis.Fourier.FiniteAbelian.PontryaginDuality
@@ -1143,6 +1146,104 @@ theorem finitePlacePrincipalValue_range (v : V) :
       _ = finitePlacePrincipalValue v f + (f - finitePlacePrincipalValue v f) := congrArg (finitePlacePrincipalValue v f + ·) (hP.trans hge)
       _ = f := by abel
 
+section
+
+/-- Tests for which a scalar functional intertwines an operator with a weighted
+average of translates form a submodule, including integrability in the predicate. -/
+private def principalValueAverageSubmodule {A G : Type*} [AddCommGroup A] [Module ℂ A]
+    [MeasurableSpace G] (μ : Measure G) (K : ℂ) (P : A →ₗ[ℂ] A)
+    (T : G → A →ₗ[ℂ] A) (L : A →ₗ[ℂ] ℂ) : Submodule ℂ A where
+  carrier := {f | Integrable (fun u ↦ L (T u f)) μ ∧ L (P f) = L f - K * ∫ u, L (T u f) ∂μ}
+  zero_mem' := by simp
+  add_mem' := by
+    rintro f g ⟨hf, ef⟩ ⟨hg, eg⟩
+    simp only [Set.mem_ofPred_eq, map_add]
+    exact ⟨hf.add hg, by rw [integral_add hf hg, ef, eg]; ring⟩
+  smul_mem' := by
+    rintro c f ⟨hf, ef⟩
+    simp only [Set.mem_ofPred_eq, map_smul, smul_eq_mul]
+    exact ⟨hf.const_mul c, by rw [integral_const_mul, ef]; ring⟩
+
+/-- Transport the scalar averaging identity along a linear insertion on a single orbit. -/
+private theorem principalValueAverageSubmodule_insert {A B G : Type*}
+    [AddCommGroup A] [Module ℂ A] [AddCommGroup B] [Module ℂ B] [MeasurableSpace G]
+    (μ : Measure G) (K : ℂ) (p : A →ₗ[ℂ] A) (P : B →ₗ[ℂ] B)
+    (u : G → A →ₗ[ℂ] A) (T : G → B →ₗ[ℂ] B) (L : B →ₗ[ℂ] ℂ)
+    (I : A →ₗ[ℂ] B) (a : A) (b : B) (hi : I a = b)
+    (hp : P b = I (p a)) (ht : ∀ g, T g b = I (u g a))
+    (ha : a ∈ principalValueAverageSubmodule μ K p u (L.comp I)) :
+    b ∈ principalValueAverageSubmodule μ K P T L := by
+  change Integrable (fun g ↦ L (T g b)) μ ∧ L (P b) = L b - K * ∫ g, L (T g b) ∂μ
+  simp only [ht, hp]
+  rw [← hi]
+  exact ha
+
+/-- Translation of tests as a linear map. -/
+private def principalValueTranslate {R : Type*} [CommRing R] [TopologicalSpace R]
+    [IsTopologicalRing R] (c : Rˣ) :
+    SchwartzBruhat (Multiplicative R) →ₗ[ℂ] SchwartzBruhat (Multiplicative R) where
+  toFun := schwartzBruhatUnitTranslate c
+  map_add' := fun _ _ ↦ Subtype.ext (funext fun _ ↦ rfl)
+  map_smul' := fun _ _ ↦ Subtype.ext (funext fun _ ↦ rfl)
+
+/-- A linear functional commutes with the local principal-value average. On each unit
+isotype the orbit integral is the integral of a scalar character times a single test. -/
+private theorem finitePlacePrincipalValue_average_functional (v : V) (π : Fᵥ(v)ˣ)
+    (hπ : vval(v).IsUniformizer π.val) (L : ℬ(Fᵥ(v)) →ₗ[ℂ] ℂ) (f : ℬ(Fᵥ(v))) :
+    f ∈ principalValueAverageSubmodule (μᵥ(v).restrict Uᵥ(v)) (μᵥ(v).real Uᵥ(v) : ℂ)⁻¹
+      (finitePlacePrincipalValue v).toLinearMap (fun u ↦ principalValueTranslate (π * u)) L := by
+  classical
+  have : BorelSpace Fᵥ(v)ˣ := ⟨rfl⟩
+  have : μᵥ(v).IsHaarMeasure := finiteLocalMultiplicativeTamagawaMeasure_isHaarMeasure v
+  have hU : MeasurableSet (Uᵥ(v) : Set Fᵥ(v)ˣ) :=
+    (Submonoid.isOpen_units (Valued.isOpen_valuationSubring _)).measurableSet
+  have hK : IsCompact (Uᵥ(v) : Set Fᵥ(v)ˣ) := Submonoid.units_isCompact
+    (isCompact_iff_compactSpace.mpr (compactSpace_adicCompletionIntegers v))
+  refine Submodule.span_le.mpr ?_ (finitePlacePrincipalValue_unique_span v f)
+  rintro g ⟨χ, hχ⟩
+  let ψ (u : Fᵥ(v)ˣ) : ℂ := if h : u ∈ Uᵥ(v) then χ ⟨u, h⟩ else 0
+  have hc : ContinuousOn ψ (Uᵥ(v) : Set Fᵥ(v)ˣ) := by
+    rw [continuousOn_iff_continuous_domRestrict]
+    exact (continuous_subtype_val.comp χ.continuous).congr fun u ↦ by
+      change (χ u : ℂ) = ψ u.val
+      simp only [ψ, dite_eq_left u.2]
+  let b := principalValueTranslate π g
+  have trans (u : Fᵥ(v)ˣ) (hu : u ∈ Uᵥ(v)) :
+      principalValueTranslate (π * u) g = ψ u • b := by
+    rw [show ψ u = (χ ⟨u, hu⟩ : ℂ) by simp [ψ, hu]]
+    calc principalValueTranslate (π * u) g =
+          principalValueTranslate π (schwartzBruhatUnitTranslate u g) := by
+            apply SchwartzBruhat.ext
+            intro x
+            change g (Multiplicative.ofAdd ((↑(π * u)⁻¹ : Fᵥ(v)) * x.toAdd)) = _
+            rw [mul_inv_rev, Units.val_mul, mul_assoc]
+            rfl
+      _ = _ := by rw [hχ ⟨u, hu⟩, map_smul]
+  let k : ℂ := (μᵥ(v).real Uᵥ(v) : ℂ)⁻¹
+  have hPV : finitePlacePrincipalValue v g = g - (k * ∫ u in Uᵥ(v), ψ u ∂μᵥ(v)) • b := by
+    apply SchwartzBruhat.ext
+    intro x
+    rw [finitePlacePrincipalValue_spec v π hπ]
+    unfold finitePlacePrincipalValueFun
+    have he (u : Fᵥ(v)ˣ) (hu : u ∈ Uᵥ(v)) := congrArg (fun t : ℬ(Fᵥ(v)) ↦ t x) (trans u hu)
+    have point (u : Fᵥ(v)ˣ) (hu : u ∈ Uᵥ(v)) : g (Multiplicative.ofAdd
+        ((↑u⁻¹ : Fᵥ(v)) * ((↑π⁻¹ : Fᵥ(v)) * x.toAdd))) = ψ u * b x := by
+      have eq := he u hu
+      change g (Multiplicative.ofAdd ((↑(π * u)⁻¹ : Fᵥ(v)) * x.toAdd)) = _ at eq
+      rwa [mul_inv_rev, Units.val_mul, mul_assoc] at eq
+    rw [setIntegral_congr_fun hU point, integral_mul_const]
+    change g x - k * (_ * b x) = g x - (k * _) * b x
+    rw [mul_assoc]
+  have hval (u : Fᵥ(v)ˣ) (hu : u ∈ Uᵥ(v)) :
+      L (principalValueTranslate (π * u) g) = ψ u * L b := by rw [trans u hu, map_smul, smul_eq_mul]
+  change IntegrableOn _ _ _ ∧ L (finitePlacePrincipalValue v g) = _
+  refine ⟨((hc.mul continuousOn_const).congr (fun u hu ↦ hval u hu)).integrableOn_compact hK, ?_⟩
+  rw [hPV, map_sub, map_smul, smul_eq_mul, setIntegral_congr_fun hU hval, integral_mul_const]
+  change L g - (k * _) * L b = L g - k * (_ * L b)
+  rw [mul_assoc]
+
+end
+
 end FinitePlace
 
 section AdelicPrincipalValue
@@ -1215,6 +1316,90 @@ theorem sAdelePrincipalValue_tmul {S S₀ : Finset V} (h₀ : S₀ ⊆ S)
     exact sAdelePrincipalValue_tmul_aux e (fun w : S ↦ w.val ∈ S₀)
       (fun w ↦ finitePlacePrincipalValue w.val) f g
 
+/-- Slicing an algebraic tensor against a functional on the tail commutes with any
+linear operator on the first factor. -/
+private theorem adelePrincipalValue_tensor_slice {A B X : Type*}
+    [AddCommGroup A] [Module ℂ A] [TopologicalSpace A]
+    [AddCommGroup B] [Module ℂ B] [TopologicalSpace B]
+    [AddCommGroup X] [Module ℂ X] [TopologicalSpace X]
+    (e : InductiveTensor A B ≃L[ℂ] X) (l : B →ₗ[ℂ] ℂ) (P : A →ₗ[ℂ] A) :
+    let T := e.toLinearMap.comp ((TensorProduct.map P (LinearMap.id (M := B))).comp e.symm.toLinearMap)
+    ∃ r : X →ₗ[ℂ] A, (∀ a b, r (e (a ⊗ₜ[ℂ] b)) = l b • a) ∧ r.comp T = P.comp r := by
+  intro T
+  let m : A ⊗[ℂ] B →ₗ[ℂ] A :=
+    (TensorProduct.rid ℂ A).toLinearMap.comp (TensorProduct.map LinearMap.id l)
+  let r := m.comp e.symm.toLinearMap
+  have hr (a : A) (b : B) : r (e (a ⊗ₜ[ℂ] b)) = l b • a := by
+    change m (e.symm (e _)) = _
+    erw [e.symm_apply_apply]
+    exact TensorProduct.rid_tmul a (l b)
+  refine ⟨r, hr, (LinearMap.cancel_right (g := e.toLinearMap) e.surjective).mp ?_⟩
+  apply TensorProduct.ext'
+  intro a b
+  change r (e (TensorProduct.map P LinearMap.id (e.symm (e (a ⊗ₜ[ℂ] b))))) =
+    P (r (e (a ⊗ₜ[ℂ] b)))
+  erw [e.symm_apply_apply, TensorProduct.map_tmul, hr, hr, map_smul]
+  rfl
+
+/-- The slice at the tail of an adele is evaluated by varying its stage coordinates.
+Applying the global principal value before slicing applies the stage principal value to the slice. -/
+private theorem adelePrincipalValue_slice (S : Finset V) (x : 𝔸[F]) :
+    ∃ (z : SAdeleRing F S → 𝔸[F]) (r : ℬ(𝔸[F]) →ₗ[ℂ] ℬₛ(S)),
+      (∀ p, (z p).1 = p.1) ∧ (∀ p (w : S), (z p).2 w.val = p.2 w) ∧
+      (∀ p w, w ∉ S → (z p).2 w = x.2 w) ∧ z (adeleProjection F S x) = x ∧
+      (∀ h p, r h (Multiplicative.ofAdd p) = h (Multiplicative.ofAdd (z p))) ∧
+      r.comp (adelePrincipalValue F S) = (sAdelePrincipalValue F (Finset.Subset.refl S)).comp r := by
+  classical
+  let patch (p : SAdeleRing F S) (w : V) : w.adicCompletion F :=
+    if h : w ∈ S then p.2 ⟨w, h⟩ else x.2 w
+  let z (p : SAdeleRing F S) : 𝔸[F] := (p.1, ⟨patch p, by
+    filter_upwards [S.eventually_cofinite_notMem, x.2.2] with w hw hx
+    rw [show patch p w = x.2 w from dite_eq_right hw]
+    exact hx⟩)
+  have hstage (p : SAdeleRing F S) : adeleProjection F S (z p) = p :=
+    Prod.ext rfl (funext fun w ↦ (dite_eq_left w.2 : patch p w.val = p.2 w))
+  let tail := finiteAdeleTailProjection F S x.2
+  have htail (p : SAdeleRing F S) : finiteAdeleTailProjection F S (z p).2 = tail := by
+    apply RestrictedProduct.ext
+    intro w
+    exact dite_eq_right w.2
+  let ev : ℬ(FiniteAdeleTail F S) →ₗ[ℂ] ℂ :=
+    { toFun := fun g ↦ g (Multiplicative.ofAdd tail), map_add' := fun _ _ ↦ rfl,
+      map_smul' := fun _ _ ↦ rfl }
+  let e := (sAdeleTailSchwartz_inductiveTensor_equiv F S).choose
+  obtain ⟨r, hr, hP⟩ := adelePrincipalValue_tensor_slice e ev (sAdelePrincipalValue F (Finset.Subset.refl S))
+  refine ⟨z, r, fun _ ↦ rfl, fun p w ↦ dite_eq_left w.2, fun p w hw ↦ dite_eq_right hw, ?_, ?_, hP⟩
+  · refine Prod.ext rfl ?_
+    apply RestrictedProduct.ext
+    intro w
+    change patch _ w = _
+    simp only [patch]
+    split <;> rfl
+  · intro h p
+    let L : ℬₛ(S) →ₗ[ℂ] ℂ :=
+      { toFun := fun f ↦ f (Multiplicative.ofAdd p), map_add' := fun _ _ ↦ rfl, map_smul' := fun _ _ ↦ rfl }
+    let R : ℬ(𝔸[F]) →ₗ[ℂ] ℂ :=
+      { toFun := fun f ↦ f (Multiplicative.ofAdd (z p)), map_add' := fun _ _ ↦ rfl, map_smul' := fun _ _ ↦ rfl }
+    suffices heq : (L.comp r).comp e.toLinearMap = R.comp e.toLinearMap from
+      LinearMap.congr_fun ((LinearMap.cancel_right e.surjective).mp heq) h
+    apply TensorProduct.ext'
+    intro a b
+    change r (e (a ⊗ₜ[ℂ] b)) (Multiplicative.ofAdd p) = e (a ⊗ₜ[ℂ] b) (Multiplicative.ofAdd (z p))
+    erw [hr, (sAdeleTailSchwartz_inductiveTensor_equiv F S).choose_spec a b (z p), hstage, htail]
+    exact mul_comm _ _
+
+open Classical in
+/-- Split a product on a stage into factors on the selected stage and its complement. -/
+private theorem adelePrincipalValue_prod_stage {ι : Type*} {S₀ S : Finset ι} (h₀ : S₀ ⊆ S)
+    (f : S → ℂ) : (∏ w : S, f w) =
+      (∏ w : S₀, f ⟨w.val, h₀ w.2⟩) * ∏ w : {w : S // w.val ∉ S₀}, f w.val := by
+  classical
+  rw [← Fintype.prod_subtype_mul_prod_subtype (fun w : S ↦ w.val ∈ S₀)]
+  congr 1
+  exact Fintype.prod_equiv
+    (⟨fun w ↦ ⟨w.val.val, w.2⟩, fun w ↦ ⟨⟨w.val, h₀ w.2⟩, w.2⟩,
+      fun _ ↦ rfl, fun _ ↦ rfl⟩ : {w : S // w.val ∈ S₀} ≃ S₀) _ _ fun _ ↦ rfl
+
 private theorem sLocalThetaPrincipalValue_transition_ext {ι A X Y : Type*} {M : ι → Type*}
     [TopologicalSpace A] [AddCommGroup A] [Module ℂ A] [TopologicalSpace X]
     [AddCommGroup X] [Module ℂ X] [AddCommGroup Y] [Module ℂ Y]
@@ -1228,163 +1413,69 @@ private theorem sLocalThetaPrincipalValue_transition_ext {ι A X Y : Type*} {M :
   apply TensorProduct.ext
   exact LinearMap.ext fun a ↦ LinearMap.ext_on_range PiTensorProduct.span_tprod_eq_top (h a)
 
-namespace AdelePrincipalValueTmul
-local notation "B(" R ")" => SchwartzBruhat (Multiplicative R)
-local notation "E(" S ")" => (sAdeleTailSchwartz_inductiveTensor_equiv F S).choose
-local notation "U(" S ")" => (sAdeleSchwartz_inductiveTensor_equiv F S).choose
-private def ev {G : Type*} [CommGroup G] [TopologicalSpace G] (x : G) :
-    SchwartzBruhat G →ₗ[ℂ] ℂ where
-  toFun f := f x
-  map_add' _ _ := rfl
-  map_smul' _ _ := rfl
-private def slice (S : Finset V) (x : AdeleRing (𝓞 F) F) :
-    B(AdeleRing (𝓞 F) F) →ₗ[ℂ] B(SAdeleRing F S) :=
-  (TensorProduct.lift ((LinearMap.lsmul ℂ (B(SAdeleRing F S))).comp
-    (ev (Multiplicative.ofAdd (finiteAdeleTailProjection F S x.2))))).comp
-      ((TensorProduct.comm ℂ _ _).toLinearMap.comp E(S).symm.toLinearMap)
-private theorem slice_pure (S : Finset V) (x : AdeleRing (𝓞 F) F)
-    (a : B(SAdeleRing F S)) (b : B(FiniteAdeleTail F S)) :
-    slice S x (E(S) (a ⊗ₜ[ℂ] b)) =
-      b (Multiplicative.ofAdd (finiteAdeleTailProjection F S x.2)) • a := by
-  unfold slice
-  simp only [LinearMap.comp_apply]
-  exact congrArg (fun z ↦ TensorProduct.lift ((LinearMap.lsmul ℂ (B(SAdeleRing F S))).comp
-    (ev (Multiplicative.ofAdd (finiteAdeleTailProjection F S x.2)))) (TensorProduct.comm ℂ _ _ z))
-    (E(S).symm_apply_apply (a ⊗ₜ[ℂ] b))
-private theorem slice_eval (S : Finset V) (x y : AdeleRing (𝓞 F) F)
-    (h : finiteAdeleTailProjection F S y.2 = finiteAdeleTailProjection F S x.2)
-    (f : B(AdeleRing (𝓞 F) F)) :
-    slice S x f (Multiplicative.ofAdd (adeleProjection F S y)) = f (Multiplicative.ofAdd y) := by
-  let l := (ev (Multiplicative.ofAdd (adeleProjection F S y))).comp (slice S x)
-  let r := ev (Multiplicative.ofAdd y)
-  have he : l.comp E(S).toLinearMap = r.comp E(S).toLinearMap := by
-    apply TensorProduct.ext'
-    intro a b
-    change slice S x (E(S) (a ⊗ₜ[ℂ] b)) _ = E(S) (a ⊗ₜ[ℂ] b) _
-    rw [slice_pure, (sAdeleTailSchwartz_inductiveTensor_equiv F S).choose_spec a b y, h]
-    exact mul_comm _ _
-  exact LinearMap.congr_fun ((LinearMap.cancel_right E(S).surjective).mp he) f
-private theorem same (S : Finset V) (a : B(SAdeleRing F S)) (b : B(FiniteAdeleTail F S)) :
-    adelePrincipalValue F S (E(S) (a ⊗ₜ[ℂ] b)) =
-      E(S) (sAdelePrincipalValue F (Finset.Subset.refl S) a ⊗ₜ[ℂ] b) := by
-  unfold adelePrincipalValue
-  change E(S) (TensorProduct.map _ _ (E(S).symm (E(S) _))) = _
-  exact congrArg (fun z ↦ E(S) (TensorProduct.map (sAdelePrincipalValue F (Finset.Subset.refl S)) (LinearMap.id : B(FiniteAdeleTail F S) →ₗ[ℂ] _) z)) (E(S).symm_apply_apply (a ⊗ₜ[ℂ] b))
-set_option maxHeartbeats 1000000 in
-private theorem slice_pv (S : Finset V) (x : AdeleRing (𝓞 F) F) (f : B(AdeleRing (𝓞 F) F)) :
-    slice S x (adelePrincipalValue F S f) =
-      sAdelePrincipalValue F (Finset.Subset.refl S) (slice S x f) := by
-  let l := (slice S x).comp (adelePrincipalValue F S)
-  let r := (sAdelePrincipalValue F (Finset.Subset.refl S)).comp (slice S x)
-  have he : l.comp E(S).toLinearMap = r.comp E(S).toLinearMap := by
-    apply TensorProduct.ext'
-    intro a b
-    change slice S x (adelePrincipalValue F S (E(S) (a ⊗ₜ[ℂ] b))) = _
-    erw [same, slice_pure]
-    change _ = sAdelePrincipalValue F (Finset.Subset.refl S) (slice S x (E(S) (a ⊗ₜ[ℂ] b)))
-    erw [slice_pure, map_smul]
-  exact LinearMap.congr_fun ((LinearMap.cancel_right E(S).surjective).mp he) f
-private def pureTest (S : Finset V) (a : B(InfiniteAdeleRing F))
-    (b : ∀ v : V, B(v.adicCompletion F)) : B(SAdeleRing F S) :=
-  U(S) (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w : S, b w.val))
-private theorem pure_val (S : Finset V) (a : B(InfiniteAdeleRing F))
-    (b : ∀ v : V, B(v.adicCompletion F)) (z : SAdeleRing F S) :
-    pureTest S a b (Multiplicative.ofAdd z) =
-      a (Multiplicative.ofAdd z.1) * ∏ w : S, b w.val (Multiplicative.ofAdd (z.2 w)) := by
-  unfold pureTest
-  with_reducible exact (sAdeleSchwartz_inductiveTensor_equiv F S).choose_spec a (fun w ↦ b w.val) z
-set_option maxHeartbeats 1000000 in
-open Classical in
-private theorem sliced (S T : Finset V) (h : T ⊆ S) (a : B(InfiniteAdeleRing F))
-    (b : ∀ v : V, B(v.adicCompletion F)) (g : B(FiniteAdeleTail F S)) (x : AdeleRing (𝓞 F) F) :
-    slice T x (E(S) (pureTest S a b ⊗ₜ[ℂ] g)) =
-      ((∏ w ∈ S \ T, b w (Multiplicative.ofAdd (x.2 w))) *
-        g (Multiplicative.ofAdd (finiteAdeleTailProjection F S x.2))) • pureTest T a b := by
-  apply Subtype.ext
-  funext z
-  let f (w : V) := if hw : w ∈ T then z.toAdd.2 ⟨w,hw⟩ else x.2 w
-  have hf : ∀ᶠ w in Filter.cofinite, f w ∈ w.adicCompletionIntegers F := by
-    filter_upwards [T.eventually_cofinite_notMem, x.2.2] with w hw hx
-    rw [show f w = x.2 w from dite_eq_right hw]
-    exact hx
-  let y : AdeleRing (𝓞 F) F := (z.toAdd.1, ⟨f,hf⟩)
-  have hp : adeleProjection F T y = z.toAdd := Prod.ext rfl (funext fun w ↦ dite_eq_left w.2)
-  have ht (R : Finset V) (hh : T ⊆ R) :
-      finiteAdeleTailProjection F R y.2 = finiteAdeleTailProjection F R x.2 := by
-    apply RestrictedProduct.ext
-    intro w
-    exact dite_eq_right (fun hw ↦ w.2 (hh hw))
-  change slice T x _ (Multiplicative.ofAdd z.toAdd) = _ * pureTest T a b (Multiplicative.ofAdd z.toAdd)
-  conv_lhs => rw [← hp]
-  rw [slice_eval T x y (ht T (Finset.Subset.refl T)), (sAdeleTailSchwartz_inductiveTensor_equiv F S).choose_spec, ht S h, pure_val, ← hp, pure_val]
-  let d (w : V) := b w (Multiplicative.ofAdd (y.2 w))
-  have split := Finset.prod_sdiff (f := d) h
-  have hd : (∏ w ∈ S \ T, d w) = ∏ w ∈ S \ T, b w (Multiplicative.ofAdd (x.2 w)) := by
-    apply Finset.prod_congr rfl
-    intro w hw
-    exact congrArg (fun t ↦ b w (Multiplicative.ofAdd t)) (dite_eq_right (Finset.mem_sdiff.mp hw).2)
-  rw [hd, Finset.prod_subtype T (fun _ ↦ Iff.rfl), Finset.prod_subtype S (fun _ ↦ Iff.rfl)] at split
-  change (a (Multiplicative.ofAdd y.1) * (∏ w : S, d w.val)) * _ = (_ * _) * (a (Multiplicative.ofAdd y.1) * (∏ w : T, d w.val))
-  rw [← split]
-  ring
-open Classical in
-private theorem pure_pv (S T : Finset V) (h : T ⊆ S) (a : B(InfiniteAdeleRing F))
-    (b : ∀ v : V, B(v.adicCompletion F)) :
-    sAdelePrincipalValue F h (pureTest S a b) =
-      pureTest S a (fun v ↦ if v ∈ T then finitePlacePrincipalValue v (b v) else b v) := by
-  exact sAdelePrincipalValue_tmul h a (fun w ↦ b w.val)
-open Classical in
-private theorem checked {S S₀ : Finset V} (h₀ : S₀ ⊆ S)
-    (f : B(SAdeleRing F S)) (g : B(FiniteAdeleTail F S)) :
-    let e := (sAdeleTailSchwartz_inductiveTensor_equiv F S).choose
-    adelePrincipalValue F S₀ (e (f ⊗ₜ[ℂ] g)) = e (sAdelePrincipalValue F h₀ f ⊗ₜ[ℂ] g) := by
-  let ins := E(S).toLinearMap.comp ((TensorProduct.mk ℂ _ _).flip g)
-  suffices he : ins.comp (sAdelePrincipalValue F h₀) = (adelePrincipalValue F S₀).comp ins from
-    (LinearMap.congr_fun he f).symm
-  apply sLocalThetaPrincipalValue_transition_ext U(S)
-  intro a t
-  let b (v : V) : B(v.adicCompletion F) := if hv : v ∈ S then t ⟨v,hv⟩ else 0
-  have hb : (fun w : S ↦ b w.val) = t := funext fun w ↦ dite_eq_left w.2
-  have reduce (a : B(InfiniteAdeleRing F)) (b : ∀ v : V, B(v.adicCompletion F)) :
-      ins (sAdelePrincipalValue F h₀ (pureTest S a b)) = adelePrincipalValue F S₀ (ins (pureTest S a b)) := by
-    let b' (v : V) := if v ∈ S₀ then finitePlacePrincipalValue v (b v) else b v
-    have loc := pure_pv S S₀ h₀ a b
-    have loc₀ := pure_pv S₀ S₀ (Finset.Subset.refl S₀) a b
-    apply Subtype.ext
-    funext xx
-    let x := xx.toAdd
-    let c (k : ∀ v : V, B(v.adicCompletion F)) := (∏ w ∈ S \ S₀, k w (Multiplicative.ofAdd (x.2 w))) *
-      g (Multiplicative.ofAdd (finiteAdeleTailProjection F S x.2))
-    have hc : c b' = c b := by
-      apply congrArg (· * _)
-      apply Finset.prod_congr rfl
-      intro w hw
-      dsimp only [b']
-      rw [ite_eq_right (Finset.mem_sdiff.mp hw).2]
-    have hh : slice S₀ x (ins (sAdelePrincipalValue F h₀ (pureTest S a b))) =
-        slice S₀ x (adelePrincipalValue F S₀ (ins (pureTest S a b))) := by
-      calc
-        _ = slice S₀ x (ins (pureTest S a b')) := congrArg (fun k ↦ slice S₀ x (ins k)) loc
-        _ = c b' • pureTest S₀ a b' := sliced S S₀ h₀ a b' g x
-        _ = c b • sAdelePrincipalValue F (Finset.Subset.refl S₀) (pureTest S₀ a b) :=
-          congrArg₂ (· • ·) hc loc₀.symm
-        _ = sAdelePrincipalValue F (Finset.Subset.refl S₀) (c b • pureTest S₀ a b) := (map_smul _ _ _).symm
-        _ = _ := (congrArg (sAdelePrincipalValue F (Finset.Subset.refl S₀))
-          (sliced S S₀ h₀ a b g x).symm).trans (slice_pv S₀ x _).symm
-    exact ((slice_eval S₀ x x rfl _).symm.trans
-      (congrArg (fun k : B(SAdeleRing F S₀) ↦ k (Multiplicative.ofAdd (adeleProjection F S₀ x))) hh)).trans
-      (slice_eval S₀ x x rfl _)
-  exact hb ▸ reduce a b
-end AdelePrincipalValueTmul
-
 /-- Paper: Definition 5.3.1.4(2), p. 242.
 Through any stage containing S₀ the global operator acts as the S-local operator on the stage
 factor and as the identity on the tail. -/
 theorem adelePrincipalValue_tmul {S S₀ : Finset V} (h₀ : S₀ ⊆ S)
     (f : ℬₛ(S)) (g : ℬ(FiniteAdeleTail F S)) :
     let e := (sAdeleTailSchwartz_inductiveTensor_equiv F S).choose
-    adelePrincipalValue F S₀ (e (f ⊗ₜ[ℂ] g)) = e (sAdelePrincipalValue F h₀ f ⊗ₜ[ℂ] g) :=
-  AdelePrincipalValueTmul.checked h₀ f g
+    adelePrincipalValue F S₀ (e (f ⊗ₜ[ℂ] g)) = e (sAdelePrincipalValue F h₀ f ⊗ₜ[ℂ] g) := by
+  classical
+  intro e
+  let i : ℬₛ(S) →ₗ[ℂ] ℬ(𝔸[F]) :=
+    e.toLinearMap.comp ((TensorProduct.mk ℂ ℬₛ(S) ℬ(FiniteAdeleTail F S)).flip g)
+  let P := sAdelePrincipalValue F h₀
+  let Q := adelePrincipalValue F S₀
+  suffices eq : i.comp P = Q.comp i from (LinearMap.congr_fun eq f).symm
+  apply sLocalThetaPrincipalValue_transition_ext (sAdeleSchwartz_inductiveTensor_equiv F S).choose
+  intro a b
+  let pure (T : Finset V) (d : ∀ w : T, ℬ(w.val.adicCompletion F)) : ℬₛ(T) :=
+    (sAdeleSchwartz_inductiveTensor_equiv F T).choose (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, d w))
+  let op (T : Finset V) (d : ∀ w : T, ℬ(w.val.adicCompletion F)) (w : T) :=
+    if w.val ∈ S₀ then finitePlacePrincipalValue w.val (d w) else d w
+  let res (d : ∀ w : S, ℬ(w.val.adicCompletion F)) (w : S₀) := d ⟨w.val, h₀ w.2⟩
+  have hPV (T : Finset V) (hT : S₀ ⊆ T) (d : ∀ w : T, ℬ(w.val.adicCompletion F)) :
+      sAdelePrincipalValue F hT (pure T d) = pure T (op T d) := by
+    with_reducible exact sAdelePrincipalValue_tmul hT a d
+  change i (P (pure S b)) = Q (i (pure S b))
+  apply SchwartzBruhat.ext
+  intro y
+  let x := y.toAdd
+  obtain ⟨z, r, hz₁, hzS, hzout, hzx, hr, hrQ⟩ := adelePrincipalValue_slice S₀ x
+  let C (d : ∀ w : S, ℬ(w.val.adicCompletion F)) : ℂ :=
+    (∏ w : {w : S // w.val ∉ S₀}, d w.val (Multiplicative.ofAdd (x.2 w.val.val))) *
+      g (Multiplicative.ofAdd (finiteAdeleTailProjection F S x.2))
+  have slice (d : ∀ w : S, ℬ(w.val.adicCompletion F)) :
+      r (i (pure S d)) = C d • pure S₀ (res d) := by
+    apply SchwartzBruhat.ext
+    intro t
+    let p := t.toAdd
+    change r (i (pure S d)) (Multiplicative.ofAdd p) = C d * pure S₀ (res d) (Multiplicative.ofAdd p)
+    erw [hr, (sAdeleTailSchwartz_inductiveTensor_equiv F S).choose_spec (pure S d) g (z p)]
+    have ht : finiteAdeleTailProjection F S (z p).2 = finiteAdeleTailProjection F S x.2 := by
+      apply RestrictedProduct.ext
+      intro w
+      exact hzout p w.val fun h ↦ w.2 (h₀ h)
+    erw [ht, (sAdeleSchwartz_inductiveTensor_equiv F S).choose_spec a d (adeleProjection F S (z p)),
+      (sAdeleSchwartz_inductiveTensor_equiv F S₀).choose_spec a (res d) p]
+    change (a (Multiplicative.ofAdd (z p).1) *
+      ∏ w : S, d w (Multiplicative.ofAdd ((z p).2 w.val))) * _ = _
+    rw [hz₁, adelePrincipalValue_prod_stage h₀]
+    have hout (w : {w : S // w.val ∉ S₀}) : (z p).2 w.val.val = x.2 w.val.val :=
+      hzout p w.val.val w.2
+    simp only [hzS p, hout, C, res]
+    ring
+  have hC : C (op S b) = C b := by
+    apply congrArg (· * _)
+    exact Finset.prod_congr rfl fun w _ ↦ by simp only [op, ite_eq_right w.2]
+  have eq : r (i (P (pure S b))) = r (Q (i (pure S b))) := by
+    change r (i (sAdelePrincipalValue F h₀ (pure S b))) = _
+    have hq : r (Q (i (pure S b))) = sAdelePrincipalValue F (Finset.Subset.refl S₀) (r (i (pure S b))) :=
+      LinearMap.congr_fun hrQ _
+    rw [hPV S h₀, slice, hC, hq, slice, map_smul, hPV]
+  have atx := congrArg (fun k : ℬₛ(S₀) ↦ k (Multiplicative.ofAdd (adeleProjection F S₀ x))) eq
+  change i (P (pure S b)) (Multiplicative.ofAdd x) = Q (i (pure S b)) (Multiplicative.ofAdd x)
+  simpa only [hr, hzx] using atx
 
 section PrincipalValueInjectivity
 
@@ -1477,7 +1568,7 @@ private theorem sAdelePrincipalValue_isClosedEmbedding_injective {S S₀ : Finse
 
 /-- Finite-place principal values admit algebraic left inverses. On the finite
 tensor factor these are continuous for the finest locally convex topology. -/
-private theorem sAdelePrincipalValue_isClosedEmbedding_tensorFamily {A B : Type*}
+private theorem sAdelePrincipalValue_tensorFamily_leftInverse {A B : Type*}
     [AddCommGroup A] [Module ℂ A] [TopologicalSpace A] [PolynormableSpace ℂ A] [T2Space A]
     [AddCommGroup B] [Module ℂ B] [TopologicalSpace B] [T2Space B]
     {ι : Type*} {D : ι → Type*} [∀ i, AddCommGroup (D i)] [∀ i, Module ℂ (D i)]
@@ -1485,10 +1576,11 @@ private theorem sAdelePrincipalValue_isClosedEmbedding_tensorFamily {A B : Type*
     (T : ∀ i, D i →ₗ[ℂ] D i) (hinj : ∀ i, Function.Injective (T i)) :
     let W := FinestLocallyConvex (⨂[ℂ] i, D i)
     let P : W →ₗ[ℂ] W := PiTensorProduct.map T
-    IsClosedEmbedding (e.toLinearMap.comp ((TensorProduct.map
-      (LinearMap.id (R := ℂ) (M := A)) P).comp e.symm.toLinearMap)) := by
+    let f := e.toLinearMap.comp ((TensorProduct.map
+      (LinearMap.id (R := ℂ) (M := A)) P).comp e.symm.toLinearMap)
+    ∃ j : B →L[ℂ] B, LeftInverse j f ∧ Continuous f := by
   classical
-  intro W P
+  intro W P _
   choose L hL using fun i ↦ (T i).exists_leftInverse_of_injective
     (LinearMap.ker_eq_bot.mpr (hinj i))
   let J : W →ₗ[ℂ] W := PiTensorProduct.map L
@@ -1509,7 +1601,20 @@ private theorem sAdelePrincipalValue_isClosedEmbedding_tensorFamily {A B : Type*
         TensorProduct.map (LinearMap.id (M := A)) J (TensorProduct.map LinearMap.id P z) = z := by
       rw [TensorProduct.map_map, hJP, LinearMap.id_comp, TensorProduct.map_id, LinearMap.id_apply]
     exact (congrArg e (hmaps (e.symm x))).trans (e.apply_symm_apply x)
-  exact hleft.isClosedEmbedding j.continuous f.continuous
+  exact ⟨j, hleft, f.continuous⟩
+
+private theorem sAdelePrincipalValue_isClosedEmbedding_tensorFamily {A B : Type*}
+    [AddCommGroup A] [Module ℂ A] [TopologicalSpace A] [PolynormableSpace ℂ A] [T2Space A]
+    [AddCommGroup B] [Module ℂ B] [TopologicalSpace B] [T2Space B]
+    {ι : Type*} {D : ι → Type*} [∀ i, AddCommGroup (D i)] [∀ i, Module ℂ (D i)]
+    (e : InductiveTensor A (FinestLocallyConvex (⨂[ℂ] i, D i)) ≃L[ℂ] B)
+    (T : ∀ i, D i →ₗ[ℂ] D i) (hinj : ∀ i, Function.Injective (T i)) :
+    let W := FinestLocallyConvex (⨂[ℂ] i, D i)
+    let P : W →ₗ[ℂ] W := PiTensorProduct.map T
+    IsClosedEmbedding (e.toLinearMap.comp ((TensorProduct.map
+      (LinearMap.id (R := ℂ) (M := A)) P).comp e.symm.toLinearMap)) := by
+  obtain ⟨j, hj, hc⟩ := sAdelePrincipalValue_tensorFamily_leftInverse e T hinj
+  exact hj.isClosedEmbedding j.continuous hc
 
 /-- Transport the split injection through the S-adelic tensor presentation. -/
 private theorem sAdelePrincipalValue_isClosedEmbedding_tensor {S S₀ : Finset V} (h₀ : S₀ ⊆ S) :
@@ -1549,10 +1654,48 @@ theorem sAdelePrincipalValue_isClosedEmbedding {S S₀ : Finset V} (h₀ : S₀ 
     sAdelePrincipalValue_isClosedEmbedding_injective h₀⟩,
     sAdelePrincipalValue_isClosedEmbedding_isClosed h₀⟩
 
+/-- A continuous linear left inverse on the stage tensors with the identity on the tail. -/
+private theorem adelePrincipalValue_isClosedEmbedding_tensor {A B X : Type*}
+    [AddCommGroup A] [Module ℂ A] [TopologicalSpace A] [PolynormableSpace ℂ A] [T2Space A]
+    [AddCommGroup B] [Module ℂ B] [TopologicalSpace B] [PolynormableSpace ℂ B] [T2Space B]
+    [AddCommGroup X] [Module ℂ X] [TopologicalSpace X] [T2Space X]
+    (e : InductiveTensor A B ≃L[ℂ] X) (p : A →ₗ[ℂ] A)
+    (hs : ∃ j : A →L[ℂ] A, LeftInverse j p ∧ Continuous p) :
+    IsClosedEmbedding (e.toLinearMap.comp ((TensorProduct.map p
+      (LinearMap.id (R := ℂ) (M := B))).comp e.symm.toLinearMap)) := by
+  obtain ⟨j, hj, hp⟩ := hs
+  let lift (t : A →L[ℂ] A) : X →L[ℂ] X := e.toContinuousLinearMap.comp
+    ((⟨inductiveTensorMap t.toLinearMap LinearMap.id,
+       inductiveTensorMap_continuous t (ContinuousLinearMap.id ℂ B)⟩ :
+      InductiveTensor A B →L[ℂ] InductiveTensor A B).comp e.symm.toContinuousLinearMap)
+  have hcomp : j.toLinearMap.comp p = LinearMap.id := LinearMap.ext hj
+  have hleft : LeftInverse (lift j) (lift ⟨p, hp⟩) := by
+    intro x
+    change e (TensorProduct.map j.toLinearMap LinearMap.id
+      (e.symm (e (TensorProduct.map p LinearMap.id (e.symm x))))) = x
+    have hm (t : A ⊗[ℂ] B) :
+        TensorProduct.map j.toLinearMap (LinearMap.id (M := B)) (TensorProduct.map p LinearMap.id t) = t := by
+      rw [TensorProduct.map_map, hcomp, LinearMap.id_comp, TensorProduct.map_id, LinearMap.id_apply]
+    erw [e.symm_apply_apply]
+    exact (congrArg e (hm (e.symm x))).trans (e.apply_symm_apply x)
+  exact hleft.isClosedEmbedding (lift j).continuous (lift ⟨p, hp⟩).continuous
+
 /-- Paper: Definition 5.3.1.4(2), p. 242.
 The global principal value is a topological embedding with closed range. -/
 theorem adelePrincipalValue_isClosedEmbedding (S₀ : Finset V) :
-    IsClosedEmbedding (adelePrincipalValue F S₀) := by sorry
+    IsClosedEmbedding (adelePrincipalValue F S₀) := by
+  classical
+  let : T2Space (ℬ(InfiniteAdeleRing F)) := schwartzBruhat_eval_t2
+  let : T2Space (ℬₛ(S₀)) := schwartzBruhat_eval_t2
+  let : T2Space (ℬ(FiniteAdeleTail F S₀)) := schwartzBruhat_eval_t2
+  let : T2Space (ℬ(𝔸[F])) := schwartzBruhat_eval_t2
+  unfold adelePrincipalValue
+  with_reducible apply adelePrincipalValue_isClosedEmbedding_tensor
+  unfold sAdelePrincipalValue
+  with_reducible_and_instances apply sAdelePrincipalValue_tensorFamily_leftInverse
+  intro w
+  rw [ite_eq_left w.property]
+  exact (finitePlacePrincipalValue_isClosedEmbedding w.val).injective
 
 local instance instMeasurableSpaceAdicUnitsSec3aKernel (v : V) :
     MeasurableSpace (v.adicCompletion F)ˣ := borel _
@@ -1588,394 +1731,20 @@ private theorem sAdelePrincipalValue_preserves_thetaKernel_translate
   exact tsum_congr fun t => congrArg (fun y => f (Multiplicative.ofAdd y))
     (mul_left_comm g.inv (d t).val x.val)
 
-local notation "Fᵥ(" v ")" => HeightOneSpectrum.adicCompletion F v
-local notation "Uᵥ(" v ")" => (HeightOneSpectrum.adicCompletionIntegers F v).units
-local notation "μᵥ(" v ")" => finiteLocalMultiplicativeTamagawaMeasure F v
-local notation "vval(" v ")" => (Valued.v : Valuation Fᵥ(v) (WithZero (Multiplicative ℤ)))
-open scoped BigOperators
-
-/-- The local unit at `v`, viewed as an S-idele, depends continuously on the local unit. -/
-private theorem adelicPrincipalValueLocalUnit_continuous {S : Finset V} (v : S) :
-    Continuous (fun c : Fᵥ(v.val)ˣ ↦ adelicPrincipalValueLocalUnit v c) := by
-  classical
-  let one : ∀ w : S, Fᵥ(w.val) := fun _ ↦ 1
-  have hone : Continuous (fun _ : Fᵥ(v.val)ˣ ↦ one) := continuous_const
-  refine Units.continuous_iff.mpr ⟨?_, ?_⟩
-  · change Continuous (fun c : Fᵥ(v.val)ˣ ↦
-      ((1 : InfiniteAdeleRing F), Function.update one v c.val))
-    exact continuous_const.prodMk (hone.update v Units.continuous_val)
-  · change Continuous (fun c : Fᵥ(v.val)ˣ ↦
-      ((1 : InfiniteAdeleRing F), Function.update one v c.inv))
-    exact continuous_const.prodMk (hone.update v Units.continuous_coe_inv)
-
-private def sUnitDiag (S : Finset V) :
-    (Set.integer (S : Set V) F)ˣ →* (SAdeleRing F S)ˣ :=
-  (Units.map ((adeleProjection F S).comp
-    (integralAdelesOutside F S).subtype).toMonoidHom).comp
-    (Units.map (integralAdeleDiagonal F S).toMonoidHom)
-
-private theorem sAdeleSchwartz_ind {ι : Type*} [Fintype ι] {E N : Type*} {M : ι → Type*}
+/-- Inserting a single local test in a fixed pure tensor is linear in that test. -/
+private theorem principalValue_tensor_insert {ι A B : Type*} [DecidableEq ι] {M : ι → Type*}
+    [AddCommGroup A] [Module ℂ A] [TopologicalSpace A]
+    [AddCommGroup B] [Module ℂ B] [TopologicalSpace B]
     [∀ i, AddCommGroup (M i)] [∀ i, Module ℂ (M i)]
-    [AddCommGroup E] [Module ℂ E] [TopologicalSpace E]
-    [AddCommGroup N] [Module ℂ N] [TopologicalSpace N]
-    (e : InductiveTensor E (FinestLocallyConvex (⨂[ℂ] i, M i)) ≃L[ℂ] N) (P : N → Prop)
-    (h0 : P 0) (hadd : ∀ x y, P x → P y → P (x + y)) (hsmul : ∀ (r : ℂ) x, P x → P (r • x))
-    (hpure : ∀ (a : E) (g : ∀ i, M i), P (e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] i, g i)))) (x : N) : P x := by
-  have key : ∀ y : E ⊗[ℂ] (⨂[ℂ] i, M i), P (e y) := by
-    intro y
-    induction y using TensorProduct.induction_on with
-    | zero => exact (congrArg P (map_zero e)).mpr h0
-    | tmul a b =>
-      induction b using PiTensorProduct.induction_on with
-      | smul_tprod r g =>
-        exact (congrArg (fun t ↦ P (e t)) (TensorProduct.tmul_smul r a _)).mpr
-          ((congrArg P (map_smul e r _)).mpr (hsmul r _ (hpure a g)))
-      | add b c hb hc =>
-        exact (congrArg (fun t ↦ P (e t)) (TensorProduct.tmul_add a b c)).mpr
-          ((congrArg P (map_add e _ _)).mpr (hadd _ _ hb hc))
-    | add y z hy hz => exact (congrArg P (map_add e y z)).mpr (hadd _ _ hy hz)
-  exact (congrArg P (e.apply_symm_apply x)).mp (key (e.symm x))
+    (e : InductiveTensor A (FinestLocallyConvex (⨂[ℂ] i, M i)) ≃L[ℂ] B)
+    (a : A) (b : ∀ i, M i) (v : ι) :
+    ∃ I : M v →ₗ[ℂ] B, (∀ h, I h = e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, (Function.update b v h) w))) ∧
+      I (b v) = e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, b w)) := by
+  let W := FinestLocallyConvex (⨂[ℂ] i, M i)
+  refine ⟨e.toLinearMap.comp (((TensorProduct.mk ℂ A W) a).comp
+    ((PiTensorProduct.tprod ℂ).toLinearMap b v)), fun _ ↦ rfl, ?_⟩
+  exact congrArg (fun d : ∀ i, M i ↦ e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, d w))) (Function.update_eq_self v b)
 
-open Classical in
-private theorem adelicPrincipalValueLocalUnit_inv_val {S : Finset V} (v : S)
-    (c : Fᵥ(v.val)ˣ) :
-    (adelicPrincipalValueLocalUnit v c).inv =
-      ((1 : InfiniteAdeleRing F), Function.update (fun _ : S ↦ (1 : _)) v c.inv) := by
-  classical
-  simp [adelicPrincipalValueLocalUnit]
-
-private theorem adelicPrincipalValueLocalUnit_inv_arch {S : Finset V} (v : S)
-    (c : Fᵥ(v.val)ˣ) :
-    (adelicPrincipalValueLocalUnit v c).inv.1 = 1 := by
-  rw [adelicPrincipalValueLocalUnit_inv_val]
-
-private theorem adelicPrincipalValueLocalUnit_inv_coord_ne {S : Finset V} (v : S)
-    (c : Fᵥ(v.val)ˣ) (w : S) (hwv : w ≠ v) :
-    (adelicPrincipalValueLocalUnit v c).inv.2 w = 1 := by
-  classical
-  simp [adelicPrincipalValueLocalUnit, Function.update_of_ne hwv]
-
-private theorem adelicPrincipalValueLocalUnit_inv_coord_v {S : Finset V} (v : S)
-    (c : Fᵥ(v.val)ˣ) :
-    (adelicPrincipalValueLocalUnit v c).inv.2 v = c.inv := by
-  classical
-  simp [adelicPrincipalValueLocalUnit]
-
-private theorem sAdeleProd_split {α : Type*} [Fintype α] [DecidableEq α] (v : α) (f : α → ℂ) :
-    Finset.prod (Finset.univ : Finset α) f =
-      f v * Finset.prod ((Finset.univ : Finset α).erase v) f :=
-  (Finset.mul_prod_erase (Finset.univ : Finset α) f (Finset.mem_univ v)).symm
-private theorem sAdelePrincipalValue_singleton_apply {S : Finset V} (v : S)
-    (π : Fᵥ(v.val)ˣ) (hπ : vval(v.val).IsUniformizer π.val) (f : ℬₛ(S))
-    (z : SAdeleRing F S) :
-    sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property) f
-        (Multiplicative.ofAdd z) =
-      f (Multiplicative.ofAdd z) -
-        ((μᵥ(v.val).real Uᵥ(v.val) : ℂ)⁻¹) *
-          ∫ u in Uᵥ(v.val),
-            schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) f
-              (Multiplicative.ofAdd z) ∂μᵥ(v.val) := by
-  classical
-  let e := (sAdeleSchwartz_inductiveTensor_equiv F S).choose
-  have hspec := (sAdeleSchwartz_inductiveTensor_equiv F S).choose_spec
-  let μ := μᵥ(v.val)
-  let U : Set Fᵥ(v.val)ˣ := Uᵥ(v.val)
-  have hUc : IsCompact U := Submonoid.units_isCompact
-    (isCompact_iff_compactSpace.mpr (compactSpace_adicCompletionIntegers v.val))
-  haveI : μ.IsHaarMeasure := finiteLocalMultiplicativeTamagawaMeasure_isHaarMeasure v.val
-  haveI : BorelSpace Fᵥ(v.val)ˣ := ⟨rfl⟩
-  have hint (g : ℬₛ(S)) (y : SAdeleRing F S) :
-      IntegrableOn (fun u : Fᵥ(v.val)ˣ ↦
-        schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) g
-          (Multiplicative.ofAdd y)) U μ := by
-    have hρ : Continuous (fun u : Fᵥ(v.val)ˣ ↦
-        (adelicPrincipalValueLocalUnit v (π * u)).inv * y) :=
-      (Units.continuous_val.comp
-        (((adelicPrincipalValueLocalUnit_continuous v).comp
-          (continuous_const.mul continuous_id)).inv)).mul continuous_const
-    have heq : (fun u : Fᵥ(v.val)ˣ ↦
-        schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) g
-          (Multiplicative.ofAdd y)) =
-        fun u ↦ g (Multiplicative.ofAdd
-          ((adelicPrincipalValueLocalUnit v (π * u)).inv * y)) := by
-      funext u
-      exact schwartzBruhatUnitTranslate_apply _ _ _
-    rw [heq]
-    exact ((schwartzBruhat_continuous g).comp
-      (continuous_ofAdd.comp hρ)).continuousOn.integrableOn_compact hUc
-  let P (g : ℬₛ(S)) : Prop := ∀ y : SAdeleRing F S,
-    sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property) g
-        (Multiplicative.ofAdd y) =
-      g (Multiplicative.ofAdd y) -
-        ((μ.real U : ℂ)⁻¹) *
-          ∫ u in U, schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) g
-            (Multiplicative.ofAdd y) ∂μ
-  have h0 : P 0 := by
-    intro y
-    simp only [P, map_zero]
-    have : (fun u : Fᵥ(v.val)ˣ ↦ schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) 0
-        (Multiplicative.ofAdd y)) = fun _ ↦ 0 := by
-      funext u; simp [schwartzBruhatUnitTranslate_apply]
-    simp [this]
-  have hadd (g₁ g₂ : ℬₛ(S)) (h₁ : P g₁) (h₂ : P g₂) : P (g₁ + g₂) := by
-    intro y
-    simp only [P]
-    have hL : sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property) (g₁ + g₂)
-        (Multiplicative.ofAdd y) =
-        sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property) g₁ (Multiplicative.ofAdd y) +
-        sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property) g₂ (Multiplicative.ofAdd y) := by
-      rw [map_add]; rfl
-    have hI : (∫ u in U, schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) (g₁ + g₂)
-        (Multiplicative.ofAdd y) ∂μ) =
-        (∫ u in U, schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) g₁
-          (Multiplicative.ofAdd y) ∂μ) +
-        (∫ u in U, schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) g₂
-          (Multiplicative.ofAdd y) ∂μ) := by
-      have heq : (fun u : Fᵥ(v.val)ˣ ↦ schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u))
-          (g₁ + g₂) (Multiplicative.ofAdd y)) =
-          (fun u ↦ schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) g₁
-            (Multiplicative.ofAdd y) +
-            schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) g₂
-            (Multiplicative.ofAdd y)) := by
-        funext u; simp [schwartzBruhatUnitTranslate_apply, Pi.add_apply]
-      rw [heq, integral_add (hint g₁ y) (hint g₂ y)]
-    have hR : (g₁ + g₂) (Multiplicative.ofAdd y) =
-        g₁ (Multiplicative.ofAdd y) + g₂ (Multiplicative.ofAdd y) := rfl
-    rw [hL, hI, hR, h₁ y, h₂ y]
-    ring
-  have hsmul (r : ℂ) (g : ℬₛ(S)) (h : P g) : P (r • g) := by
-    intro y
-    simp only [P]
-    have hL : sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property) (r • g)
-        (Multiplicative.ofAdd y) =
-        r • sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property) g (Multiplicative.ofAdd y) := by
-      rw [map_smul]; rfl
-    have hI : (∫ u in U, schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) (r • g)
-        (Multiplicative.ofAdd y) ∂μ) =
-        r • (∫ u in U, schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) g
-          (Multiplicative.ofAdd y) ∂μ) := by
-      have heq : (fun u : Fᵥ(v.val)ˣ ↦ schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u))
-          (r • g) (Multiplicative.ofAdd y)) =
-          (fun u ↦ r • schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) g
-            (Multiplicative.ofAdd y)) := by
-        funext u; simp [schwartzBruhatUnitTranslate_apply, Pi.smul_apply]
-      rw [heq, integral_smul]
-    have hR : (r • g) (Multiplicative.ofAdd y) = r • g (Multiplicative.ofAdd y) := rfl
-    rw [hL, hI, hR, h y]
-    ring
-  have hpure (a : ℬ(InfiniteAdeleRing F)) (g : ∀ w : S, ℬ(Fᵥ(w.val))) :
-      P (e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, g w))) := by
-    intro y
-    simp only [P]
-    let Pfun (w : S) := if w.val ∈ ({v.val} : Finset V) then
-      finitePlacePrincipalValue w.val (g w) else g w
-    let fT : ℬₛ(S) := e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, g w))
-    let fP : ℬₛ(S) := e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, Pfun w))
-    have hPV : sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property) fT = fP :=
-      sAdelePrincipalValue_tmul (Finset.singleton_subset_iff.mpr v.property) a g
-    change sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property) fT
-        (Multiplicative.ofAdd y) =
-      fT (Multiplicative.ofAdd y) -
-        (μ.real U : ℂ)⁻¹ *
-          ∫ u in U, schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) fT
-            (Multiplicative.ofAdd y) ∂μ
-    rw [hPV]
-    have hL := hspec a Pfun y
-    have hR := hspec a g y
-    rw [hL, hR]
-    have hrest : ∏ w ∈ (Finset.univ : Finset S).erase v,
-        Pfun w (Multiplicative.ofAdd (y.2 w)) =
-      ∏ w ∈ (Finset.univ : Finset S).erase v, g w (Multiplicative.ofAdd (y.2 w)) := by
-      apply Finset.prod_congr rfl
-      intro w hw
-      have hwv : w ≠ v := by
-        intro he; subst he; exact Finset.notMem_erase _ _ hw
-      have hnm : w.val ∉ ({v.val} : Finset V) := by
-        intro h; apply hwv; exact Subtype.ext (Finset.mem_singleton.mp h)
-      simp only [Pfun, if_neg hnm]
-    have hT (u : Fᵥ(v.val)ˣ) :
-        schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) fT
-          (Multiplicative.ofAdd y) =
-        a (Multiplicative.ofAdd y.1) *
-          ((∏ w ∈ (Finset.univ : Finset S).erase v, g w (Multiplicative.ofAdd (y.2 w))) *
-            g v (Multiplicative.ofAdd ((↑(π * u)⁻¹ : Fᵥ(v.val)) * y.2 v))) := by
-      change schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u))
-        (e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, g w))) (Multiplicative.ofAdd y) = _
-      rw [schwartzBruhatUnitTranslate_apply, hspec a g]
-      have hinv : (↑(adelicPrincipalValueLocalUnit v (π * u))⁻¹ : SAdeleRing F S) =
-          (adelicPrincipalValueLocalUnit v (π * u)).inv := rfl
-      rw [hinv]
-      have harch : ((adelicPrincipalValueLocalUnit v (π * u)).inv *
-          (y : SAdeleRing F S)).1 = y.1 := by
-        rw [Prod.fst_mul, adelicPrincipalValueLocalUnit_inv_arch, one_mul]
-      rw [harch]
-      have hprod : ∏ w : S, g w (Multiplicative.ofAdd
-          (((adelicPrincipalValueLocalUnit v (π * u)).inv * y).2 w)) =
-        (∏ w ∈ (Finset.univ : Finset S).erase v, g w (Multiplicative.ofAdd (y.2 w))) *
-          g v (Multiplicative.ofAdd ((↑(π * u)⁻¹ : Fᵥ(v.val)) * y.2 v)) := by
-        rw [sAdeleProd_split, mul_comm]
-        congr 1
-        · apply Finset.prod_congr rfl
-          intro w hw
-          have hwv : w ≠ v := by
-            intro he; subst he; exact Finset.notMem_erase _ _ hw
-          have hcx : ((adelicPrincipalValueLocalUnit v (π * u)).inv * y).2 w = y.2 w := by
-            rw [Prod.snd_mul, Pi.mul_apply, adelicPrincipalValueLocalUnit_inv_coord_ne v (π * u) w hwv, one_mul]
-          rw [hcx]
-        · congr 1
-          have hcv : ((adelicPrincipalValueLocalUnit v (π * u)).inv * y).2 v =
-              (↑(π * u)⁻¹ : Fᵥ(v.val)) * y.2 v := by
-            rw [Prod.snd_mul, Pi.mul_apply, adelicPrincipalValueLocalUnit_inv_coord_v v (π * u)]
-            rfl
-          rw [hcv]
-      rw [hprod]
-      try ring
-    rw [integral_congr_ae (Filter.Eventually.of_forall hT)]
-    rw [sAdeleProd_split (f := fun w ↦ Pfun w (Multiplicative.ofAdd (y.2 w)))]
-    rw [sAdeleProd_split (f := fun w ↦ g w (Multiplicative.ofAdd (y.2 w)))]
-    rw [hrest]
-    have hv : v.val ∈ ({v.val} : Finset V) := Finset.mem_singleton_self v.val
-    simp only [Pfun, hv, ite_true]
-    have hassoc (u : Fᵥ(v.val)ˣ) : a (Multiplicative.ofAdd y.1) *
-        ((∏ w ∈ (Finset.univ : Finset S).erase v, g w (Multiplicative.ofAdd (y.2 w))) *
-          g v (Multiplicative.ofAdd ((↑(π * u)⁻¹ : Fᵥ(v.val)) * y.2 v))) =
-        (a (Multiplicative.ofAdd y.1) *
-          (∏ w ∈ (Finset.univ : Finset S).erase v, g w (Multiplicative.ofAdd (y.2 w)))) *
-          g v (Multiplicative.ofAdd ((↑(π * u)⁻¹ : Fᵥ(v.val)) * y.2 v)) := by ring
-    rw [integral_congr_ae (Filter.Eventually.of_forall hassoc)]
-    rw [integral_const_mul]
-    have hpv := finitePlacePrincipalValue_spec v.val π hπ (g v) (Multiplicative.ofAdd (y.2 v))
-    rw [hpv]
-    dsimp only [finitePlacePrincipalValueFun]
-    have hinv (u : Fᵥ(v.val)ˣ) : (↑(π * u)⁻¹ : Fᵥ(v.val)) * y.2 v =
-        (↑u⁻¹ : Fᵥ(v.val)) * ((↑π⁻¹ : Fᵥ(v.val)) * (Multiplicative.ofAdd (y.2 v)).toAdd) := by
-      change (↑(π * u)⁻¹ : Fᵥ(v.val)) * y.2 v =
-        (↑u⁻¹ : Fᵥ(v.val)) * ((↑π⁻¹ : Fᵥ(v.val)) * y.2 v)
-      rw [mul_inv_rev, Units.val_mul]; ring
-    rw [integral_congr_ae (Filter.Eventually.of_forall fun u ↦
-      congrArg (fun t ↦ g v (Multiplicative.ofAdd t)) (hinv u))]
-    ring
-  exact sAdeleSchwartz_ind e P h0 hadd hsmul hpure f z
-private theorem sLocalAdelicTheta_unitAverage_exchange {S : Finset V} (v : S)
-    (π : Fᵥ(v.val)ˣ) (f : ℬₛ(S)) (x : (SAdeleRing F S)ˣ) :
-    HasSum
-      (fun ξ : (Set.integer (S : Set V) F)ˣ ↦
-        ∫ u in Uᵥ(v.val),
-          f (Multiplicative.ofAdd ((sUnitDiag S ξ *
-            ((adelicPrincipalValueLocalUnit v (π * u))⁻¹ * x)).val)) ∂μᵥ(v.val))
-      (∫ u in Uᵥ(v.val),
-        sLocalAdelicTheta F S f ((adelicPrincipalValueLocalUnit v (π * u))⁻¹ * x) ∂μᵥ(v.val)) := by
-  classical
-  let μ := μᵥ(v.val)
-  let U : Set Fᵥ(v.val)ˣ := Uᵥ(v.val)
-  let φ : Fᵥ(v.val)ˣ → (SAdeleRing F S)ˣ := fun u ↦ (adelicPrincipalValueLocalUnit v (π * u))⁻¹ * x
-  have hφ : Continuous φ :=
-    ((adelicPrincipalValueLocalUnit_continuous v).comp (continuous_const.mul continuous_id)).inv.mul
-      continuous_const
-  have hUc : IsCompact U := Submonoid.units_isCompact
-    (isCompact_iff_compactSpace.mpr (compactSpace_adicCompletionIntegers v.val))
-  haveI : μ.IsHaarMeasure := finiteLocalMultiplicativeTamagawaMeasure_isHaarMeasure v.val
-  haveI : BorelSpace Fᵥ(v.val)ˣ := ⟨rfl⟩
-  have hUo : IsOpen U := Submonoid.isOpen_units (Valued.isOpen_valuationSubring _)
-  haveI : IsFiniteMeasure (μ.restrict U) := isFiniteMeasure_restrict.mpr hUc.measure_lt_top.ne
-  letI : Countable F := Countable.of_moduleFinite (R := ℚ)
-  letI : Countable (Set.integer (S : Set V) F)ˣ := Units.val_injective.countable
-  haveI : (atTop : Filter (Finset (Set.integer (S : Set V) F)ˣ)).IsCountablyGenerated :=
-    (atTop_basis (α := Finset (Set.integer (S : Set V) F)ˣ)).isCountablyGenerated
-  let K : Set (SAdeleRing F S)ˣ := φ '' U
-  have hK : IsCompact K := hUc.image hφ
-  let term (ξ : (Set.integer (S : Set V) F)ˣ) (u : Fᵥ(v.val)ˣ) : ℂ :=
-    f (Multiplicative.ofAdd ((sUnitDiag S ξ * φ u).val))
-  have hterm (ξ) : Continuous (term ξ) :=
-    (schwartzBruhat_continuous f).comp (continuous_ofAdd.comp
-      (Units.continuous_val.comp (continuous_const.mul hφ)))
-  let part (s : Finset (Set.integer (S : Set V) F)ˣ) (u : Fᵥ(v.val)ˣ) : ℂ := ∑ ξ ∈ s, term ξ u
-  let lim (u : Fᵥ(v.val)ˣ) : ℂ := sLocalAdelicTheta F S f (φ u)
-  have hsumK := sLocalAdelicTheta_hasSumUniformlyOn F S f K hK
-  have htu : TendstoUniformlyOn part lim atTop U := by
-    have h := ((hasSumUniformlyOn_iff_tendstoUniformlyOn.mp hsumK).comp φ).mono
-      (Set.subset_preimage_image φ U)
-    refine (h.congr ?_).congr_right ?_
-    · apply Filter.Eventually.of_forall
-      intro s u _
-      simp only [part, term, sUnitDiag, Function.comp_apply]
-    · intro u _
-      simp only [lim, sLocalAdelicTheta_apply, Function.comp_apply]
-  have hmeas (s) : AEStronglyMeasurable (part s) (μ.restrict U) :=
-    (continuous_finsetSum _ fun ξ _ ↦ hterm ξ).aestronglyMeasurable
-  have hlim : ∀ᵐ u ∂(μ.restrict U), Tendsto (fun s ↦ part s u) atTop (𝓝 (lim u)) := by
-    apply (ae_restrict_iff' hUo.measurableSet).mpr
-    apply Filter.Eventually.of_forall
-    intro u hu
-    exact htu.tendsto_at hu
-  have hbound : ∃ C, ∀ᶠ s in atTop, ∀ᵐ u ∂(μ.restrict U), ‖part s u‖ ≤ C := by
-    have hclose := (Metric.tendstoUniformlyOn_iff.mp htu) 1 zero_lt_one
-    obtain ⟨s₀, hs₀⟩ := Filter.eventually_atTop.mp hclose
-    have hps0 : Continuous (fun u ↦ ∑ ξ ∈ s₀, term ξ u) :=
-      continuous_finsetSum _ fun ξ _ ↦ hterm ξ
-    obtain ⟨M₀, hM₀⟩ := hUc.exists_bound_of_continuousOn hps0.continuousOn
-    have hsn : Continuous (fun u ↦ ∑ ξ ∈ s₀, ‖term ξ u‖) :=
-      continuous_finsetSum _ fun ξ _ ↦ (hterm ξ).norm
-    obtain ⟨M₁, hM₁⟩ := hUc.exists_bound_of_continuousOn hsn.continuousOn
-    use M₀ + 2 + M₁
-    apply Filter.Eventually.of_forall
-    intro s
-    apply (ae_restrict_iff' hUo.measurableSet).mpr
-    apply Filter.Eventually.of_forall
-    intro u hu
-    have hlim_bdd : ‖lim u‖ ≤ M₀ + 1 := by
-      have hd := hs₀ s₀ le_rfl u hu
-      rw [dist_eq_norm, norm_sub_rev] at hd
-      calc ‖lim u‖ = ‖part s₀ u - (part s₀ u - lim u)‖ := by ring_nf
-        _ ≤ ‖part s₀ u‖ + ‖part s₀ u - lim u‖ := norm_sub_le _ _
-        _ ≤ M₀ + 1 := add_le_add (hM₀ u hu) hd.le
-    have hbig : ‖part (s ∪ s₀) u‖ ≤ M₀ + 2 := by
-      have hd := hs₀ (s ∪ s₀) le_sup_right u hu
-      rw [dist_eq_norm, norm_sub_rev] at hd
-      calc ‖part (s ∪ s₀) u‖ = ‖part (s ∪ s₀) u - lim u + lim u‖ := by ring_nf
-        _ ≤ ‖part (s ∪ s₀) u - lim u‖ + ‖lim u‖ := norm_add_le _ _
-        _ ≤ 1 + (M₀ + 1) := add_le_add hd.le hlim_bdd
-        _ = M₀ + 2 := by ring
-    have hsmall : ‖part (s₀ \ s) u‖ ≤ M₁ := by
-      calc ‖part (s₀ \ s) u‖ ≤ ∑ ξ ∈ s₀ \ s, ‖term ξ u‖ := norm_sum_le _ _
-        _ ≤ ∑ ξ ∈ s₀, ‖term ξ u‖ :=
-          Finset.sum_le_sum_of_subset_of_nonneg Finset.sdiff_subset fun _ _ _ ↦ norm_nonneg _
-        _ ≤ M₁ := by
-          simpa only [Real.norm_of_nonneg (Finset.sum_nonneg (fun _ _ ↦ norm_nonneg _))] using hM₁ u hu
-    have hdecomp : part s u = part (s ∪ s₀) u - part (s₀ \ s) u := by
-      simp only [part]
-      have hunion : s ∪ s₀ = s ∪ (s₀ \ s) := by
-        ext a; simp only [Finset.mem_union, Finset.mem_sdiff]; tauto
-      rw [hunion, Finset.sum_union Finset.disjoint_sdiff]
-      try abel
-    rw [hdecomp]
-    linarith [norm_sub_le (part (s ∪ s₀) u) (part (s₀ \ s) u), hbig, hsmall]
-  have hDCT := tendsto_integral_filter_of_norm_le_const (μ := μ.restrict U)
-    (Filter.Eventually.of_forall hmeas) hbound hlim
-  have hint (ξ) : IntegrableOn (term ξ) U μ :=
-    (hterm ξ).continuousOn.integrableOn_compact hUc
-  have hconv (s) : ∫ u, part s u ∂(μ.restrict U) =
-      ∑ ξ ∈ s, ∫ u in U, term ξ u ∂μ := by
-    simp only [part]
-    exact integral_finsetSum _ (fun ξ _ ↦ hint ξ)
-  have hgoal : HasSum (fun ξ ↦ ∫ u in U, term ξ u ∂μ) (∫ u in U, lim u ∂μ) := by
-    simp only [HasSum]
-    convert hDCT using 1
-    · funext s; exact (hconv s).symm
-    · rfl
-  simpa only [term, lim, φ] using hgoal
-
-private theorem sLocalAdelicTheta_singleton_summand_eq {S : Finset V} (v : S)
-    (π : Fᵥ(v.val)ˣ) (f : ℬₛ(S)) (x : (SAdeleRing F S)ˣ)
-    (ξ : (Set.integer (S : Set V) F)ˣ) (u : Fᵥ(v.val)ˣ) :
-    schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) f
-        (Multiplicative.ofAdd ((sUnitDiag S ξ * x).val)) =
-      f (Multiplicative.ofAdd ((sUnitDiag S ξ *
-        ((adelicPrincipalValueLocalUnit v (π * u))⁻¹ * x)).val)) := by
-  rw [schwartzBruhatUnitTranslate_apply]
-  congr 1
-  simp only [Units.val_mul]
-  ring
 /-- Paper: (5.3.1.9), p. 242.
 The single-place operator at `v` is `1` minus the normalized average over the integer units at
 `v` of the translates by the reciprocal uniformizer times the unit, and S-local theta turns this
@@ -2002,84 +1771,64 @@ private theorem sLocalAdelicTheta_sAdelePrincipalValue_singleton {S : Finset V} 
                 (adelicPrincipalValueLocalUnit v (π * (u : (v.val.adicCompletion F)ˣ))) f) x
             ∂(finiteLocalMultiplicativeTamagawaMeasure F v.val) := by
   classical
-  let μ := μᵥ(v.val)
-  let U : Set Fᵥ(v.val)ˣ := Uᵥ(v.val)
-  let c : ℂ := (μ.real U : ℂ)⁻¹
-  let φ : Fᵥ(v.val)ˣ → (SAdeleRing F S)ˣ := fun u ↦ (adelicPrincipalValueLocalUnit v (π * u))⁻¹ * x
-  have hA (z : SAdeleRing F S) := sAdelePrincipalValue_singleton_apply v π hπ f z
-  have hex := sLocalAdelicTheta_unitAverage_exchange v π f x
-  have hsum1 : Summable (fun ξ : (Set.integer (S : Set V) F)ˣ ↦
-      f (Multiplicative.ofAdd ((sUnitDiag S ξ * x).val))) := by
-    have := (sLocalAdelicTheta_hasSumUniformlyOn F S f {x} isCompact_singleton).hasSum rfl
-    simpa only [sUnitDiag] using this.summable
-  have hsum2 : Summable (fun ξ : (Set.integer (S : Set V) F)ˣ ↦
-      ∫ u in U, schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) f
-        (Multiplicative.ofAdd ((sUnitDiag S ξ * x).val)) ∂μ) := by
-    have heq : (fun ξ : (Set.integer (S : Set V) F)ˣ ↦
-        ∫ u in U, schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) f
-          (Multiplicative.ofAdd ((sUnitDiag S ξ * x).val)) ∂μ) =
-        (fun ξ ↦ ∫ u in U, f (Multiplicative.ofAdd ((sUnitDiag S ξ * φ u).val)) ∂μ) := by
-      funext ξ
-      apply integral_congr_ae
-      exact Filter.Eventually.of_forall fun u ↦
-        sLocalAdelicTheta_singleton_summand_eq v π f x ξ u
-    rw [heq]
-    simpa only [φ] using hex.summable
-  calc
-    sLocalAdelicTheta F S (sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property) f) x
-      = ∑' ξ : (Set.integer (S : Set V) F)ˣ,
-          sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property) f
-            (Multiplicative.ofAdd ((sUnitDiag S ξ * x).val)) := by
-        rw [sLocalAdelicTheta_apply]
-        simp only [sUnitDiag]
-    _ = ∑' ξ : (Set.integer (S : Set V) F)ˣ,
-          (f (Multiplicative.ofAdd ((sUnitDiag S ξ * x).val)) -
-            c * ∫ u in U, schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) f
-              (Multiplicative.ofAdd ((sUnitDiag S ξ * x).val)) ∂μ) := by
-        apply tsum_congr
-        intro ξ
-        rw [hA]
-    _ = (∑' ξ : (Set.integer (S : Set V) F)ˣ, f (Multiplicative.ofAdd ((sUnitDiag S ξ * x).val))) -
-          c * ∑' ξ : (Set.integer (S : Set V) F)ˣ,
-            ∫ u in U, schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) f
-              (Multiplicative.ofAdd ((sUnitDiag S ξ * x).val)) ∂μ := by
-        have hf2 : HasSum (fun ξ : (Set.integer (S : Set V) F)ˣ ↦
-            c * ∫ u in U, schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) f
-              (Multiplicative.ofAdd ((sUnitDiag S ξ * x).val)) ∂μ)
-            (c * ∑' ξ : (Set.integer (S : Set V) F)ˣ,
-              ∫ u in U, schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) f
-                (Multiplicative.ofAdd ((sUnitDiag S ξ * x).val)) ∂μ) :=
-          hsum2.hasSum.mul_left c
-        exact (hsum1.hasSum.sub hf2).tsum_eq
-    _ = sLocalAdelicTheta F S f x - c * ∫ u in U, sLocalAdelicTheta F S f (φ u) ∂μ := by
-        have ht1 : (∑' ξ : (Set.integer (S : Set V) F)ˣ,
-            f (Multiplicative.ofAdd ((sUnitDiag S ξ * x).val))) = sLocalAdelicTheta F S f x := by
-          rw [sLocalAdelicTheta_apply]
-          simp only [sUnitDiag]
-        have ht2 : (∑' ξ : (Set.integer (S : Set V) F)ˣ,
-            ∫ u in U, f (Multiplicative.ofAdd ((sUnitDiag S ξ * φ u).val)) ∂μ) =
-            ∫ u in U, sLocalAdelicTheta F S f (φ u) ∂μ := by
-          simpa only [φ] using hex.tsum_eq
-        have heq : (fun ξ : (Set.integer (S : Set V) F)ˣ ↦
-            ∫ u in U, schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) f
-              (Multiplicative.ofAdd ((sUnitDiag S ξ * x).val)) ∂μ) =
-            (fun ξ ↦ ∫ u in U, f (Multiplicative.ofAdd ((sUnitDiag S ξ * φ u).val)) ∂μ) := by
-          funext ξ
-          apply integral_congr_ae
-          exact Filter.Eventually.of_forall fun u ↦
-            sLocalAdelicTheta_singleton_summand_eq v π f x ξ u
-        rw [ht1, heq, ht2]
-    _ = sLocalAdelicTheta F S f x -
-          c * ∫ u in U, sLocalAdelicTheta F S
-            (schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) f) x ∂μ := by
-        have hI : (∫ u in U, sLocalAdelicTheta F S f (φ u) ∂μ) =
-            ∫ u in U, sLocalAdelicTheta F S
-              (schwartzBruhatUnitTranslate (adelicPrincipalValueLocalUnit v (π * u)) f) x ∂μ := by
-          apply integral_congr_ae
-          exact Filter.Eventually.of_forall fun u ↦
-            (sAdelePrincipalValue_preserves_thetaKernel_translate
-              (adelicPrincipalValueLocalUnit v (π * u)) x f).symm
-        rw [hI]
+  let U : Set (v.val.adicCompletion F)ˣ := (v.val.adicCompletionIntegers F).units
+  let μ := finiteLocalMultiplicativeTamagawaMeasure F v.val
+  let L : ℬₛ(S) →ₗ[ℂ] ℂ :=
+    { toFun := fun h ↦ sLocalAdelicTheta F S h x
+      map_add' := fun a b ↦ congrArg (fun t : C((SAdeleRing F S)ˣ, ℂ) ↦ t x)
+        (map_add (sLocalAdelicTheta F S) a b)
+      map_smul' := fun c a ↦ congrArg (fun t : C((SAdeleRing F S)ˣ, ℂ) ↦ t x)
+        (map_smul (sLocalAdelicTheta F S) c a) }
+  let P := sAdelePrincipalValue F (Finset.singleton_subset_iff.mpr v.property)
+  let T (u : (v.val.adicCompletion F)ˣ) := principalValueTranslate (adelicPrincipalValueLocalUnit v (π * u))
+  let D := principalValueAverageSubmodule (μ.restrict U) (μ.real U : ℂ)⁻¹ P T L
+  let e := (sAdeleSchwartz_inductiveTensor_equiv F S).choose
+  have hpure (a : ℬ(InfiniteAdeleRing F)) (b : ∀ w : S, ℬ(w.val.adicCompletion F)) :
+      e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, b w)) ∈ D := by
+    let t := e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, b w))
+    have insertion := principalValue_tensor_insert (A := ℬ(InfiniteAdeleRing F)) (B := ℬₛ(S))
+      (M := fun w : S ↦ ℬ(w.val.adicCompletion F)) e a b v
+    let I := insertion.choose
+    have ins := insertion.choose_spec.1
+    have hid := insertion.choose_spec.2
+    have hPV : P t = I (finitePlacePrincipalValue v.val (b v)) := by
+      refine (sAdelePrincipalValue_tmul (Finset.singleton_subset_iff.mpr v.2) a b).trans ?_
+      refine Eq.trans ?_ (ins _).symm
+      apply congrArg (fun d : ∀ w : S, ℬ(w.val.adicCompletion F) ↦ e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] w, d w)))
+      funext w
+      by_cases h : w = v
+      · subst w; simp
+      · simp only [Finset.mem_singleton, ite_eq_right (fun he ↦ h (Subtype.ext he)),
+          Function.update_of_ne h]
+    have htrans (u : (v.val.adicCompletion F)ˣ) : T u t = I (principalValueTranslate (π * u) (b v)) := by
+      apply SchwartzBruhat.ext
+      intro y
+      let z := y.toAdd
+      let c := π * u
+      let k := adelicPrincipalValueLocalUnit v c
+      change t (Multiplicative.ofAdd ((↑k⁻¹ : SAdeleRing F S) * z)) = _
+      have hh := (sAdeleSchwartz_inductiveTensor_equiv F S).choose_spec
+      refine (hh a b _).trans ?_
+      refine Eq.trans ?_ ((hh a _ z).symm.trans (congrArg (fun φ : ℬₛ(S) ↦ φ y) (ins _).symm))
+      have harch : ((↑k⁻¹ : SAdeleRing F S) * z).1 = z.1 := one_mul _
+      rw [harch]
+      apply congrArg (_ * ·)
+      apply Finset.prod_congr rfl
+      intro w _
+      change b w (Multiplicative.ofAdd ((Function.update (fun j : S ↦ (1 : j.val.adicCompletion F)) v c.inv w) * z.2 w)) = _
+      by_cases h : w = v
+      · subst w
+        simp only [Function.update_self]
+        rfl
+      · simp only [Function.update_of_ne h, one_mul]
+    exact principalValueAverageSubmodule_insert (μ.restrict U) (μ.real U : ℂ)⁻¹
+        (finitePlacePrincipalValue v.val).toLinearMap P (fun u ↦ principalValueTranslate (π * u))
+        T L I (b v) t hid hPV htrans (finitePlacePrincipalValue_average_functional v.val π hπ (L.comp I) (b v))
+  have hQ : D.mkQ.comp LinearMap.id = (0 : (ℬₛ(S) ⧸ D) →ₗ[ℂ] _).comp D.mkQ :=
+    sLocalThetaPrincipalValue_transition_ext e D.mkQ LinearMap.id 0 fun a b ↦
+      (Submodule.Quotient.mk_eq_zero D).mpr (hpure a b)
+  have hf : f ∈ D := (Submodule.Quotient.mk_eq_zero D).mp (LinearMap.congr_fun hQ f)
+  exact hf.2
 
 /-- Paper: (5.3.1.9), p. 242.
 The single-place principal value at `v` maps the theta kernel into itself: theta of the average
@@ -4535,6 +4284,47 @@ local notation "tangent(" α ")" => (fun i : κ ↦ multi(α) (Sum.inr i))
 local notation "factors(" f ", " g ", " x ")" =>
   f (WithLp.toLp 2 (fun i : ι ↦ x (.inl i))) * g (WithLp.toLp 2 (fun j : κ ↦ x (.inr j)))
 
+private theorem coordinateDerivative_line_commute (v w : Eᵣ(ι)) :
+    Commute (LineDeriv.lineDerivOpCLM ℂ 𝒟(ι) v : 𝒟(ι) →L[ℂ] 𝒟(ι))
+      (LineDeriv.lineDerivOpCLM ℂ 𝒟(ι) w) := by
+  have hd (u : Eᵣ(ι)) (g : 𝒟(ι)) :
+      ⇑((LineDeriv.lineDerivOpCLM ℂ 𝒟(ι) u : 𝒟(ι) →L[ℂ] 𝒟(ι)) g) =
+        fun y ↦ fderiv ℝ (⇑g) y u := by
+    ext y
+    rw [TestFunction.lineDerivOpCLM_eq_lineDerivCLM, TestFunction.lineDerivCLM_eq_fderivCLM,
+      TestFunction.fderivCLM_apply_of_le g le_top]
+  apply ContinuousLinearMap.ext
+  intro f
+  apply TestFunction.ext
+  intro x
+  simp only [mul_apply_eq_comp, hd]
+  have hf : DifferentiableAt ℝ (fderiv ℝ ⇑f) x :=
+    ((f.contDiff.fderiv_right (m := 1) (by simp)).differentiable one_ne_zero).differentiableAt
+  simp only [fderiv_clm_apply hf (differentiableAt_const _), fderiv_fun_const, Pi.zero_apply,
+    ContinuousLinearMap.comp_zero, zero_add, ContinuousLinearMap.flip_apply]
+  exact f.contDiff.contDiffAt.isSymmSndFDerivAt (by simp) v w
+
+open Classical in
+private theorem coordinateDerivative_add_single_one {I A : Type*} [Fintype I] [DecidableEq I] [Monoid A]
+    (D : I → A) (hc : ∀ i j, Commute (D i) (D j)) (a : I → ℕ) (i : I) :
+    coordinateDerivative D (a + Pi.single i 1) = D i * coordinateDerivative D a := by
+  have h : ∀ l : List I, l.Nodup → (l.map (fun j ↦ D j ^ ((a + Pi.single i 1) : I → ℕ) j)).prod =
+        (if i ∈ l then D i else 1) * (l.map (fun j ↦ D j ^ a j)).prod := by
+    intro l hl
+    induction l with
+    | nil => simp
+    | cons j l ih =>
+      have hn := List.nodup_cons.mp hl
+      simp only [List.map_cons, List.prod_cons, List.mem_cons]
+      rw [ih hn.2, Pi.add_apply]
+      by_cases he : j = i
+      · subst j; simp [hn.1, pow_succ', mul_assoc]
+      · by_cases hm : i ∈ l
+        · simp only [Ne.symm he, false_or, hm, ite_true, Pi.single_eq_of_ne he, add_zero]
+          rw [← mul_assoc, ← mul_assoc, ((hc j i).pow_left (a j)).eq]
+        · simp [he, Ne.symm he, hm]
+  simpa [coordinateDerivative] using h (Finset.univ.toList : List I) (Finset.nodup_toList _)
+
 -- TODO(paper-gap): The count N^m in (2) disagrees with the sum in (5.3.2.4).
 -- In (2)–(5) the coefficient orders must be upper bounds. The distributional transpose
 -- also introduces the factor (-1)^|α| in (5.3.2.5) and (5.3.2.6).
@@ -4553,7 +4343,17 @@ theorem distribution_coordinatePlane_decomposition [Nonempty ι] (T : 𝒟'(ι �
     ∃ A : index(N) → 𝒟'(κ),
       (∀ α, DistributionOrderLE (A α) (N - weight(multi(α))) ∧
         IsCompact (Distribution.dsupport (⇑(A α)))) ∧
-      ∀ f : 𝒟(ι ⊕ κ), T f = ∑ α : index(N), A α (R𝒟 (∂𝒟[ι ⊕ κ, multi(α)] f)) := by sorry
+      ∀ f : 𝒟(ι ⊕ κ), T f = ∑ α : index(N), A α (R𝒟 (∂𝒟[ι ⊕ κ, multi(α)] f)) := by
+  let D (i : ι ⊕ κ) : 𝒟(ι ⊕ κ) →L[ℂ] 𝒟(ι ⊕ κ) :=
+    LineDeriv.lineDerivOpCLM ℂ 𝒟(ι ⊕ κ) (eᵣ i : Eᵣ(ι ⊕ κ))
+  obtain ⟨K, A, hA, hsum⟩ := CoordinatePlane.exists_orderZero_coefficients
+    (ι := ι) (κ := κ) T N hT hK hplane (coordinateDerivative D) (coordinateDerivative_zero D)
+    (coordinateDerivative_add_single_one D (fun _ _ ↦ coordinateDerivative_line_commute _ _))
+    R𝒟 exists_testFunction_coordinatePlaneRestriction.choose_spec
+  refine ⟨A, fun α ↦ ⟨?_, K.isCompact.of_isClosed_subset Distribution.isClosed_dsupport (hA α).2⟩, hsum⟩
+  intro K'
+  obtain ⟨C, hC, h⟩ := (hA α).1 K'
+  exact ⟨C, hC, fun f hf B hB hderiv ↦ h f hf B hB fun j hj ↦ hderiv j (hj.trans (Nat.zero_le _))⟩
 
 private theorem coordinateDerivative_split_sum {M : Type*} [Monoid M] (D : (ι ⊕ κ) → M)
     (hc : ∀ i j, Commute (D i) (D j)) (a : (ι ⊕ κ) → ℕ) :
@@ -4577,26 +4377,6 @@ private theorem coordinateDerivative_split_sum {M : Type*} [Monoid M] (D : (ι �
   have h := (hp.map (fun i ↦ D i ^ a i)).prod_eq' (List.pairwise_map.mpr
     (List.pairwise_of_forall_mem_list (fun i _ j _ ↦ (hc i j).pow_pow _ _)))
   simpa [coordinateDerivative, l, r, s, List.map_append, List.map_map, Function.comp_def] using h
-
-private theorem coordinateDerivative_line_commute (v w : Eᵣ(ι)) :
-    Commute (LineDeriv.lineDerivOpCLM ℂ 𝒟(ι) v : 𝒟(ι) →L[ℂ] 𝒟(ι))
-      (LineDeriv.lineDerivOpCLM ℂ 𝒟(ι) w) := by
-  have hd (u : Eᵣ(ι)) (g : 𝒟(ι)) :
-      ⇑((LineDeriv.lineDerivOpCLM ℂ 𝒟(ι) u : 𝒟(ι) →L[ℂ] 𝒟(ι)) g) =
-        fun y ↦ fderiv ℝ (⇑g) y u := by
-    ext y
-    rw [TestFunction.lineDerivOpCLM_eq_lineDerivCLM, TestFunction.lineDerivCLM_eq_fderivCLM,
-      TestFunction.fderivCLM_apply_of_le g le_top]
-  apply ContinuousLinearMap.ext
-  intro f
-  apply TestFunction.ext
-  intro x
-  simp only [mul_apply_eq_comp, hd]
-  have hf : DifferentiableAt ℝ (fderiv ℝ ⇑f) x :=
-    ((f.contDiff.fderiv_right (m := 1) (by simp)).differentiable one_ne_zero).differentiableAt
-  simp only [fderiv_clm_apply hf (differentiableAt_const _), fderiv_fun_const, Pi.zero_apply,
-    ContinuousLinearMap.comp_zero, zero_add, ContinuousLinearMap.flip_apply]
-  exact f.contDiff.contDiffAt.isSymmSndFDerivAt (by simp) v w
 
 open Classical in
 private theorem coordinateDerivative_plane_line (R : 𝒟(ι ⊕ κ) →L[ℂ] 𝒟(κ))
@@ -4783,6 +4563,7 @@ theorem coordinateDerivative_testFunction_toSchwartz {ι : Type*} [Fintype ι]
     simp only [List.map_cons, List.prod_cons, mul_apply_eq_comp]
     rw [← ih, ← hpow]
 
+open scoped Manifold in
 /-- Paper: Theorem 5.3.2.3(5), p. 245.
 A compactly supported distribution has a tempered extension. Cutting a Schwartz test off by a
 test function that equals one on a neighbourhood of the distribution's support does not change
@@ -4793,7 +4574,28 @@ private theorem distribution_coordinatePlane_decomposition_tempered_extension {E
     (hA : IsCompact (Distribution.dsupport (⇑A))) :
     ∃ B : StrongDual ℂ 𝓢(E, ℂ),
       ∀ g : 𝓓((⊤ : Opens E), ℂ), B (g.hasCompactSupport.toSchwartzMap g.contDiff) = A g := by
-  sorry
+  obtain ⟨K, hK, hsub⟩ := exists_compact_superset hA
+  obtain ⟨χ, hχ, hzero, -⟩ := exists_contMDiffMap_one_nhds_of_subset_interior 𝓘(ℝ, E)
+    (n := ⊤) Distribution.isClosed_dsupport hsub
+  let b (x : E) : ℂ := χ x
+  have hd : ContDiff ℝ (⊤ : ℕ∞) b :=
+    Complex.ofRealCLM.contDiff.comp (contMDiff_iff_contDiff.mp χ.contMDiff)
+  have hb : tsupport b ⊆ K := hK.isClosed.closure_subset_iff.mpr fun x hx ↦
+    by_contra fun hn ↦ hx (by simp [b, hzero x hn])
+  let χT : 𝓓((⊤ : Opens E), ℂ) :=
+    ⟨b, hd, hK.of_isClosed_subset (isClosed_tsupport b) hb, fun _ _ ↦ trivial⟩
+  let J := schwartzToTestFunctionMulCLM χT
+  refine ⟨A.comp J, fun g ↦ ?_⟩
+  change A (J _) = A g
+  rw [← sub_eq_zero, ← map_sub]
+  apply testFunction_vanishes_off_dsupport
+  intro x hx hxA
+  apply (notMem_tsupport_iff_eventuallyEq.mpr ?_) hx
+  filter_upwards [hχ.filter_mono (nhds_le_nhdsSet hxA)] with y hy
+  change schwartzToTestFunctionMulCLM χT (g.hasCompactSupport.toSchwartzMap g.contDiff) y - g y = 0
+  rw [schwartzToTestFunctionMulCLM_apply]
+  change (χ y : ℂ) * g y - g y = 0
+  simp [hy]
 
 /-- Restriction to the coordinate plane commutes with passing a compactly supported test to
 its Schwartz function: both restrictions are given by inserting zeros in the normal
@@ -4870,6 +4672,537 @@ theorem distribution_coordinatePlane_decomposition_tempered {N : ℕ} (T : 𝒟'
   · intro f
     simp only [sum_apply, ContinuousLinearMap.comp_apply]
 
+namespace TestFunctionTensor
+
+variable {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E]
+
+/-- Compatible compact localizations glue to a continuous operator on all test functions. -/
+private theorem testFunction_glue_cutoffs {Z Y I : Type*}
+    [AddCommGroup Z] [Module ℂ Z] [TopologicalSpace Z]
+    [AddCommGroup Y] [Module ℝ Y] [Module ℂ Y] [IsScalarTower ℝ ℂ Y]
+    [TopologicalSpace Y] [IsTopologicalAddGroup Y] [LocallyConvexSpace ℝ Y] [ContinuousSMul ℝ Y]
+    (J : 𝓓((⊤ : Opens E), ℂ) →L[ℂ] Z)
+    (M : I → Z →L[ℂ] Z) (R : I → Z →L[ℂ] Y)
+    (comm : ∀ i j z, R i (M j z) = R j (M i z))
+    (fix : ∀ K : Compacts E, ∃ i, ∀ f : 𝓓((⊤ : Opens E), ℂ),
+        tsupport (f : E → ℂ) ⊆ K → M i (J f) = J f) :
+    ∃ Q : 𝓓((⊤ : Opens E), ℂ) →L[ℂ] Y, ∀ i f, M i (J f) = J f → Q f = R i (J f) := by
+  classical
+  choose idx hidx using fix
+  let Kf (f : 𝓓((⊤ : Opens E), ℂ)) : Compacts E := ⟨tsupport (f : E → ℂ), f.hasCompactSupport⟩
+  let q (f : 𝓓((⊤ : Opens E), ℂ)) := R (idx (Kf f)) (J f)
+  have hq (i : I) (f : 𝓓((⊤ : Opens E), ℂ)) (hf : M i (J f) = J f) : q f = R i (J f) := by
+    have hh := comm (idx (Kf f)) i (J f)
+    rwa [hf, hidx _ _ Subset.rfl] at hh
+  refine ⟨TestFunction.limitCLM ℂ q (fun K hK ↦ ((R (idx K)).comp J).comp
+    (TestFunction.ofSupportedInCLM ℂ hK)) (fun K hK f ↦ ?_), hq⟩
+  exact hq (idx K) _ (hidx _ _ f.tsupport_subset)
+
+section TensorProof
+open UniformSpace
+open scoped TensorProduct
+local notation "D(" E ")" => 𝓓((⊤ : Opens E), ℂ)
+local notation "S(" E ")" => 𝓢(E, ℂ)
+local notation "Cι(" A ", " B ")" => Completion (InductiveTensor A B)
+
+attribute [local instance] uniformContinuousConstSMul_of_continuousConstSMul
+
+private local instance {X : Type*} [AddCommGroup X] [Module ℂ X] {I : Type*}
+    (p : SeminormFamily ℂ X I) : ContinuousSMul ℂ (WithGeneratingSeminorms X p) :=
+  (withGeneratingSeminorms_spec X p).continuousSMul
+
+private local instance {X : Type*} [NormedAddCommGroup X] [NormedSpace ℝ X] :
+    PolynormableSpace ℂ S(X) := (schwartz_withSeminorms ℂ X ℂ).toPolynormableSpace
+
+private local instance {X : Type*} [NormedAddCommGroup X] [NormedSpace ℝ X] :
+    PolynormableSpace ℂ D(X) := (testFunction_complex_polynormable (E := X)).2
+
+variable {A B C : Type*}
+  [NormedAddCommGroup A] [NormedSpace ℝ A] [FiniteDimensional ℝ A]
+  [NormedAddCommGroup B] [NormedSpace ℝ B] [FiniteDimensional ℝ B]
+  [NormedAddCommGroup C] [NormedSpace ℝ C] [FiniteDimensional ℝ C]
+
+open scoped Manifold in
+private theorem compactTestOne (K : Compacts E) [FiniteDimensional ℝ E] :
+    ∃ b : D(E), ∀ x ∈ K, b x = 1 := by
+  obtain ⟨U, hU, hsub⟩ := exists_compact_superset K.isCompact
+  obtain ⟨χ, hχ, hzero, -⟩ := exists_contMDiffMap_one_nhds_of_subset_interior 𝓘(ℝ, E)
+    (n := ⊤) K.isCompact.isClosed hsub
+  let b (x : E) : ℂ := χ x
+  have hb : tsupport b ⊆ U := hU.isClosed.closure_subset_iff.mpr fun x hx ↦
+    by_contra fun hn ↦ hx (by simp [b, hzero x hn])
+  refine ⟨⟨b, Complex.ofRealCLM.contDiff.comp (contMDiff_iff_contDiff.mp χ.contMDiff),
+    hU.of_isClosed_subset (isClosed_tsupport b) hb, fun _ _ ↦ trivial⟩, fun x hx ↦ ?_⟩
+  change (χ x : ℂ) = 1
+  rw [hχ.self_of_nhdsSet x hx]
+  rfl
+
+/-- Factor the algebraic product through tests. Separate continuity can be checked on
+a compact rectangle at a time, where one cutoff realizes the factorization. -/
+private theorem localizedTensor_product
+    (e : C ≃ₜ A × B) (U : InductiveTensor D(A) D(B) →L[ℂ] S(C))
+    (hU : ∀ (a : D(A)) (b : D(B)) x, U (a ⊗ₜ[ℂ] b) x = a (e x).1 * b (e x).2) :
+    ∃ P : InductiveTensor D(A) D(B) →L[ℂ] D(C), ∀ t, testFunctionToSchwartzCLM (P t) = U t := by
+  classical
+  let box (K : Compacts A) (H : Compacts B) : Compacts C :=
+    ⟨e ⁻¹' ((K : Set A) ×ˢ (H : Set B)), e.isClosedEmbedding.isCompact_preimage (K.isCompact.prod H.isCompact)⟩
+  have supp (a : D(A)) (b : D(B)) (K : Compacts A) (H : Compacts B)
+      (ha : tsupport (a : A → ℂ) ⊆ K) (hb : tsupport (b : B → ℂ) ⊆ H) :
+      tsupport ((U (a ⊗ₜ[ℂ] b)) : C → ℂ) ⊆ box K H := by
+    refine (box K H).isCompact.isClosed.closure_subset_iff.mpr fun x hx ↦ ?_
+    rw [mem_support, hU, mul_ne_zero_iff] at hx
+    exact ⟨ha (subset_tsupport _ hx.1), hb (subset_tsupport _ hx.2)⟩
+  have hc (t : InductiveTensor D(A) D(B)) : HasCompactSupport ((U t) : C → ℂ) := by
+    induction t using TensorProduct.inductionOn with
+    | tmul a b =>
+      let K : Compacts A := ⟨_, a.hasCompactSupport⟩
+      let H : Compacts B := ⟨_, b.hasCompactSupport⟩
+      exact (box K H).isCompact.of_isClosed_subset (isClosed_tsupport _)
+        (supp a b K H Subset.rfl Subset.rfl)
+    | add t s ht hs =>
+      erw [map_add U]
+      exact ht.add hs
+  let P : InductiveTensor D(A) D(B) →ₗ[ℂ] D(C) :=
+    { toFun := fun t ↦ ⟨U t, (U t).smooth ⊤, hc t, fun _ _ ↦ trivial⟩
+      map_add' := fun t s ↦ TestFunction.ext fun x ↦ congrArg (fun f : S(C) ↦ f x) (map_add U t s)
+      map_smul' := fun c t ↦ TestFunction.ext fun x ↦ congrArg (fun f : S(C) ↦ f x) (map_smul U c t) }
+  have cut {t : InductiveTensor D(A) D(B)} {K : Compacts C} (ht : tsupport ((U t) : C → ℂ) ⊆ K)
+      {b : D(C)} (hb : ∀ x ∈ K, b x = 1) : schwartzToTestFunctionMulCLM b (U t) = P t := by
+    ext x
+    rw [schwartzToTestFunctionMulCLM_apply]
+    change b x * U t x = U t x
+    by_cases h : x ∈ tsupport ((U t) : C → ℂ)
+    · rw [hb x (ht h), one_mul]
+    · rw [image_eq_zero_of_notMem_tsupport h, mul_zero]
+  have hsep := (continuous_inductiveTensor_iff U.toLinearMap).mp U.continuous
+  refine ⟨⟨P, (continuous_inductiveTensor_iff P).mpr ⟨fun a ↦ ?_, fun b ↦ ?_⟩⟩, fun _ ↦ rfl⟩
+  · change Continuous (P.comp (TensorProduct.mk ℂ D(A) D(B) a))
+    apply (TestFunction.continuous_iff_continuous_comp _).2
+    intro H hH
+    let K : Compacts A := ⟨_, a.hasCompactSupport⟩
+    obtain ⟨b, hb⟩ := compactTestOne (box K H)
+    exact (((schwartzToTestFunctionMulCLM b).continuous.comp (hsep.1 a)).comp
+      (TestFunction.continuous_ofSupportedIn hH)).congr fun f ↦ cut (supp _ _ _ _ Subset.rfl f.tsupport_subset) hb
+  · change Continuous (P.comp ((TensorProduct.mk ℂ D(A) D(B)).flip b))
+    apply (TestFunction.continuous_iff_continuous_comp _).2
+    intro K hK
+    let H : Compacts B := ⟨_, b.hasCompactSupport⟩
+    obtain ⟨a, ha⟩ := compactTestOne (box K H)
+    exact (((schwartzToTestFunctionMulCLM a).continuous.comp (hsep.2 b)).comp
+      (TestFunction.continuous_ofSupportedIn hK)).congr fun f ↦ cut (supp _ _ _ _ f.tsupport_subset Subset.rfl) ha
+
+private def testTensorMap {X Y V W : Type*}
+    [AddCommGroup X] [Module ℂ X] [TopologicalSpace X] [PolynormableSpace ℂ X] [T2Space X]
+    [AddCommGroup Y] [Module ℂ Y] [TopologicalSpace Y] [PolynormableSpace ℂ Y] [T2Space Y]
+    [AddCommGroup V] [Module ℂ V] [TopologicalSpace V] [PolynormableSpace ℂ V] [T2Space V]
+    [AddCommGroup W] [Module ℂ W] [TopologicalSpace W] [PolynormableSpace ℂ W] [T2Space W]
+    (a : X →L[ℂ] V) (b : Y →L[ℂ] W) :
+    InductiveTensor X Y →L[ℂ] InductiveTensor V W :=
+  ⟨inductiveTensorMap a.toLinearMap b.toLinearMap, inductiveTensorMap_continuous a b⟩
+
+private theorem testCompletedTensor_ext {X Y V : Type*}
+    [AddCommGroup X] [Module ℂ X] [TopologicalSpace X]
+    [AddCommGroup Y] [Module ℂ Y] [TopologicalSpace Y]
+    [AddCommGroup V] [Module ℂ V] [TopologicalSpace V] [T2Space V]
+    (f g : Cι(X, Y) →L[ℂ] V) (h : ∀ x y, f (Completion.coe' (α := InductiveTensor X Y) (x ⊗ₜ[ℂ] y)) =
+        g (Completion.coe' (α := InductiveTensor X Y) (x ⊗ₜ[ℂ] y))) : f = g := by
+  have he : f.toLinearMap.comp Completion.toComplL.toLinearMap =
+      g.toLinearMap.comp Completion.toComplL.toLinearMap := TensorProduct.ext' h
+  exact ContinuousLinearMap.ext fun z ↦ Completion.induction_on z (isClosed_eq f.continuous g.continuous)
+    fun x ↦ LinearMap.congr_fun he x
+
+private def schwartzEval (x : E) : S(E) →L[ℂ] ℂ :=
+  (BoundedContinuousFunction.evalCLM ℂ x).comp (SchwartzMap.toBoundedContinuousFunctionCLM ℂ E ℂ)
+
+/-- A real elementary factor carries the usual Schwartz topology. The range test is
+the purely real case of the elementary Schwartz submodule characterization. -/
+private theorem testTensor_realStage (d : ℕ) :
+    ∃ J : S(EuclideanSpace ℝ (Fin d)) ≃L[ℂ] ElementarySchwartz d 0 0 PUnit.{1},
+      ∀ f x, J f x = f x.1 := by
+  let S := S(EuclideanSpace ℝ (Fin d))
+  let T := ElementarySchwartz d 0 0 PUnit.{1}
+  let L : S →ₗ[ℂ] T :=
+    { toFun := fun f ↦ ⟨fun x ↦ f x.1, (elementarySchwartzSubmodule_real_iff f).mpr ⟨f, rfl⟩⟩
+      map_add' := fun _ _ ↦ rfl
+      map_smul' := fun _ _ ↦ rfl }
+  have h (s : T) (x : ElementaryLieGroup d 0 0 PUnit.{1}) : s (x.1, 0, 0, 0) = s x :=
+    congrArg s (Prod.ext rfl (Subsingleton.elim _ _))
+  have hb : Bijective L := by
+    refine ⟨fun f g e ↦ SchwartzMap.ext fun x ↦ congrArg (fun s : T ↦ s (x, 0, 0, 0)) e, fun s ↦ ?_⟩
+    have he := funext (h s)
+    obtain ⟨f, hf⟩ := (elementarySchwartzSubmodule_real_iff (fun x ↦ s (x, 0, 0, 0))).mp
+      (he.symm ▸ s.property)
+    exact ⟨f, Subtype.ext (funext fun x ↦ (congrFun hf x.1).trans (h s x))⟩
+  have hS := euclideanSchwartz_frechet d
+  let : BarrelledSpace ℂ S := isFrechetTVS_barrelled hS
+  have hc : Continuous L := continuous_toElementarySchwartz_of_eval L fun x ↦
+    ⟨schwartzEval x.1, fun _ ↦ rfl⟩
+  let q : S →L[ℂ] T := ⟨L, hc⟩
+  have hopen := isOpenMap_of_surjective_toLF
+    (isLFSpace_of_isFrechetTVS (elementarySchwartz_isFrechet (m := d) (n := 0) (r := 0) (F := PUnit.{1})))
+    (X := fun _ ↦ S) (fun _ ↦ hS) (fun _ ↦ ContinuousLinearMap.id ℂ S)
+    (fun _ ↦ Subset.rfl) (fun f ↦ ⟨0, f, rfl⟩) q hb.surjective
+  have hq := hopen.isQuotientMap hc hb.surjective
+  exact ⟨ContinuousLinearEquiv.ofIsHomeomorph (LinearEquiv.ofBijective L hb)
+    (isHomeomorph_iff_isQuotientMap_injective.mpr ⟨hq, hb.injective⟩), fun _ _ ↦ rfl⟩
+
+/-- The whole group with trivial kernel is the largest structural pair for a real
+vector group. This stage gives the Schwartz–Bruhat coordinate equivalence. The stage construction
+follows Ch02_AdelicTheta/Sec2b and AppB_AnalyticNT/Sec4b. -/
+private theorem testTensor_realCoordinates {G : Type*} [CommGroup G] [TopologicalSpace G]
+    [IsTopologicalGroup G] [T2Space G] [LocallyCompactSpace G] [SecondCountableTopology G]
+    [FiniteDimensional ℝ E] (v : G ≃ₜ* Multiplicative E) :
+    ∃ J : S(E) ≃L[ℂ] SchwartzBruhat G, ∀ f x, J f x = f (v x).toAdd := by
+  classical
+  let n := Module.finrank ℝ E
+  let V := EuclideanSpace ℝ (Fin n)
+  let b : E ≃L[ℝ] V := ContinuousLinearEquiv.ofFinrankEq (by simp [V, n, finrank_euclideanSpace])
+  let eb : Multiplicative E ≃ₜ* Multiplicative V :=
+    ⟨b.toLinearEquiv.toAddEquiv.toMultiplicative, b.continuous, b.symm.continuous⟩
+  let B := (Fin 0 → AddCircle (1 : ℝ)) × (Fin 0 → ℤ) × PUnit.{1}
+  let : Unique B := uniqueOfSubsingleton 0
+  let w : Multiplicative (ElementaryLieGroup n 0 0 PUnit.{1}) ≃ₜ* Multiplicative V :=
+    ContinuousMulEquiv.mk' (Homeomorph.prodUnique _ _) fun _ _ ↦ rfl
+  let p : ElementaryLCAPresentation G := ⟨n, 0, 0, PUnit.{1}, (v.trans eb).trans w.symm⟩
+  have hG := (lca_elementary_iff (G := G)).mpr ⟨p⟩
+  let i : (⊤ : Subgroup G) ≃ₜ* G :=
+    { Subgroup.topEquiv with
+      continuous_toFun := continuous_subtype_val
+      continuous_invFun := continuous_id.subtype_mk _ }
+  let a : BruhatStructuralPair G := ⟨(⊤, OrderDual.toDual ⊥), by simp,
+    isCompactlyGeneratedGroup_of_continuousMulEquiv i.symm hG.1,
+    isBruhatGoodSubgroup_bot_iff.mpr hG.2, bot_le⟩
+  let j : G →* a.quotient := (QuotientGroup.mk' _).comp i.symm.toMulEquiv.toMonoidHom
+  have hj : IsOpenQuotientMap j := QuotientGroup.isOpenQuotientMap_mk.comp i.symm.toHomeomorph.isOpenQuotientMap
+  have inj : Function.Injective j := (MonoidHom.ker_eq_bot_iff j).mp (eq_bot_iff.mpr fun x hx ↦
+    (a.quotient_mk_eq_one (i.symm x)).mp hx)
+  let q := (MulEquiv.ofBijective j ⟨inj, hj.surjective⟩).toContinuousMulEquiv
+    fun _ ↦ hj.isQuotientMap.isOpen_preimage
+  let t : ElementaryLCAPresentation a.quotient := {p with equiv := q.symm.trans p.equiv}
+  let A : SchwartzBruhatStage t →ₗ[ℂ] SchwartzBruhat G := schwartzBruhatStageInclusion a t
+  have hA := schwartzBruhatStage_isEmbedding a t
+  have hsur : Surjective A := by
+    intro f
+    obtain ⟨u, e', s, hs⟩ := (mem_schwartzBruhatSubmodule_iff f.val).mp f.property
+    obtain ⟨k, hk, -⟩ := schwartzBruhatStage_transition (show u ≤ a from ⟨le_top, le_top⟩) e' t
+    exact ⟨k s, Subtype.ext ((hk s).trans hs)⟩
+  let T := ContinuousLinearEquiv.ofIsHomeomorph (LinearEquiv.ofBijective A ⟨hA.injective, hsur⟩)
+    (isHomeomorph_iff_isEmbedding_surjective.mpr ⟨hA, hsur⟩)
+  let B := ContinuousLinearEquiv.equivOfInverse
+    (SchwartzMap.compCLMOfContinuousLinearEquiv ℂ b.symm (F := ℂ))
+    (SchwartzMap.compCLMOfContinuousLinearEquiv ℂ b (F := ℂ))
+    (fun f ↦ SchwartzMap.ext fun x ↦ congrArg f (b.symm_apply_apply x))
+    (fun f ↦ SchwartzMap.ext fun x ↦ congrArg f (b.apply_symm_apply x))
+  obtain ⟨R, hR⟩ := testTensor_realStage n
+  refine ⟨(B.trans R).trans T, fun f x ↦ ?_⟩
+  change (show SchwartzBruhat G from schwartzBruhatStageInclusion a t (R (B f))) x = _
+  rw [schwartzBruhatStageInclusion_apply, schwartzBruhatStageRealization_apply, dite_eq_left (Subgroup.mem_top x)]
+  change R (B f) (p.equiv (q.symm (q x))).toAdd = _
+  rw [q.symm_apply_apply, hR]; exact congrArg f (b.symm_apply_apply (v x).toAdd)
+
+private def testTensorInSchwartz : InductiveTensor D(A) D(B) →L[ℂ] InductiveTensor S(A) S(B) :=
+  testTensorMap testFunctionToSchwartzCLM testFunctionToSchwartzCLM
+
+private def testTensorCut (b : D(A) × D(B)) : InductiveTensor S(A) S(B) →L[ℂ] InductiveTensor D(A) D(B) :=
+  testTensorMap (schwartzToTestFunctionMulCLM b.1) (schwartzToTestFunctionMulCLM b.2)
+
+local notation "InclT" => testTensorInSchwartz (A := A) (B := B)
+local notation "CutT" => testTensorCut (A := A) (B := B)
+private def testTensorMul (b : D(A) × D(B)) : Cι(S(A), S(B)) →L[ℂ] Cι(S(A), S(B)) :=
+  (InclT).completion.comp (CutT b).completion
+
+local notation "MulT" => testTensorMul (A := A) (B := B)
+
+private theorem testTensor_mul_pure (a : D(A) × D(B)) (f : S(A)) (g : S(B)) :
+    MulT a (Completion.coe' (α := InductiveTensor S(A) S(B)) (f ⊗ₜ[ℂ] g)) =
+      Completion.coe' (α := InductiveTensor S(A) S(B))
+        (testFunctionToSchwartzCLM (schwartzToTestFunctionMulCLM a.1 f) ⊗ₜ[ℂ]
+            testFunctionToSchwartzCLM (schwartzToTestFunctionMulCLM a.2 g)) := by
+  let t : InductiveTensor S(A) S(B) := f ⊗ₜ[ℂ] g
+  exact (congrArg (InclT).completion ((CutT a).completion_apply_coe t)).trans
+    ((InclT).completion_apply_coe (CutT a t))
+
+private theorem schwartzToTestFunctionMulCLM_comm (a b : D(E)) (f : S(E)) :
+    schwartzToTestFunctionMulCLM a (testFunctionToSchwartzCLM (schwartzToTestFunctionMulCLM b f)) =
+      schwartzToTestFunctionMulCLM b (testFunctionToSchwartzCLM (schwartzToTestFunctionMulCLM a f)) := by
+  ext x
+  rw [schwartzToTestFunctionMulCLM_apply, schwartzToTestFunctionMulCLM_apply]
+  change a x * schwartzToTestFunctionMulCLM b f x = b x * schwartzToTestFunctionMulCLM a f x
+  rw [schwartzToTestFunctionMulCLM_apply, schwartzToTestFunctionMulCLM_apply, mul_left_comm]
+
+private theorem testTensor_cut_mul_pure (a b : D(A) × D(B)) (f : S(A)) (g : S(B)) :
+    (CutT a).completion (MulT b (Completion.coe' (α := InductiveTensor S(A) S(B)) (f ⊗ₜ[ℂ] g))) =
+      Completion.coe' (α := InductiveTensor D(A) D(B))
+        (schwartzToTestFunctionMulCLM a.1 (testFunctionToSchwartzCLM (schwartzToTestFunctionMulCLM b.1 f)) ⊗ₜ[ℂ]
+         schwartzToTestFunctionMulCLM a.2 (testFunctionToSchwartzCLM (schwartzToTestFunctionMulCLM b.2 g))) :=
+  (congrArg (CutT a).completion (testTensor_mul_pure b f g)).trans ((CutT a).completion_apply_coe _)
+
+private theorem testTensor_comm (a b : D(A) × D(B)) (z : Cι(S(A), S(B))) :
+    (CutT a).completion (MulT b z) = (CutT b).completion (MulT a z) := by
+  refine DFunLike.congr_fun (testCompletedTensor_ext
+    ((CutT a).completion.comp (MulT b)) ((CutT b).completion.comp (MulT a)) ?_) z
+  intro f g
+  exact (testTensor_cut_mul_pure a b f g).trans ((congrArg (Completion.coe' (α := InductiveTensor D(A) D(B)))
+    (congrArg₂ (TensorProduct.tmul ℂ) (schwartzToTestFunctionMulCLM_comm a.1 b.1 f)
+      (schwartzToTestFunctionMulCLM_comm a.2 b.2 g))).trans
+    (testTensor_cut_mul_pure b a f g).symm)
+
+private theorem testTensor_mul_eval
+    (e : C ≃ₜ A × B) (V : Cι(S(A), S(B)) ≃L[ℂ] S(C))
+    (hV : ∀ (a : S(A)) (b : S(B)) x, V (Completion.coe' (α := InductiveTensor S(A) S(B))
+        (a ⊗ₜ[ℂ] b)) x = a (e x).1 * b (e x).2)
+    (a : D(A) × D(B)) (x : C) (z : Cι(S(A), S(B))) :
+    V (MulT a z) x = (a.1 (e x).1 * a.2 (e x).2) * V z x := by
+  let ev := (schwartzEval x).comp V.toContinuousLinearMap
+  refine DFunLike.congr_fun (testCompletedTensor_ext (ev.comp (MulT a))
+    ((a.1 (e x).1 * a.2 (e x).2) • ev) ?_) z
+  intro f g
+  change V ((InclT).completion ((CutT a).completion _)) x = _ * V _ x
+  erw [ContinuousLinearMap.completion_apply_coe, ContinuousLinearMap.completion_apply_coe]
+  change V (Completion.coe' (α := InductiveTensor S(A) S(B))
+      (testFunctionToSchwartzCLM (schwartzToTestFunctionMulCLM a.1 f) ⊗ₜ[ℂ]
+    testFunctionToSchwartzCLM (schwartzToTestFunctionMulCLM a.2 g))) x = _
+  rw [hV, hV]; change schwartzToTestFunctionMulCLM a.1 f _ * schwartzToTestFunctionMulCLM a.2 g _ = _
+  rw [schwartzToTestFunctionMulCLM_apply, schwartzToTestFunctionMulCLM_apply]; ring
+
+private theorem testTensor_fix
+    (e : C ≃ₜ A × B) (V : Cι(S(A), S(B)) ≃L[ℂ] S(C))
+    (hV : ∀ (a : S(A)) (b : S(B)) x, V (Completion.coe' (α := InductiveTensor S(A) S(B))
+        (a ⊗ₜ[ℂ] b)) x = a (e x).1 * b (e x).2) (f : D(C)) (b : D(A) × D(B))
+    (hb : ∀ x ∈ tsupport (f : C → ℂ), b.1 (e x).1 * b.2 (e x).2 = 1) :
+    MulT b (V.symm (testFunctionToSchwartzCLM f)) = V.symm (testFunctionToSchwartzCLM f) := by
+  apply V.injective; apply SchwartzMap.ext; intro x
+  rw [testTensor_mul_eval e V hV, V.apply_symm_apply]
+  change (b.1 (e x).1 * b.2 (e x).2) * f x = f x
+  by_cases h : x ∈ tsupport (f : C → ℂ)
+  · rw [hb x h, one_mul]
+  · rw [image_eq_zero_of_notMem_tsupport h, mul_zero]
+
+/- On the Schwartz tensor product a product cutoff acts by pointwise multiplication.
+The inverse sends a compact test to its Schwartz kernel inverse, then cuts off both
+factors. Commutation makes this independent of the choice of cutoff. -/
+section TestTensorKernel
+
+private local instance : CompleteSpace D(C) := completeSpace_testFunction
+
+variable
+    (e : C ≃ₜ A × B) (V : Cι(S(A), S(B)) ≃L[ℂ] S(C))
+    (hV : ∀ (a : S(A)) (b : S(B)) x, V (Completion.coe' (α := InductiveTensor S(A) S(B))
+        (a ⊗ₜ[ℂ] b)) x = a (e x).1 * b (e x).2)
+
+private def testTensorForward (V : Cι(S(A), S(B)) ≃L[ℂ] S(C)) :=
+  V.toContinuousLinearMap.comp (Completion.toComplL.comp InclT)
+
+private def testTensorBack (V : Cι(S(A), S(B)) ≃L[ℂ] S(C)) :=
+  V.symm.toContinuousLinearMap.comp (testFunctionToSchwartzCLM (E := C))
+
+local notation "J" => testTensorBack V
+
+include hV in
+private theorem testTensor_glue :
+    ∃ Q : D(C) →L[ℂ] Cι(D(A), D(B)), ∀ b f, MulT b (J f) = J f →
+      Q f = (CutT b).completion (J f) := by
+  have hp : PolynormableSpace ℂ Cι(D(A), D(B)) := polynormableSpace_completion
+  let : Module ℝ Cι(D(A), D(B)) := Module.compHom Cι(D(A), D(B)) (algebraMap ℝ ℂ)
+  let : IsScalarTower ℝ ℂ Cι(D(A), D(B)) := IsScalarTower.of_compHom ℝ ℂ Cι(D(A), D(B))
+  let : LocallyConvexSpace ℝ Cι(D(A), D(B)) := (PolynormableSpace.withSeminorms ℂ Cι(D(A), D(B))).toLocallyConvexSpace
+  let : ContinuousSMul ℝ Cι(D(A), D(B)) := MulAction.continuousSMul_compHom
+    (f := (algebraMap ℝ ℂ).toMonoidHom) Complex.continuous_ofReal
+  exact testFunction_glue_cutoffs J MulT (fun b : D(A) × D(B) ↦ (CutT b).completion) testTensor_comm (fun K ↦ by
+    obtain ⟨a, ha⟩ := compactTestOne ⟨_, K.isCompact.image (continuous_fst.comp e.continuous)⟩
+    obtain ⟨b, hb⟩ := compactTestOne ⟨_, K.isCompact.image (continuous_snd.comp e.continuous)⟩
+    exact ⟨(a, b), fun f hf ↦ testTensor_fix e V hV f (a, b) fun x hx ↦ by
+      exact (congrArg₂ (· * ·) (ha _ ⟨x, hf hx, rfl⟩) (hb _ ⟨x, hf hx, rfl⟩)).trans (one_mul _)⟩)
+
+include hV in
+private theorem testTensor_fixed (f : D(C)) : ∃ b, MulT b (J f) = J f := by
+  obtain ⟨a, ha⟩ := compactTestOne ⟨_, f.hasCompactSupport.image (continuous_fst.comp e.continuous)⟩
+  obtain ⟨b, hb⟩ := compactTestOne ⟨_, f.hasCompactSupport.image (continuous_snd.comp e.continuous)⟩
+  exact ⟨(a, b), testTensor_fix e V hV f (a, b) fun x hx ↦
+    (congrArg₂ (· * ·) (ha _ ⟨x, hx, rfl⟩) (hb _ ⟨x, hx, rfl⟩)).trans (one_mul _)⟩
+
+private theorem schwartzToTestFunctionMulCLM_fixed [FiniteDimensional ℝ E] (f : D(E)) :
+    ∃ a : D(E), schwartzToTestFunctionMulCLM a (testFunctionToSchwartzCLM f) = f := by
+  obtain ⟨a, ha⟩ := compactTestOne ⟨_, f.hasCompactSupport⟩
+  refine ⟨a, TestFunction.ext fun x ↦ ?_⟩
+  rw [schwartzToTestFunctionMulCLM_apply]
+  change a x * f x = f x
+  by_cases h : x ∈ tsupport (f : E → ℂ)
+  · rw [ha _ h, one_mul]
+  · rw [image_eq_zero_of_notMem_tsupport h, mul_zero]
+
+variable (P : InductiveTensor D(A) D(B) →L[ℂ] D(C)) (Q : D(C) →L[ℂ] Cι(D(A), D(B)))
+
+local notation "H" => ContinuousLinearMap.fromCompletion P
+
+private theorem testTensor_cut_incl_pure (f : D(A)) (g : D(B)) :
+    let t : InductiveTensor D(A) D(B) := f ⊗ₜ[ℂ] g
+    ∃ b : D(A) × D(B), (CutT b).completion (Completion.coe' (InclT t)) = Completion.coe' t := by
+  intro t
+  let a := (schwartzToTestFunctionMulCLM_fixed f).choose
+  let b := (schwartzToTestFunctionMulCLM_fixed g).choose
+  refine ⟨(a, b), ((CutT (a, b)).completion_apply_coe (InclT t)).trans ?_⟩
+  exact congrArg (Completion.coe' (α := InductiveTensor D(A) D(B)))
+    (congrArg₂ (TensorProduct.tmul ℂ) (schwartzToTestFunctionMulCLM_fixed f).choose_spec
+      (schwartzToTestFunctionMulCLM_fixed g).choose_spec)
+
+private theorem testTensor_left
+    (hP : ∀ t : InductiveTensor D(A) D(B), testFunctionToSchwartzCLM (P t) = testTensorForward V t)
+    (hQ : ∀ (b : D(A) × D(B)) (f : D(C)), MulT b (J f) = J f → Q f = (CutT b).completion (J f)) :
+    Q.comp H = ContinuousLinearMap.id ℂ Cι(D(A), D(B)) := by
+  refine testCompletedTensor_ext _ _ fun f g ↦ ?_
+  let t : InductiveTensor D(A) D(B) := f ⊗ₜ[ℂ] g
+  let fixed := testTensor_cut_incl_pure f g
+  let b := fixed.choose
+  have hJ : J (P t) = Completion.coe' (InclT t) :=
+    (congrArg V.symm (hP t)).trans (V.symm_apply_apply _)
+  have hR : (CutT b).completion (J (P t)) = Completion.coe' t :=
+    (congrArg (CutT b).completion hJ).trans fixed.choose_spec
+  have hm : MulT b (J (P t)) = J (P t) :=
+    (congrArg (InclT).completion hR).trans (((InclT).completion_apply_coe t).trans hJ.symm)
+  exact (congrArg Q (P.fromCompletion_apply_coe t)).trans ((hQ b (P t) hm).trans hR)
+
+private theorem testTensor_intertwines
+    (hP : ∀ t : InductiveTensor D(A) D(B), testFunctionToSchwartzCLM (P t) = testTensorForward V t) (z : Cι(D(A), D(B))) :
+    V ((InclT).completion z) = testFunctionToSchwartzCLM (H z) := by
+  refine DFunLike.congr_fun (testCompletedTensor_ext (V.toContinuousLinearMap.comp (InclT).completion)
+    (testFunctionToSchwartzCLM.comp H) ?_) z
+  intro a b
+  change V ((InclT).completion (Completion.coe' (α := InductiveTensor D(A) D(B)) (a ⊗ₜ[ℂ] b))) =
+    testFunctionToSchwartzCLM (P.fromCompletion _)
+  erw [ContinuousLinearMap.completion_apply_coe, ContinuousLinearMap.fromCompletion_apply_coe]
+  exact (hP _).symm
+
+include hV in
+private theorem testTensor_right
+    (hP : ∀ t : InductiveTensor D(A) D(B), testFunctionToSchwartzCLM (P t) = testTensorForward V t)
+    (hQ : ∀ (b : D(A) × D(B)) (f : D(C)), MulT b (J f) = J f → Q f = (CutT b).completion (J f)) (f : D(C)) :
+    H (Q f) = f := by
+  let fixed := testTensor_fixed e V hV f
+  let b := fixed.choose
+  have hb : MulT b (J f) = J f := fixed.choose_spec
+  rw [hQ _ _ hb]
+  have hi := testTensor_intertwines (V := V) (P := P) (hP := hP) ((CutT b).completion (J f))
+  have he := (hi.symm.trans (congrArg V hb)).trans (V.apply_symm_apply _)
+  exact TestFunction.ext fun x ↦ congrArg (fun F : S(C) ↦ F x) he
+
+include hV in
+private theorem testTensor_seq
+    (hP : ∀ t : InductiveTensor D(A) D(B), testFunctionToSchwartzCLM (P t) = testTensorForward V t)
+    (hQ : ∀ (b : D(A) × D(B)) (f : D(C)), MulT b (J f) = J f → Q f = (CutT b).completion (J f)) (f : D(C)) :
+    ∃ s : ℕ → InductiveTensor D(A) D(B),
+    Tendsto (fun n ↦ H (Completion.coe' (s n))) atTop (𝓝 f) := by
+  let fixed := testTensor_fixed e V hV f
+  let b := fixed.choose
+  have hb : MulT b (J f) = J f := fixed.choose_spec
+  have hright := testTensor_right (e := e) (V := V) (hV := hV) (P := P) (hP := hP) (Q := Q) (hQ := hQ)
+  have hd := V.surjective.denseRange.comp (Completion.denseRange_coe (α := InductiveTensor S(A) S(B))) V.continuous
+  obtain ⟨s, hs, ht⟩ := mem_closure_iff_seq_limit.mp (hd (testFunctionToSchwartzCLM f))
+  choose t htval using hs
+  have ht' : Filter.Tendsto (fun n ↦ Completion.coe' (t n)) Filter.atTop (𝓝 (J f)) := by
+    have ht1 := (V.symm.continuous.tendsto (testFunctionToSchwartzCLM f)).comp ht
+    exact ht1.congr fun n ↦ (congrArg V.symm (htval n).symm).trans (V.symm_apply_apply _)
+  have ht2 := (((H).continuous.comp (CutT b).completion.continuous).tendsto (J f)).comp ht'
+  refine ⟨fun n ↦ CutT b (t n), ?_⟩
+  have he : H ((CutT b).completion (J f)) = f := (congrArg H (hQ b f hb).symm).trans (hright f)
+  simpa only [Function.comp_def, ContinuousLinearMap.completion_apply_coe, he] using ht2
+
+end TestTensorKernel
+
+private theorem testFunction_tensor_of_schwartz_kernel
+    (e : C ≃ₜ A × B) (V : Cι(S(A), S(B)) ≃L[ℂ] S(C))
+    (hV : ∀ (a : S(A)) (b : S(B)) x, V (Completion.coe' (α := InductiveTensor S(A) S(B))
+        (a ⊗ₜ[ℂ] b)) x = a (e x).1 * b (e x).2) :
+    ∃ H : Cι(D(A), D(B)) ≃L[ℂ] D(C),
+      (∀ (a : D(A)) (b : D(B)) x, H (Completion.coe' (α := InductiveTensor D(A) D(B))
+        (a ⊗ₜ[ℂ] b)) x = a (e x).1 * b (e x).2) ∧
+      ∀ f, ∃ s : ℕ → InductiveTensor D(A) D(B), Filter.Tendsto
+        (fun n ↦ H (Completion.coe' (s n))) Filter.atTop (𝓝 f) := by
+  let : CompleteSpace D(C) := completeSpace_testFunction
+  let U := testTensorForward V
+  have hU (a : D(A)) (b : D(B)) (x : C) : U (a ⊗ₜ[ℂ] b) x = a (e x).1 * b (e x).2 :=
+    hV (testFunctionToSchwartzCLM a) (testFunctionToSchwartzCLM b) x
+  let prod := localizedTensor_product e U hU
+  let glue := testTensor_glue e V hV
+  let P := prod.choose
+  let Q := glue.choose
+  have hl := testTensor_left (V := V) (P := P) (Q := Q)
+    (hP := prod.choose_spec) (hQ := glue.choose_spec)
+  have hr := testTensor_right (e := e) (hV := hV) (V := V) (P := P) (Q := Q)
+    (hP := prod.choose_spec) (hQ := glue.choose_spec)
+  let iso := ContinuousLinearEquiv.equivOfInverse P.fromCompletion Q (fun z ↦ DFunLike.congr_fun hl z) hr
+  refine ⟨iso, fun a b x ↦ ?_, testTensor_seq (e := e) (hV := hV) (V := V) (P := P) (Q := Q)
+    (hP := prod.choose_spec) (hQ := glue.choose_spec)⟩
+  change P.fromCompletion (Completion.coe' (α := InductiveTensor D(A) D(B)) (a ⊗ₜ[ℂ] b)) x = _
+  erw [P.fromCompletion_apply_coe]
+  exact (congrArg (fun f : S(C) ↦ f x) (prod.choose_spec _)).trans (hU a b x)
+
+/-- Transport the Schwartz–Bruhat kernel along the real vector group presentations. -/
+private theorem testTensor_schwartzKernel (e : C ≃L[ℝ] A × B) :
+    ∃ V : Cι(S(A), S(B)) ≃L[ℂ] S(C), ∀ (a : S(A)) (b : S(B)) x,
+      V (Completion.coe' (α := InductiveTensor S(A) S(B)) (a ⊗ₜ[ℂ] b)) x = a (e x).1 * b (e x).2 := by
+  let G := Multiplicative A
+  let K := Multiplicative B
+  let c : G × K ≃ₜ* Multiplicative C :=
+    { toEquiv := e.symm.toEquiv
+      map_mul' := fun x y ↦ e.symm.map_add x y
+      continuous_toFun := e.symm.continuous, continuous_invFun := e.continuous }
+  obtain ⟨Ja, ha⟩ := testTensor_realCoordinates (E := A) (ContinuousMulEquiv.refl G)
+  obtain ⟨Jb, hb⟩ := testTensor_realCoordinates (E := B) (ContinuousMulEquiv.refl K)
+  obtain ⟨Jc, hc⟩ := testTensor_realCoordinates c
+  let : T2Space (SchwartzBruhat G) := schwartzBruhat_eval_t2
+  let : T2Space (SchwartzBruhat K) := schwartzBruhat_eval_t2
+  let f := testTensorMap Ja.toContinuousLinearMap Jb.toContinuousLinearMap
+  let g := testTensorMap Ja.symm.toContinuousLinearMap Jb.symm.toContinuousLinearMap
+  have left : g.completion.comp f.completion = ContinuousLinearMap.id ℂ _ := by
+    apply testCompletedTensor_ext
+    intro x y
+    change g.completion (f.completion _) = _
+    erw [ContinuousLinearMap.completion_apply_coe, ContinuousLinearMap.completion_apply_coe]
+    change Completion.coe' (α := InductiveTensor S(A) S(B)) (Ja.symm (Ja x) ⊗ₜ[ℂ] Jb.symm (Jb y)) = _
+    rw [Ja.symm_apply_apply, Jb.symm_apply_apply]; rfl
+  have right : f.completion.comp g.completion = ContinuousLinearMap.id ℂ _ := by
+    apply testCompletedTensor_ext
+    intro x y
+    change f.completion (g.completion _) = _
+    erw [ContinuousLinearMap.completion_apply_coe, ContinuousLinearMap.completion_apply_coe]
+    change Completion.coe' (α := InductiveTensor (SchwartzBruhat G) (SchwartzBruhat K))
+      (Ja (Ja.symm x) ⊗ₜ[ℂ] Jb (Jb.symm y)) = _
+    rw [Ja.apply_symm_apply, Jb.apply_symm_apply]; rfl
+  let t := ContinuousLinearEquiv.equivOfInverse f.completion g.completion
+    (fun z ↦ DFunLike.congr_fun left z) (fun z ↦ DFunLike.congr_fun right z)
+  obtain ⟨V, hV⟩ := schwartzBruhat_kernel_equiv (G := G) (H := K)
+  refine ⟨(t.trans V).trans Jc.symm, fun a b x ↦ ?_⟩
+  let z : G × K := (Multiplicative.ofAdd (e x).1, Multiplicative.ofAdd (e x).2)
+  have hcoord : (c z).toAdd = x := e.symm_apply_apply x
+  have eval (s : SchwartzBruhat (G × K)) : Jc.symm s x = s z := by
+    rw [← hcoord, ← hc, Jc.apply_symm_apply]
+  change Jc.symm (V (f.completion _)) x = _
+  erw [eval, ContinuousLinearMap.completion_apply_coe]
+  exact (hV (Ja a) (Jb b) z.1 z.2).trans (congrArg₂ (· * ·) (ha a z.1) (hb b z.2))
+
+private theorem testTensor_euclidean {ι κ : Type*} [Fintype ι] [Fintype κ] :
+    let W := InductiveTensor D(EuclideanSpace ℝ ι) D(EuclideanSpace ℝ κ)
+    ∃ H : Completion W ≃L[ℂ] D(EuclideanSpace ℝ (ι ⊕ κ)),
+      (∀ (a : D(EuclideanSpace ℝ ι)) (b : D(EuclideanSpace ℝ κ)) (x : EuclideanSpace ℝ (ι ⊕ κ)),
+          H (Completion.coe' (α := W) (a ⊗ₜ[ℂ] b)) x =
+          a (WithLp.toLp 2 (fun i : ι ↦ x (.inl i))) * b (WithLp.toLp 2 (fun j : κ ↦ x (.inr j)))) ∧
+        ∀ f, ∃ s : ℕ → W, Filter.Tendsto (fun n ↦ H (s n : Completion W)) Filter.atTop (𝓝 f) := by
+  intro W
+  let L : EuclideanSpace ℝ (ι ⊕ κ) ≃ₗᵢ[ℝ] WithLp 2 (EuclideanSpace ℝ ι × EuclideanSpace ℝ κ) :=
+    PiLp.sumPiLpEquivProdLpPiLp (𝕜 := ℝ) 2 (fun _ : ι ⊕ κ ↦ ℝ)
+  let e := WithLp.homeomorphProd 2 (EuclideanSpace ℝ ι) (EuclideanSpace ℝ κ)
+  let C : EuclideanSpace ℝ (ι ⊕ κ) ≃L[ℝ] EuclideanSpace ℝ ι × EuclideanSpace ℝ κ :=
+    { L.toLinearEquiv.trans (WithLp.linearEquiv 2 ℝ _) with
+      continuous_toFun := e.continuous.comp L.continuous
+      continuous_invFun := L.symm.continuous.comp e.symm.continuous }
+  let h := testTensor_schwartzKernel C
+  exact testFunction_tensor_of_schwartz_kernel C.toHomeomorph h.choose h.choose_spec
+
+end TensorProof
+
+end TestFunctionTensor
+
 /-- Paper: Remark 5.3.2.4, p. 246.
 Products of test functions define a map from the inductive tensor product with
 sequentially dense range. The completed inductive tensor product is isomorphic
@@ -4885,7 +5218,9 @@ theorem testFunction_inductiveTensor_equiv :
         e (UniformSpace.Completion.coe' (α := W) (f ⊗ₜ[ℂ] g)) x = factors(f, g, x)) ∧
       ∀ h : 𝒟(ι ⊕ κ), ∃ s : ℕ → W,
         Tendsto (fun n ↦ e (s n : UniformSpace.Completion W))
-          atTop (𝓝 h) := by sorry
+          atTop (𝓝 h) := by
+  intro W
+  exact TestFunctionTensor.testTensor_euclidean (ι := ι) (κ := κ)
 
 /-- Iterated line derivatives are iterated derivatives along the line. -/
 private theorem lineDerivPow_apply_eq_iteratedDeriv {E : Type*} [NormedAddCommGroup E]
