@@ -8,7 +8,8 @@ import all RiemannMasullo.Ch09_HardySobolev.Sec2
 import all RiemannMasullo.Ch10_TraceSpectral.Sec3
 import all RiemannMasullo.Ch07_SchauderBasesZeta.Sec4
 
-import RiemannMasullo.Ch12_TraceGeometric.Sec5
+import all RiemannMasullo.Ch12_TraceGeometric.Sec5
+import Mathlib.Analysis.Distribution.SchwartzSpace.Fourier
 import all RiemannMasullo.Ch03_IdelicZeta.Sec2
 import Mathlib.Analysis.LocallyConvex.Barrelled
 import Mathlib.Analysis.Calculus.BumpFunction.Normed
@@ -38,6 +39,13 @@ For every closed strip and every Sobolev exponent greater than one, the
 necessary direction extends to complex separation of the surviving zero sites.
 The proof probes complete blocks with their order-zero coordinate and uses the
 Hölder continuity of these coordinates in reciprocal Sobolev norm.
+
+At width zero, polynomial separation is also sufficient for every real exponent
+greater than one. The Fourier transforms of smooth frequency cutoffs isolate
+the individual admitted derivatives. Their polynomially bounded Sobolev norms
+control the prescribed biorthogonal vectors. The binomial convolution formula
+and the weighted divisor count then sum the complete blocks for every bounded
+insertion, including at multiple zeros.
 -/
 
 @[expose] public noncomputable section
@@ -1498,4 +1506,809 @@ theorem spectralStrip_exists_divergent_rankOne_of_no_polynomial_separation
 
 #print axioms spectralStrip_homogeneous_blocks_require_polynomial_separation
 #print axioms spectralStrip_exists_divergent_rankOne_of_no_polynomial_separation
+end RiemannMasullo
+
+open Filter Function MeasureTheory Topology Set FourierTransform
+namespace RiemannMasullo
+namespace LineCardinal
+local notation "S" => SchwartzMap ℝ ℂ
+private def dS (f : S) : ℕ → S
+  | 0 => f
+  | m+1 => SchwartzMap.derivCLM ℂ ℂ (dS f m)
+private theorem dS_apply (f : S) (m : ℕ) : (dS f m : ℝ → ℂ) = iteratedDeriv m f := by
+  induction m with
+  | zero => rfl
+  | succ m ih => funext x; rw [iteratedDeriv_succ, ←ih]; rfl
+private def K : ℂ := 2*(Real.pi:ℂ)*Complex.I
+private theorem K_ne : K ≠ 0 := mul_ne_zero (mul_ne_zero (by norm_num) (Complex.ofReal_ne_zero.mpr Real.pi_ne_zero)) Complex.I_ne_zero
+private theorem fourier_dS (f : S) (m : ℕ) (x : ℝ) :
+    𝓕 (dS f m) x = (K*x)^m * 𝓕 f x := by
+  induction m with
+  | zero => simp [dS]
+  | succ m ih =>
+    let q := dS f m
+    have hd : Integrable (deriv (q : ℝ → ℂ)) := (SchwartzMap.derivCLM ℂ ℂ q).integrable
+    have h := congrFun (Real.fourier_deriv q.integrable q.differentiable hd) x
+    change 𝓕 (dS f (m+1)) x = (K*x)*𝓕 (dS f m) x at h
+    rw [h,ih,pow_succ]; ring
+private theorem fourier_moment (f : S) (u : ℝ) (m : ℕ) :
+    ∫ x : ℝ, (𝓕 f x) * Complex.exp ((u:ℂ)*Complex.I*x) * (x:ℂ)^m =
+      K⁻¹^m * iteratedDeriv m f (u/(2*Real.pi)) := by
+  let v := u/(2*Real.pi)
+  have hi := ((dS f m).integrable).fourierInv_fourier_eq
+    (show Integrable (𝓕 ((dS f m): ℝ → ℂ)) from (𝓕 (dS f m)).integrable)
+    (v := v) (dS f m).continuous.continuousAt
+  rw [Real.fourierInv_eq'] at hi
+  change _ = K⁻¹^m * iteratedDeriv m f v
+  rw [←dS_apply,←hi,←integral_const_mul]
+  apply integral_congr_ae (.of_forall fun x ↦ ?_)
+  change _ = K⁻¹^m*(Complex.exp _ * 𝓕 (dS f m) x)
+  have e : ((2*Real.pi*inner ℝ x v:ℝ):ℂ)*Complex.I = (u:ℂ)*Complex.I*x := by
+    simp only [Real.inner_apply,v,Complex.ofReal_mul,Complex.ofReal_div,Complex.ofReal_ofNat]
+    field_simp [Real.pi_ne_zero]
+  rw [e,fourier_dS,mul_pow,inv_pow]
+  field_simp [K_ne]
+end LineCardinal
+end RiemannMasullo
+
+open Filter Function MeasureTheory Topology Set
+namespace RiemannMasullo
+namespace LineCardinal
+local notation "S" => SchwartzMap ℝ ℂ
+private def B (k : ℕ) : S :=
+  ((LineModulation.bumpS_compact LineModulation.inletBump).mul_right
+    (f' := fun x : ℝ ↦ (x:ℂ)^k)).toSchwartzMap
+    ((LineModulation.bumpS _).smooth'.mul (Complex.ofRealCLM.contDiff.pow _))
+private theorem deriv_real_cast (f : ℝ → ℝ) (hf : ContDiff ℝ (⊤:ℕ∞) f) (m : ℕ) :
+    iteratedDeriv m (fun x : ℝ ↦ (f x:ℂ)) = fun x ↦ ((iteratedDeriv m f x : ℝ) : ℂ) := by
+  induction m with
+  | zero => rfl
+  | succ m hm =>
+    rw [iteratedDeriv_succ,hm,iteratedDeriv_succ]
+    funext x
+    have hd := (ContDiff.differentiable_iteratedDeriv m hf (by exact_mod_cast ENat.natCast_lt_top m)).differentiableAt (x:=x)
+    exact (Complex.ofRealCLM.hasFDerivAt.comp_hasDerivAt x hd.hasDerivAt).deriv
+private theorem B_origin (k m : ℕ) : iteratedDeriv m (B k) 0 = if m=k then (k.factorial:ℂ) else 0 := by
+  have h : (B k : ℝ → ℂ) =ᶠ[𝓝 0] fun x : ℝ ↦ ((x^k:ℝ):ℂ) := by
+    filter_upwards [LineModulation.inletBump.eventuallyEq_one] with x hx
+    change (LineModulation.inletBump x:ℂ)*(x:ℂ)^k = _
+    rw [show LineModulation.inletBump x = 1 from hx,Complex.ofReal_one,one_mul,Complex.ofReal_pow]
+  rw [h.iteratedDeriv_eq,deriv_real_cast (fun x : ℝ ↦ x^k) (contDiff_id.pow _) m]
+  dsimp only
+  rw [iteratedDeriv_fun_pow_zero]
+  split <;> simp
+private theorem B_outside (k m : ℕ) {x : ℝ} (hx : 1≤|x|) : iteratedDeriv m (B k) x = 0 := by
+  have he : (B k : ℝ → ℂ) =ᶠ[𝓝 x] 0 := by
+    have hh : (1/2:ℝ) < |x| := by linarith
+    filter_upwards [continuous_abs.continuousAt.eventually (lt_mem_nhds hh)] with y hy
+    change (LineModulation.inletBump y:ℂ)*(y:ℂ)^k = 0
+    have hz : LineModulation.inletBump y = 0 := LineModulation.inletBump.zero_of_le_dist (by
+      change (1/2:ℝ) ≤ dist y 0; simpa [Real.dist_eq] using hy.le)
+    simp [hz]
+  rw [he.iteratedDeriv_eq]
+  simp
+private def shifted (f : S) (t h : ℝ) (hh : 0<h) : S :=
+  (SchwartzMap.compCLMOfContinuousLinearEquiv ℂ
+    (ContinuousLinearEquiv.unitsEquivAut ℝ (Units.mk0 h⁻¹ (inv_ne_zero hh.ne'))) f).compSubConstCLM ℂ t
+private theorem shifted_derivs (f : S) (t h : ℝ) (hh : 0<h) (m : ℕ) (x : ℝ) :
+    iteratedDeriv m (shifted f t h hh) x = (h⁻¹)^m • iteratedDeriv m f (h⁻¹*(x-t)) := by
+  have heq : (shifted f t h hh : ℝ → ℂ) = fun y ↦ (fun q ↦ f (h⁻¹*q)) (y-t) := by
+    funext y
+    change f ((y-t)*h⁻¹) = _
+    rw [mul_comm]
+  rw [heq,iteratedDeriv_comp_sub_const (f := fun q : ℝ ↦ f (h⁻¹*q)),iteratedDeriv_comp_const_smul (f.smooth _) h⁻¹]
+private theorem shifted_seminorm (k p m : ℕ) (t h : ℝ) (hh : 0<h) (hh' : h≤1) :
+    (SchwartzMap.seminorm ℂ p m) (shifted (B k) t h hh) ≤
+      (SchwartzMap.seminorm ℂ 0 m) (B k) * (1+|t|)^p * (h⁻¹)^m := by
+  apply SchwartzMap.seminorm_le_bound ℂ _ _ _ (by positivity)
+  intro x
+  rw [norm_iteratedFDeriv_eq_norm_iteratedDeriv,shifted_derivs,norm_smul,
+    Real.norm_of_nonneg (pow_nonneg (inv_nonneg.mpr hh.le) _)]
+  by_cases hx : 1 ≤ |h⁻¹*(x-t)|
+  · rw [B_outside _ _ hx,norm_zero,mul_zero,mul_zero]; positivity
+  · have hxt : |x-t| ≤ h := by
+      rw [abs_mul,abs_of_pos (inv_pos.mpr hh),←div_eq_inv_mul] at hx
+      simpa only [one_mul] using (div_le_iff₀ hh).mp (not_le.mp hx).le
+    have hnorm : ‖x‖ ≤ 1+|t| := by
+      rw [Real.norm_eq_abs,show x = (x-t)+t by ring] at ⊢
+      exact (abs_add_le ..).trans (add_le_add (hxt.trans hh') (le_refl _))
+    have H := (B k).le_seminorm ℂ 0 m (h⁻¹*(x-t))
+    rw [pow_zero,one_mul,norm_iteratedFDeriv_eq_norm_iteratedDeriv] at H
+    calc
+      _ = (‖x‖^p*‖iteratedDeriv m (B k) (h⁻¹*(x-t))‖)*(h⁻¹)^m := by ring
+      _ ≤ _ := by grw [pow_le_pow_left₀ (norm_nonneg _) hnorm p,H]; apply le_of_eq; ring
+end LineCardinal
+end RiemannMasullo
+
+open Filter Function Set
+namespace RiemannMasullo
+namespace LineCardinal
+local notation "S" => SchwartzMap ℝ ℂ
+private theorem images_bounded {E : Type*} [NormedAddCommGroup E] [NormedSpace ℂ E] (P : S →L[ℂ] E)
+    (M : ℕ) : ∃ C ≥ (0:ℝ), ∃ d : ℕ, ∀ (k : ℕ), k≤M → ∀ (t h : ℝ) (hh : 0<h), h≤1 →
+      ‖P (shifted (B k) t h hh)‖ ≤ C * (1+|t|+h⁻¹)^d := by
+  classical
+  let q := (normSeminorm ℂ E).comp P.toLinearMap
+  have hq : Continuous q := continuous_norm.comp P.continuous
+  obtain ⟨I,D,_,hD⟩ := Seminorm.bound_of_continuous (schwartz_withSeminorms ℂ ℝ ℂ) q hq
+  let J := Finset.range (M+1) ×ˢ I
+  let M₀ := ∑ z ∈ J, SchwartzMap.seminorm ℂ 0 z.2.2 (B z.1)
+  have hM : 0 ≤ M₀ := Finset.sum_nonneg (fun _ _ ↦ apply_nonneg _ _)
+  let d := I.sup (fun z ↦ z.1+z.2)
+  refine ⟨(D:ℝ)*M₀, by positivity, d, fun k hk t h hh hh' ↦ ?_⟩
+  let y := shifted (B k) t h hh
+  let G := 1+|t|+h⁻¹
+  have hG : 1≤G := by dsimp [G]; linarith [abs_nonneg t,(inv_pos.mpr hh)]
+  refine (hD y).trans ?_
+  change (D:ℝ)*(I.sup (schwartzSeminormFamily ℂ ℝ ℂ)) y ≤ _
+  rw [mul_assoc]
+  apply mul_le_mul_of_nonneg_left _ D.coe_nonneg
+  apply Seminorm.finset_sup_apply_le (by positivity)
+  intro z hz
+  have hc : SchwartzMap.seminorm ℂ 0 z.2 (B k) ≤ M₀ := Finset.single_le_sum (a := (k,z))
+    (f := fun z : ℕ × (ℕ × ℕ) ↦ SchwartzMap.seminorm ℂ 0 z.2.2 (B z.1))
+    (fun _ _ ↦ apply_nonneg _ _) (Finset.mem_product.mpr ⟨Finset.mem_range_succ_iff.mpr hk,hz⟩)
+  have h₁ : 1+|t| ≤ G := le_add_of_nonneg_right (inv_nonneg.mpr hh.le)
+  have h₂ : h⁻¹ ≤ G := le_add_of_nonneg_left (by positivity)
+  calc
+    _ ≤ SchwartzMap.seminorm ℂ 0 z.2 (B k)*(1+|t|)^z.1*(h⁻¹)^z.2 := shifted_seminorm k z.1 z.2 t h hh hh'
+    _ ≤ M₀*G^z.1*G^z.2 := by grw [hc,pow_le_pow_left₀ (by positivity) h₁,pow_le_pow_left₀ (inv_nonneg.mpr hh.le) h₂]
+    _ ≤ _ := by rw [mul_assoc,←pow_add]; exact mul_le_mul_of_nonneg_left (pow_le_pow_right₀ hG (Finset.le_sup (f := fun z : ℕ × ℕ ↦ z.1+z.2) hz)) hM
+private theorem inverse_coeff_bound (K C : ℂ) (hK : K ≠ 0) (hC : C ≠ 0) (M : ℕ) :
+    ∃ A > (0:ℝ), ∀ k≤M, ∀ h : ℝ, 0<h → h≤1 →
+      ‖(C*K⁻¹^k*(h⁻¹)^k*(k.factorial:ℂ))⁻¹‖ ≤ A := by
+  refine ⟨1+(1+‖K‖)^M*‖C‖⁻¹,by positivity,fun k hk h hh hh' ↦ ?_⟩
+  simp only [norm_inv,norm_mul,norm_pow,Complex.norm_natCast,Complex.norm_real,
+    Real.norm_of_nonneg (inv_nonneg.mpr hh.le),mul_inv,inv_pow,inv_inv]
+  have hf : (1:ℝ) ≤ (k.factorial:ℝ) := by exact_mod_cast k.factorial_pos
+  have hf' : (k.factorial:ℝ)⁻¹ ≤ 1 := (inv_le_one₀ (by positivity)).mpr hf
+  have hp : ‖K‖^k ≤ (1+‖K‖)^M := (pow_le_pow_left₀ (norm_nonneg _) (by linarith : ‖K‖≤1+‖K‖) _).trans
+    (pow_le_pow_right₀ (le_add_of_nonneg_right (norm_nonneg _)) hk)
+  have hscale : h^k ≤ 1 := pow_le_one₀ hh.le hh'
+  calc
+    _ ≤ ‖C‖⁻¹*(1+‖K‖)^M*1*1 := by gcongr
+    _ ≤ _ := by rw [mul_one,mul_one,mul_comm]; linarith
+end LineCardinal
+end RiemannMasullo
+
+open Filter Function MeasureTheory Topology Set FourierTransform
+namespace RiemannMasullo
+namespace LineCardinal
+local notation "S" => SchwartzMap ℝ ℂ
+local notation "dw(" s ")" => intervalSobolevMeasure (volume : Measure ℝ) id (-(0:ℝ)) 0 s
+private theorem line_temperate (s : ℝ) (hs : 0 ≤ s) : (dw(s)).HasTemperateGrowth := by
+  obtain ⟨n,hn⟩ := exists_nat_gt (s+2)
+  refine ⟨n,?_⟩
+  change Integrable _ (volume.withDensity fun x : ℝ ↦ ENNReal.ofReal (intervalSobolevDensity (-0) 0 s x))
+  rw [integrable_withDensity_iff (by apply Measurable.ennreal_ofReal; unfold intervalSobolevDensity; fun_prop)
+    (.of_forall fun _ ↦ ENNReal.ofReal_lt_top)]
+  have hi := (integrable_one_add_norm (μ := (volume : Measure ℝ)) (r := 2) (by simp))
+  apply hi.mono' (by apply Measurable.aestronglyMeasurable; unfold intervalSobolevDensity; fun_prop)
+  apply Filter.Eventually.of_forall
+  intro x
+  let r := 1+‖x‖
+  have hr : 1 ≤ r := by dsimp only [r]; simp
+  have hrp : 0<r := zero_lt_one.trans_le hr
+  rw [ENNReal.toReal_ofReal (by unfold intervalSobolevDensity; positivity : 0 ≤ intervalSobolevDensity (-0) 0 s x)]
+  simp only [intervalSobolevDensity,neg_zero,mul_zero,zero_mul,Real.exp_zero,max_self,one_mul,
+    Real.norm_eq_abs,abs_mul]
+  change |r^(-(n:ℝ))| * |(1+x^2)^(s/2)| ≤ r^(-(2:ℝ))
+  rw [abs_of_nonneg (Real.rpow_nonneg hrp.le _),abs_of_nonneg (Real.rpow_nonneg (by positivity) _),mul_comm]
+  have hb : 1+x^2 ≤ r^2 := by dsimp only [r]; rw [Real.norm_eq_abs]; nlinarith [sq_abs x,abs_nonneg x]
+  have hp := Real.rpow_le_rpow (by positivity) hb (by linarith : 0 ≤ s/2)
+  rw [←Real.rpow_natCast r 2,←Real.rpow_mul hrp.le,show ((2:ℕ):ℝ)*(s/2)=s by push_cast;ring] at hp
+  exact (mul_le_mul_of_nonneg_right hp (Real.rpow_nonneg hrp.le _)).trans
+    ((Real.rpow_add hrp s (-(n:ℝ))).symm.le.trans (Real.rpow_le_rpow_of_exponent_le hr (by linarith)))
+private def lineFourierLift {s : ℝ} (hs : 0≤s) : S →L[ℂ] CompactIntervalSobolev volume id (-0) 0 s := by
+  letI := line_temperate s hs
+  exact (SchwartzMap.toLpCLM ℂ ℂ 2 (dw(s))).comp (fourierCLM ℂ S)
+private theorem lineFourierLift_rep {s : ℝ} (hs : 0≤s) (f : S) :
+    (lineFourierLift hs f : ℝ → ℂ) =ᵐ[volume] (𝓕 f : S) := by
+  let := line_temperate s hs
+  have he := (𝓕 f : S).coeFn_toLp 2 (dw(s))
+  have hac : (volume : Measure ℝ) ≪ dw(s) := withDensity_absolutelyContinuous'
+    (by apply Measurable.aemeasurable; apply Measurable.ennreal_ofReal; unfold intervalSobolevDensity; fun_prop)
+    (.of_forall fun x ↦ ENNReal.ofReal_ne_zero_iff.mpr (by simp [intervalSobolevDensity]; positivity))
+  exact hac.ae_le he
+end LineCardinal
+end RiemannMasullo
+
+open Filter Function MeasureTheory Topology Set FourierTransform NumberField IsDedekindDomain
+open scoped NumberField.AdeleRing NNReal ENNReal
+namespace RiemannMasullo
+namespace LineCardinal
+set_option quotPrecheck false
+variable {F : Type*} [Field F] [NumberField F]
+attribute [local instance] instIdeleClassMeasurableSpaceSec1 instIdeleClassBorelSpaceSec1
+  instIdeleClassT2Sec1 instIdeleClassLocallyCompactSec1 instIdeleClassSecondCountableSec1
+  instIdeleClassHaarMeasureSec1
+local notation "S" => SchwartzMap ℝ ℂ
+local notation "C𝔽" => IdeleClassGroup (𝓞 F) F
+local notation "C₁" => (ideleClassNorm F).ker
+local notation "μ𝔽" => ideleClassTamagawaMeasure F
+local notation "l" => logIdeleClassNorm F
+local notation "J(" χ ", " a ", " s ")" => SpectralStripJetIndex (F:=F) χ a 0 s
+local notation "H(" a ", " hs ")" => spectralSobolevQuotient F a (neg_le_self (le_refl (0:ℝ))) (le_of_lt (zero_lt_one.trans hs))
+local notation "D(" a ", " hs ")" => spectralSobolevDualEmbedding F a (neg_le_self (le_refl (0:ℝ))) (le_of_lt (zero_lt_one.trans hs))
+local notation "raw(" χ ", " hs ", " i ")" => (spectralStripJet_memLp χ (le_refl (0:ℝ)) (le_of_lt (zero_lt_one.trans hs)) i).toLp _
+local notation "ordD(" j ")" => (j).val.2.2.2
+local notation "freq(" j ")" => (j).val.2.2.1
+local notation "ang(" j ")" => (j).val.1
+private theorem line_coord {χ : PontryaginDual C₁ → PontryaginDual C𝔽} {a s : ℝ} (j : J(χ,a,s)) :
+    j.val.2.1 = 0 := by simpa only [neg_zero,Icc_self,mem_singleton_iff] using (j.mem_strip_order_pos (le_refl (0:ℝ))).1
+private theorem order_cutoff {χ : PontryaginDual C₁ → PontryaginDual C𝔽} {a s : ℝ} (j : J(χ,a,s)) :
+    (ordD(j):ℝ) < (s-1)/2 := by
+  have h := j.property
+  rw [spectralStripMultiplicity_boundary (le_refl (0:ℝ)) (Or.inr (line_coord j))] at h
+  exact ((lt_spectralBoundaryMultiplicity _ _ _).mp h).2
+
+open Classical in
+private theorem fourier_jet_map (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
+    (hχ : IsSpectralBasepointChoice χ) (a : ℝ) {s : ℝ} (hs : 1<s)
+    (L : J(χ,a,s) → StrongDual ℂ H(a,hs)) (hj : ∀ j, D(a,hs) (L j) = raw(χ,hs,j)) (η : PontryaginDual C₁) :
+    ∃ P : S →L[ℂ] H(a,hs), ∀ (f : S) (j : J(χ,a,s)),
+      L j (P f) = if ang(j)=η then (LineModulation.radScale F:ℂ)*K⁻¹^ordD(j)*
+        iteratedDeriv ordD(j) f (freq(j)/(2*Real.pi)) else 0 := by
+  let hs₀ := le_of_lt (zero_lt_one.trans hs)
+  obtain ⟨R,hR⟩ := stripTail_radial_lift (χ η) (le_refl (0:ℝ)) hs₀
+  let P₀ := lineFourierLift hs₀
+  let θ := globalThetaSobolev F a (neg_le_self (le_refl (0:ℝ))) hs₀
+  refine ⟨θ.mkQL.comp (R.comp P₀),fun f j ↦ ?_⟩
+  have hl : Continuous l := ((NNReal.continuous_coe.comp Units.continuous_val).comp
+      (isProperMap_ideleClassNorm F).continuous).log fun g ↦
+        (show 0 < ((ideleClassNorm F g).val : ℝ) from NNReal.coe_pos.mpr (Units.zero_lt _)).ne'
+  have hm : QuasiMeasurePreserving l μ𝔽 volume := ⟨hl.aemeasurable,by
+    rw [show (μ𝔽).map l = _ from classTamagawa_map_log_norm (F := F)]; exact Measure.AbsolutelyContinuous.smul_left Measure.AbsolutelyContinuous.rfl _⟩
+  have he := (spectralStripConvolution_jet_eval (a:=a) (le_refl (0:ℝ)) hs χ j (L j) (hj j) (R (P₀ f))).2
+  have hrep := (hR (P₀ f)).trans ((hm.ae_eq_comp (lineFourierLift_rep hs₀ f)).mono fun x hx ↦
+    congrArg ((χ η x:ℂ)⁻¹ * ·) hx)
+  let q (y : ℝ) := 𝓕 f y * Complex.exp ((freq(j):ℂ)*Complex.I*(y:ℂ)) * (y:ℂ)^ordD(j)
+  let v (y : C𝔽) := (χ η y : ℂ)⁻¹ * (χ (ang(j)) y : ℂ)
+  have hpair : L j (θ.mkQL (R (P₀ f))) = ∫ y, v y*q (l y) ∂μ𝔽 := by
+    refine he.trans (integral_congr_ae ?_)
+    filter_upwards [hrep] with y hy
+    change R (P₀ f) y * spectralZeroJet (χ j.val.1) j.val.2.1 (freq(j)) (ordD(j)) y = _
+    rw [hy,stripProfile_jet,line_coord j,Complex.ofReal_zero,zero_add]
+    dsimp only [v,q,comp_apply]; ring
+  rw [show L j ((θ.mkQL.comp (R.comp P₀)) f) = _ from hpair]
+  by_cases h : ang(j) = η
+  · rw [ite_eq_left h]
+    have hv (y : C𝔽) : v y=1 := by dsimp [v]; rw [h,inv_mul_cancel₀ (Circle.coe_ne_zero _)]
+    simp only [hv,one_mul]
+    have hq : Continuous q := ((𝓕 f : S).continuous.mul (by fun_prop)).mul (Complex.continuous_ofReal.pow _)
+    rw [←integral_map hl.aemeasurable hq.aestronglyMeasurable,
+      show (μ𝔽).map l = _ from classTamagawa_map_log_norm (F:=F),
+      integral_smul_nnreal_measure,NNReal.smul_def,Complex.real_smul]
+    exact (congrArg ((LineModulation.radScale F:ℂ)* ·) (fourier_moment f (freq(j)) (ordD(j)))).trans (mul_assoc ..).symm
+  · rw [ite_eq_right h]
+    obtain ⟨k,hk⟩ : ∃ k : C₁, χ η k.val ≠ χ j.val.1 k.val := by
+      by_contra! hc
+      apply h
+      rw [←hχ j.val.1,←hχ η]
+      exact DFunLike.ext _ _ fun k ↦ (hc k).symm
+    apply stripProfile_orthogonality μ𝔽 (χ η) (χ j.val.1) k.val hk
+    intro y
+    change q (Real.log ((ideleClassNorm F (k.val*y)).val : ℝ)) = _
+    rw [map_mul,k.property,one_mul]
+
+private theorem select_radius {c t u : ℝ} (hc : 0<c) (hcu : c ≤ |u-t|) :
+    1 ≤ |(min 1 (c/(2*Real.pi)))⁻¹*(u/(2*Real.pi)-t/(2*Real.pi))| := by
+  let p := 2*Real.pi
+  have hp : 0<p := by dsimp [p]; positivity
+  have hm : 0<min 1 (c/p) := lt_min zero_lt_one (div_pos hc hp)
+  change 1≤|(min 1 (c/p))⁻¹*(u/p-t/p)|
+  rw [abs_mul,abs_of_pos (inv_pos.mpr hm),←sub_div,abs_div,abs_of_pos hp,←div_eq_inv_mul,le_div_iff₀ hm,one_mul]
+  exact (min_le_right ..).trans (div_le_div_of_nonneg_right hcu hp.le)
+private theorem numeric_radius_bound {c : ℝ} (hc : 0<c) (n : ℕ) :
+    ∃ A> (0:ℝ), ∀ t : ℝ, 1+|t/(2*Real.pi)|+
+      (min 1 ((c/(1+|t|)^n)/(2*Real.pi)))⁻¹ ≤ A*(1+|t|)^(n+1) := by
+  let p := 2*Real.pi
+  have hp : 1≤p := by dsimp [p]; linarith [Real.pi_gt_three]
+  refine ⟨2+p/c, by positivity, fun t ↦ ?_⟩
+  let r := 1+|t|
+  have hr : 1≤r := le_add_of_nonneg_right (abs_nonneg _)
+  have hrp := zero_lt_one.trans_le hr
+  have hpow : r^n ≤ r^(n+1) := pow_le_pow_right₀ hr (Nat.le_succ n)
+  have hr1 : r ≤ r^(n+1) := by simpa only [pow_one] using (pow_le_pow_right₀ hr (show 1≤n+1 by omega))
+  have ht : |t/p| ≤ |t| := by rw [abs_div,abs_of_pos (zero_lt_one.trans_le hp)]; exact div_le_self (abs_nonneg _) hp
+  change 1+|t/p|+(min 1 ((c/r^n)/p))⁻¹ ≤ (2+p/c)*r^(n+1)
+  have e : ((c/r^n)/p)⁻¹ = (p/c)*r^n := by field_simp [hc.ne',hrp.ne',(zero_lt_one.trans_le hp).ne']
+  rcases le_total 1 ((c/r^n)/p) with h|h
+  · rw [min_eq_left h,inv_one]
+    nlinarith only [ht,hr,hr1,show 1+|t|=r from rfl,mul_nonneg (by positivity : 0≤p/c) (pow_nonneg hrp.le (n+1))]
+  · rw [min_eq_right h,e]
+    nlinarith only [ht,hr1,show 1+|t|=r from rfl,mul_le_mul_of_nonneg_left hpow (by positivity : 0≤p/c),pow_nonneg hrp.le (n+1)]
+
+open Classical in
+private theorem interpolant_growth (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
+    (hχ : IsSpectralBasepointChoice χ) (a : ℝ) {s : ℝ} (hs : 1<s)
+    (x : J(χ,a,s) → H(a,hs)) (L : J(χ,a,s) → StrongDual ℂ H(a,hs))
+    (hb : IsSpectralMarkushevichBasis x L) (hj : ∀ j, D(a,hs) (L j) = raw(χ,hs,j)) (η : PontryaginDual C₁)
+    {c : ℝ} (hc : 0<c) (n : ℕ)
+    (sep : ∀ i j : J(χ,a,s), ang(i)=η → ang(j)=η → freq(i)≠freq(j) →
+      c/(1+|freq(i)|)^n ≤ |freq(j)-freq(i)|) :
+    ∃ C ≥ (0:ℝ), ∃ d : ℕ, ∀ i : J(χ,a,s), ang(i)=η → ‖x i‖ ≤ C*(1+|freq(i)|)^d := by
+  obtain ⟨M,hM⟩ := exists_nat_gt ((s-1)/2)
+  obtain ⟨P,hP⟩ := fourier_jet_map χ hχ a hs L hj η
+  obtain ⟨V,hV,d,hVd⟩ := images_bounded P M
+  let C : ℂ := (LineModulation.radScale F:ℂ)
+  have hC : C ≠ 0 := Complex.ofReal_ne_zero.mpr (LineModulation.radScale_pos (F:=F)).ne'
+  obtain ⟨D,hD,hdD⟩ := inverse_coeff_bound K C K_ne hC M
+  obtain ⟨A,hA,ha⟩ := numeric_radius_bound hc n
+  refine ⟨D*V*A^d, by positivity,(n+1)*d,fun i hi ↦ ?_⟩
+  let t := freq(i)
+  let k := ordD(i)
+  let p := 2*Real.pi
+  have hp : 0<p := by dsimp [p]; positivity
+  let r := c/(1+|t|)^n
+  have hr : 0<r := by dsimp [r]; positivity
+  let h := min 1 (r/p)
+  have hh : 0<h := lt_min zero_lt_one (div_pos hr hp)
+  have hh' : h≤1 := min_le_left ..
+  have hk : k≤M := Nat.le_of_lt (by exact_mod_cast ((order_cutoff i).trans hM))
+  let f := shifted (B k) (t/p) h hh
+  let b : ℂ := C*K⁻¹^k*(h⁻¹)^k*(k.factorial:ℂ)
+  have hbn : b ≠ 0 := by dsimp only [b]; exact mul_ne_zero (mul_ne_zero (mul_ne_zero hC (pow_ne_zero _ (inv_ne_zero K_ne)))
+    (pow_ne_zero _ (Complex.ofReal_ne_zero.mpr (inv_ne_zero hh.ne')))) (Nat.cast_ne_zero.mpr (Nat.factorial_ne_zero _))
+  have hsel (j : J(χ,a,s)) : L j (P f) = if j=i then b else 0 := by
+    rw [hP]
+    by_cases hang : ang(j)=η
+    · rw [ite_eq_left hang,shifted_derivs]
+      by_cases ht : freq(j)=t
+      · rw [ht,sub_self,mul_zero,B_origin]
+        by_cases hji : j=i
+        · subst j; simp [b,k,Complex.real_smul, mul_assoc,C]
+        · have hkm : ordD(j)≠k := fun hm ↦ hji (Subtype.ext (Prod.ext (hang.trans hi.symm)
+              (Prod.ext ((line_coord j).trans (line_coord i).symm) (Prod.ext ht hm))))
+          simp [hkm,hji]
+      · have hdist := select_radius hr (sep i j hi hang (Ne.symm ht))
+        rw [B_outside _ _ hdist,smul_zero,mul_zero,ite_eq_right (fun eq ↦ ht (congrArg (fun j : J(χ,a,s) ↦ freq(j)) eq))]
+    · rw [ite_eq_right hang,ite_eq_right (show j≠i from fun eq ↦ hang ((congrArg (fun j : J(χ,a,s) ↦ ang(j)) eq).trans hi))]
+  have he : x i = b⁻¹ • P f := by
+    apply (SeparatingDual.eq_iff_forall_dual_eq (R:=ℂ)).mpr
+    have H : ContinuousLinearMap.apply ℂ ℂ (x i) = ContinuousLinearMap.apply ℂ ℂ (b⁻¹ • P f) := by
+      apply ContinuousLinearMap.ext_on hb.2.2.2
+      rintro _ ⟨j,rfl⟩
+      change L j (x i) = L j (b⁻¹ • P f)
+      rw [map_smul,hsel]
+      by_cases e : j=i
+      · subst j; rw [hb.1,ite_eq_left rfl,smul_eq_mul,inv_mul_cancel₀ hbn]
+      · rw [hb.2.1 _ _ (Ne.symm e),ite_eq_right e,smul_zero]
+    exact fun u ↦ DFunLike.congr_fun H u
+  rw [he,norm_smul]
+  have hv := hVd k hk (t/p) h hh hh'
+  have hnum := pow_le_pow_left₀ (by positivity) (ha t) d
+  refine (mul_le_mul (hdD k hk h hh hh') hv (norm_nonneg _) hD.le).trans ?_
+  rw [mul_pow,←pow_mul] at hnum
+  change D*(V*(1+|t/p|+h⁻¹)^d) ≤ D*V*A^d*(1+|t|)^((n+1)*d)
+  calc
+    _ = D*V*(1+|t/p|+h⁻¹)^d := (mul_assoc ..).symm
+    _ ≤ D*V*(A^d*(1+|t|)^((n+1)*d)) := mul_le_mul_of_nonneg_left hnum (mul_nonneg hD.le hV)
+    _ = _ := (mul_assoc ..).symm
+end LineCardinal
+end RiemannMasullo
+
+open Filter Function MeasureTheory Topology Set FourierTransform NumberField IsDedekindDomain
+open scoped NumberField.AdeleRing NNReal ENNReal
+namespace RiemannMasullo
+namespace LineCardinal
+set_option quotPrecheck false
+variable {F : Type*} [Field F] [NumberField F]
+attribute [local instance] instIdeleClassMeasurableSpaceSec1 instIdeleClassBorelSpaceSec1
+  instIdeleClassT2Sec1 instIdeleClassLocallyCompactSec1 instIdeleClassSecondCountableSec1
+  instIdeleClassHaarMeasureSec1
+local notation "S" => SchwartzMap ℝ ℂ
+local notation "C𝔽" => IdeleClassGroup (𝓞 F) F
+local notation "C₁" => (ideleClassNorm F).ker
+local notation "μ𝔽" => ideleClassTamagawaMeasure F
+
+local notation "m𝔽" =>
+  (⟨ideleClassNorm F, (isProperMap_ideleClassNorm F).continuous⟩ : C𝔽 →ₜ* ℝ≥0ˣ)
+local notation "W(" l ", " r ", " s ")" =>
+  CompactIntervalSobolev μ𝔽 (fun g : C𝔽 ↦ Real.log ((ideleClassNorm F g).val : ℝ)) l r s
+local notation "Θ(" a ", " hI ", " hs ")" => globalThetaSobolev F a hI hs
+local notation "Q(" a ", " hI ", " hs ")" => spectralSobolevQuotient F a hI hs
+local notation "hStrip(" hα ")" => (neg_nonpos.mpr hα |>.trans hα)
+local notation "hs₀(" hs ")" => le_of_lt (zero_lt_one.trans hs)
+local notation "shift(" b ", " t ")" => ((b:ℝ):ℂ)+((t:ℝ):ℂ)*Complex.I
+local notation "order(" ψ ", " z ")" => meromorphicOrderAt (continuedCompletedHeckeL (F:=F) ψ) z
+local notation "mult(" ψ ", " z ")" => (order(ψ,z)).untop₀.toNat
+variable (a : ℝ)
+local notation "Z(" χ ", " α ")" => {z : PontryaginDual C₁ × ℝ × ℝ //
+  z.2.1 ∈ Icc (-α) α ∧ 0 < order(χ z.1, shift(a + z.2.1, z.2.2))}
+local notation "N(" χ ", " α ", " s ", " z ")" => spectralStripMultiplicity α s (z).val.2.1
+  (mult(χ (z).val.1, shift(a + (z).val.2.1, (z).val.2.2)))
+
+variable {α s : ℝ} (hα : 0 ≤ α) (hs : 1 < s)
+
+local notation "logNorm" => (logIdeleClassNorm F)
+local notation "D" => spectralSobolevDualEmbedding F a (hStrip(hα)) hs₀(hs)
+local notation "raw(" χ ", " j ")" =>
+  spectralZeroJet (F := F) (χ (j).val.1) (j).val.2.1 (j).val.2.2.1 (j).val.2.2.2
+local notation "jet(" z ", " m ")" => ⟨((z).val.1, (z).val.2.1, (z).val.2.2, (m).val), (m).isLt⟩
+local notation "J(" χ ")" => SpectralStripJetIndex (F := F) χ a α s
+
+private def logTest (φ : BruhatCompactSupport C𝔽) (k : ℕ) : BruhatCompactSupport C𝔽 := by
+  have hb := IsBruhatSmooth.mul_comp_realHom ((mem_bruhatSmoothSubmodule_iff _).mp φ.property.1)
+    (ideleClassLogNorm F) (continuous_ideleClassLogNorm (F:=F)) (Complex.ofRealCLM.contDiff.pow k)
+  exact (⟨(fun x : C𝔽 ↦ φ.val x*(logNorm x:ℂ)^k), (mem_bruhatSmoothSubmodule_iff _).mpr hb,
+    φ.property.2.mul_right⟩ : bruhatCompactSupportSubmodule C𝔽)
+private theorem logTest_hom (φ : BruhatCompactSupport C𝔽) (k : ℕ) (η : PontryaginDual C₁)
+    (h : ∀ (w : C₁) (g : C𝔽), φ.val (w.val⁻¹*g) = (η w:ℂ)*φ.val g) (w : C₁) (g : C𝔽) :
+    (logTest φ k).val (w.val⁻¹*g) = (η w : ℂ)*(logTest φ k).val g := by
+  change φ.val (w.val⁻¹*g)*(logNorm (w.val⁻¹*g):ℂ)^k = (η w:ℂ)*(φ.val g * (logNorm g:ℂ)^k)
+  have hl : logNorm (w.val⁻¹*g)=logNorm g := by
+    unfold logIdeleClassNorm
+    rw [map_mul,map_inv,w.property,inv_one,one_mul]
+  rw [h,hl,mul_assoc]
+private theorem translation_sum (η : PontryaginDual C𝔽) (b t : ℝ)
+    (m : ℕ) (v : W(-α, α, s))
+    (hint : ∀ i ≤ m, Integrable (fun x ↦ v x * spectralZeroJet η b t i x) μ𝔽)
+    (g : C𝔽) :
+    let τ := hardySobolevTranslation μ𝔽 m𝔽 (-α) α s (hStrip(hα)) hs₀(hs)
+    ∫ y, τ g v y * spectralZeroJet η b t m y ∂μ𝔽 =
+      ∑ i ∈ Finset.range (m+1), (ideleClassNormTwist η (shift(b,t)) g * (logNorm g:ℂ)^(m-i) * (m.choose i:ℂ)) *
+        ∫ y, v y * spectralZeroJet η b t i y ∂μ𝔽 := by
+  intro τ
+  let T := ideleClassNormTwist η ((b : ℂ) + (t : ℂ) * Complex.I)
+  let L (y : C𝔽) : ℂ := logNorm y
+  let c (i : ℕ) := T g * L g ^ (m - i) * (m.choose i : ℂ)
+  have hlog (y : C𝔽) : L (g * y) = L y + L g := by
+    dsimp only [L, logIdeleClassNorm]
+    rw [map_mul, Units.val_mul, NNReal.coe_mul, Real.log_mul
+      (NNReal.coe_ne_zero.2 (ideleClassNorm F g).ne_zero)
+      (NNReal.coe_ne_zero.2 (ideleClassNorm F y).ne_zero), Complex.ofReal_add, add_comm]
+  have hsum (y : C𝔽) : v y * spectralZeroJet η b t m (g * y) =
+      ∑ i ∈ Finset.range (m + 1), c i * (v y * spectralZeroJet η b t i y) := by
+    change v y * (T (g * y) * L (g * y) ^ m) = _
+    rw [map_mul, hlog, add_pow]
+    simp only [Finset.mul_sum]
+    refine Finset.sum_congr rfl fun i _ ↦ ?_
+    change v y * (T g * T y * (L y ^ i * L g ^ (m - i) * (m.choose i : ℂ))) =
+      (T g * L g ^ (m - i) * (m.choose i : ℂ)) * (v y * (T y * L y ^ i))
+    ring
+  let J := spectralZeroJet η b t m
+  let H (y : C𝔽) := v (g⁻¹ * y) * J y
+  calc
+    _ = ∫ y, H y ∂μ𝔽 := integral_congr_ae
+      ((hardySobolevTranslation_apply μ𝔽 m𝔽 (-α) α s (hStrip(hα)) hs₀(hs) g v).mono
+        fun y hy ↦ congrArg (· * J y) hy)
+    _ = ∫ y, H (g * y) ∂μ𝔽 := (integral_mul_left_eq_self H g).symm
+    _ = ∫ y, v y * J (g * y) ∂μ𝔽 := by simp only [H, inv_mul_cancel_left]
+    _ = _ := by
+      simp_rw [show ∀ y, v y * J (g * y) = _ from hsum]
+      rw [integral_finsetSum _ fun i hi ↦ (hint i (Finset.mem_range_succ_iff.mp hi)).const_mul (c i)]
+      simp_rw [integral_const_mul]
+      rfl
+
+private theorem convolution_sum (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
+    (f : J(χ) → StrongDual ℂ Q(a, hStrip(hα), hs₀(hs)))
+    (hj : ∀ j, D (f j) = (spectralStripJet_memLp χ hα hs₀(hs) j).toLp (raw(χ, j)))
+    (φ : BruhatCompactSupport C𝔽) (z : Z(χ, α)) (m : Fin (N(χ, α, s, z)))
+    (u : Q(a, hStrip(hα), hs₀(hs))) :
+    let lower (i : Fin (m.val+1)) : Fin (N(χ,α,s,z)) := ⟨i.val,(Nat.le_of_lt_succ i.isLt).trans_lt m.isLt⟩
+    f (jet(z,m)) (spectralConvolution (F:=F) a (hStrip(hα)) hs₀(hs) φ u) =
+      ∑ i : Fin (m.val+1), nuclearityTestMellin (χ z.val.1) (logTest φ (m.val-i.val)) (shift(z.val.2.1,z.val.2.2)) *
+        ((m.val.choose i.val : ℂ) * f (jet(z,lower i)) u) := by
+  intro lower
+  let θ := globalThetaSobolev F a (hStrip(hα)) hs₀(hs)
+  obtain ⟨v,hv⟩ := θ.mkQ_surjective u
+  let J (i : ℕ) := spectralZeroJet (χ z.val.1) z.val.2.1 z.val.2.2 i
+  let j : J(χ) := jet(z,m)
+  let τ := hardySobolevTranslation μ𝔽 m𝔽 (-α) α s (hStrip(hα)) hs₀(hs)
+  let ℓ := (f j).comp θ.mkQL
+  let η := ideleClassNormTwist (χ z.val.1) (shift(z.val.2.1,z.val.2.2))
+  have heval (j : J(χ)) (w : W(-α,α,s)) := spectralStripConvolution_jet_eval (a:=a) hα hs χ j (f j) (hj j) w
+  have hint (i : ℕ) (hi : i≤m.val) : Integrable (fun y ↦ v y*J i y) μ𝔽 := by
+    let k : Fin (N(χ,α,s,z)) := ⟨i,hi.trans_lt m.isLt⟩
+    exact (heval (jet(z,k)) v).1
+  let B (i : Fin (m.val+1)) := (m.val.choose i.val : ℂ) * f (jet(z,lower i)) u
+  have hτ (g : C𝔽) : ℓ (τ g v) = ∑ i : Fin (m.val+1), (η g*(logNorm g:ℂ)^(m.val-i.val))*B i := by
+    refine (heval j (τ g v)).2.trans ((translation_sum hα hs (χ z.val.1) z.val.2.1 z.val.2.2 m.val v hint g).trans ?_)
+    rw [←Fin.sum_univ_eq_sum_range]
+    apply Finset.sum_congr rfl
+    intro i _
+    have e : (∫ y, v y * J i.val y ∂μ𝔽) = f (jet(z,lower i)) u :=
+      (heval (jet(z,lower i)) v).2.symm.trans (congrArg (f (jet(z,lower i))) hv)
+    change (η g*(logNorm g:ℂ)^(m.val-i.val)*(m.val.choose i.val:ℂ))*(∫ y, v y*J i.val y ∂μ𝔽) = _
+    rw [e]; dsimp only [B]; ring
+  have hP := bruhatRegularizedAction_apply μ𝔽 τ
+    (exists_hardySobolevTranslation μ𝔽 m𝔽 (-α) α s (hStrip(hα)) hs₀(hs)).choose_spec.2 φ v
+  have he := congrArg (fun p : PettisWeakCompletion W(-α,α,s) ↦
+    (show Module.Dual ℂ (StrongDual ℂ W(-α,α,s)) from p) ℓ) hP.2
+  change ℓ (hardySobolevTestAction μ𝔽 m𝔽 (-α) α s (hStrip(hα)) hs₀(hs) φ v) =
+    ∫ g, ℓ (φ.val g • τ g v) ∂μ𝔽 at he
+  let d (i : Fin (m.val+1)) (g : C𝔽) := (logTest φ (m.val-i.val)).val g * η g
+  have hInt (i : Fin (m.val+1)) : Integrable (d i) μ𝔽 := (spectralConvolution_mellin_integrable _ _ _).1
+  calc
+    _ = ℓ (hardySobolevTestAction μ𝔽 m𝔽 (-α) α s (hStrip(hα)) hs₀(hs) φ v) :=
+      (congrArg (fun w ↦ f j (spectralConvolution (F:=F) a (hStrip(hα)) hs₀(hs) φ w)) hv.symm).trans
+        (congrArg (f j) (spectralConvolution_mkQ a (hStrip(hα)) hs₀(hs) φ v))
+    _ = ∫ g, ℓ (φ.val g • τ g v) ∂μ𝔽 := he
+    _ = ∫ g, ∑ i, d i g * B i ∂μ𝔽 := by
+      apply integral_congr_ae (.of_forall fun g ↦ ?_)
+      rw [map_smul,smul_eq_mul,hτ,Finset.mul_sum]
+      apply Finset.sum_congr rfl
+      intro i _
+      change φ.val g*(η g*(logNorm g:ℂ)^(m.val-i.val)*B i) = (φ.val g*(logNorm g:ℂ)^(m.val-i.val)*η g)*B i
+      ring
+    _ = _ := by
+      rw [integral_finsetSum _ (fun i _ ↦ (hInt i).mul_const _)]
+      apply Finset.sum_congr rfl
+      intro i _
+      rw [integral_mul_const]
+      rfl
+
+private theorem action_estimate (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
+    (L : J(χ) → StrongDual ℂ Q(a, hStrip(hα), hs₀(hs)))
+    (hj : ∀ j, D (L j) = (spectralStripJet_memLp χ hα hs₀(hs) j).toLp (raw(χ, j)))
+    (φ : BruhatCompactSupport C𝔽) (z : Z(χ, α)) (m : Fin (N(χ, α, s, z)))
+    (u : Q(a, hStrip(hα), hs₀(hs))) (M : ℕ) (hm : m.val≤M) {C : ℝ} (hC : 0≤C) (hL : ∀ i, ‖L i‖ ≤ C) :
+    ‖L (jet(z,m)) (spectralConvolution (F:=F) a (hStrip(hα)) hs₀(hs) φ u)‖ ≤
+      ((M+1:ℕ):ℝ)*(2:ℝ)^M*C*‖u‖*
+        ∑ k ∈ Finset.range (M+1), ‖nuclearityTestMellin (χ z.val.1) (logTest φ k) (shift(z.val.2.1,z.val.2.2))‖ := by
+  let V (k : ℕ) := ‖nuclearityTestMellin (χ z.val.1) (logTest φ k) (shift(z.val.2.1,z.val.2.2))‖
+  let W := ∑ k ∈ Finset.range (M+1), V k
+  have hW : 0≤W := Finset.sum_nonneg (fun _ _ ↦ norm_nonneg _)
+  let lower (i : Fin (m.val+1)) : Fin (N(χ,α,s,z)) := ⟨i.val,(Nat.le_of_lt_succ i.isLt).trans_lt m.isLt⟩
+  rw [convolution_sum a hα hs χ L hj φ z m u]
+  refine (norm_sum_le ..).trans ?_
+  have bound (i : Fin (m.val+1)) : V (m.val-i.val) * ((m.val.choose i.val:ℝ) * ‖L (jet(z,lower i)) u‖) ≤
+      W*((2:ℝ)^M*(C*‖u‖)) := by
+    have hVi : V (m.val-i.val) ≤ W := Finset.single_le_sum (f:=V) (fun _ _ ↦ norm_nonneg _)
+      (Finset.mem_range_succ_iff.mpr ((Nat.sub_le ..).trans hm))
+    have hch : (m.val.choose i.val:ℝ) ≤ (2:ℝ)^M := by
+      exact_mod_cast (Nat.choose_le_two_pow _ _).trans (Nat.pow_le_pow_right (by decide : 0<2) hm)
+    have hU := (L (jet(z,lower i))).le_opNorm u
+    gcongr
+    exact hU.trans (mul_le_mul_of_nonneg_right (hL _) (norm_nonneg _))
+  simp only [norm_mul,Complex.norm_natCast]
+  calc
+    _ ≤ ∑ i : Fin (m.val+1), W*((2:ℝ)^M*(C*‖u‖)) := Finset.sum_le_sum (fun i _ ↦ bound i)
+    _ = ((m.val+1:ℕ):ℝ)*(W*((2:ℝ)^M*(C*‖u‖))) := by simp
+    _ ≤ ((M+1:ℕ):ℝ)*(W*((2:ℝ)^M*(C*‖u‖))) := by gcongr
+    _ = _ := by dsimp only [W,V]; ring
+
+end LineCardinal
+end RiemannMasullo
+
+open Function Set Filter MeasureTheory Topology IsDedekindDomain NumberField
+open scoped NNReal ENNReal NumberField.AdeleRing
+namespace RiemannMasullo
+namespace LineCardinal
+set_option quotPrecheck false
+variable {F : Type*} [Field F] [NumberField F]
+attribute [local instance] instIdeleClassMeasurableSpaceSec1 instIdeleClassBorelSpaceSec1
+  instIdeleClassT2Sec1 instIdeleClassLocallyCompactSec1 instIdeleClassSecondCountableSec1
+  instIdeleClassHaarMeasureSec1
+local notation "C𝔽" => IdeleClassGroup (𝓞 F) F
+local notation "C₁" => (ideleClassNorm F).ker
+local notation "μ𝔽" => ideleClassTamagawaMeasure F
+local notation "pt(" b ", " t ")" => ((b:ℝ):ℂ)+((t:ℝ):ℂ)*Complex.I
+local notation "Z(" χ ", " a ", " α ")" => {z : PontryaginDual C₁ × ℝ × ℝ //
+  z.2.1 ∈ Icc (-α) α ∧ 0 < meromorphicOrderAt (continuedCompletedHeckeL (χ z.1)) (pt(a+z.2.1,z.2.2))}
+local notation "N(" χ ", " a ", " α ", " s ", " z ")" => spectralStripMultiplicity α s (z).val.2.1
+    (meromorphicOrderAt (continuedCompletedHeckeL (χ (z).val.1)) (pt(a+(z).val.2.1,(z).val.2.2))).untop₀.toNat
+local notation "J(" χ ", " a ", " α ", " s ")" => SpectralStripJetIndex (F := F) χ a α s
+local notation "H(" a ", " hα ", " hs ")" => spectralSobolevQuotient F a (neg_le_self hα) (le_of_lt (zero_lt_one.trans hs))
+local notation "D(" a ", " hα ", " hs ")" => spectralSobolevDualEmbedding F a (neg_le_self hα) (le_of_lt (zero_lt_one.trans hs))
+local notation "raw(" χ ", " hα ", " hs ", " i ")" => (spectralStripJet_memLp χ hα (le_of_lt (zero_lt_one.trans hs)) i).toLp _
+local notation "A(" a ", " hα ", " hs ", " φ ")" => spectralConvolution (F := F) a (neg_le_self hα) (le_of_lt (zero_lt_one.trans hs)) φ
+local notation "jet(" z ", " m ")" => ⟨((z).val.1,(z).val.2.1,(z).val.2.2,(m).val),(m).isLt⟩
+local notation "hom(" φ ", " η ")" => ∀ (k : C₁) (g : C𝔽), (φ : BruhatCompactSupport C𝔽).val (k.val⁻¹*g) = (η k : ℂ)*(φ : BruhatCompactSupport C𝔽).val g
+local notation "X(" χ ", " a ", " α ", " s ", " η ")" => {z : Z(χ,a,α) // z.val.1 = η ∧ 0 < N(χ,a,α,s,z)}
+local notation "z₀(" z ")" => (⟨0,(z).property.2⟩ : Fin _)
+local notation "form(" L ", " z ")" => L (jet((z).val,z₀(z)))
+local notation "b(" z ")" => (z).val.val.2.1
+local notation "t(" z ")" => (z).val.val.2.2
+local notation "separates(" χ ", " a ", " α ", " s ", " η ")" => ∃ c > (0:ℝ), ∃ n : ℕ,
+  ∀ z w : X(χ,a,α,s,η), z ≠ w → c/(1+|t(z)|)^n ≤ ‖pt(b(z),t(z))-pt(b(w),t(w))‖
+private theorem line_site_center {χ : PontryaginDual C₁ → PontryaginDual C𝔽} {a : ℝ} (z : Z(χ,a,0)) :
+    z.val.2.1 = 0 := by simpa only [neg_zero,Icc_self,mem_singleton_iff] using z.property.1
+private theorem site_weighted_sum (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (a s : ℝ)
+    (η : PontryaginDual C₁) (φ : BruhatCompactSupport C𝔽) (d : ℕ) :
+    Summable (fun z : X(χ,a,0,s,η) ↦ (1+|t(z)|)^d * ‖nuclearityTestMellin (χ η) φ (pt(b(z),t(z)))‖) := by
+  let X := X(χ,a,0,s,η)
+  let ord (v : ℂ) := MeromorphicOn.divisor (continuedCompletedHeckeL (χ η)) univ v
+  let Y := {w : ℂ // 0<ord w}
+  let p (z : X) := (a:ℂ)+(t(z):ℂ)*Complex.I
+  have ho (z : X) : 0<ord (p z) := by
+    rw [show ord (p z) = (meromorphicOrderAt (continuedCompletedHeckeL (χ η)) (p z)).untop₀ from
+      MeromorphicOn.divisor_apply (continuedCompletedHeckeL_spec (χ η)).1.meromorphicOn (mem_univ _)]
+    have h := z.property.2
+    rw [spectralStripMultiplicity_boundary (le_refl (0:ℝ)) (Or.inr (line_site_center z.val))] at h
+    have hn := ((lt_spectralBoundaryMultiplicity _ _ _).mp h).1
+    rw [line_site_center z.val,add_zero,z.property.1] at hn
+    change 0 < (meromorphicOrderAt (continuedCompletedHeckeL (χ η)) (p z)).untop₀.toNat at hn
+    omega
+  let e (z : X) : Y := ⟨p z,ho z⟩
+  have he : Injective e := by
+    intro z w h
+    have him := congrArg (fun y : Y ↦ y.val.im) h
+    change (p z).im=(p w).im at him
+    simp only [p,Complex.add_im,Complex.ofReal_im,Complex.mul_I_im,Complex.ofReal_re,zero_add] at him
+    exact Subtype.ext (Subtype.ext (Prod.ext (z.property.1.trans w.property.1.symm)
+      (Prod.ext ((line_site_center z.val).trans (line_site_center w.val).symm) him)))
+  have hS := (weighted_divisor (χ η) φ a d).comp_injective he
+  apply Summable.of_nonneg_of_le (fun _ ↦ by positivity) _ hS
+  intro z
+  change _ ≤ (1+|(p z).im|)^d * ‖((ord (p z):ℤ):ℂ)*nuclearityTestMellin (χ η) φ (p z-(a:ℂ))‖
+  have heq : pt(b(z),t(z)) = p z-(a:ℂ) := by rw [line_site_center z.val]; dsimp only [p]; push_cast; ring
+  have him : (p z).im = t(z) := by simp [p]
+  rw [heq,him,norm_mul,Complex.norm_intCast]
+  apply mul_le_mul_of_nonneg_left _ (by positivity)
+  have hp : (1:ℝ) ≤ (ord (p z):ℝ) := by exact_mod_cast (show (1:ℤ) ≤ _ from ho z)
+  rw [abs_of_nonneg ((by norm_num : (0:ℝ)≤1).trans hp)]
+  exact le_mul_of_one_le_left (norm_nonneg _) hp
+
+private theorem site_to_jet_separation (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (a s : ℝ)
+    (η : PontryaginDual C₁) (hsep : separates(χ,a,0,s,η)) :
+    ∃ c> (0:ℝ), ∃ n : ℕ, ∀ i j : J(χ,a,0,s), i.val.1=η → j.val.1=η → i.val.2.2.1≠j.val.2.2.1 →
+      c/(1+|i.val.2.2.1|)^n ≤ |j.val.2.2.1-i.val.2.2.1| := by
+  obtain ⟨c,hc,n,hn⟩ := hsep
+  let X := X(χ,a,0,s,η)
+  let q (j : J(χ,a,0,s)) (hh : j.val.1=η) : X := ⟨⟨(j.val.1,j.val.2.1,j.val.2.2.1),
+    j.mem_strip_order_pos (le_refl (0:ℝ))⟩,hh,Nat.zero_lt_of_lt j.property⟩
+  refine ⟨c,hc,n,fun i j hi hj ht ↦ ?_⟩
+  have h := hn (q i hi) (q j hj) (fun H ↦ ht (congrArg (fun z : X ↦ t(z)) H))
+  change c/(1+|i.val.2.2.1|)^n ≤ ‖pt(i.val.2.1,i.val.2.2.1)-pt(j.val.2.1,j.val.2.2.1)‖ at h
+  rw [line_coord i,line_coord j,Complex.ofReal_zero,zero_add,zero_add,←sub_mul,norm_mul,Complex.norm_I,mul_one,
+    ←Complex.ofReal_sub,Complex.norm_real,Real.norm_eq_abs,abs_sub_comm] at h
+  exact h
+
+local notation "ordD(" i ")" => (i).val.2.2.2
+set_option maxHeartbeats 1600000 in
+private theorem line_blocks_of_separation (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ)
+    (a : ℝ) {s : ℝ} (hs : 1<s)
+    (x : J(χ,a,0,s) → H(a,le_refl (0:ℝ),hs)) (L : J(χ,a,0,s) → StrongDual ℂ H(a,le_refl (0:ℝ),hs))
+    (hb : IsSpectralMarkushevichBasis x L) (hj : ∀ i, D(a,le_refl (0:ℝ),hs) (L i) = raw(χ,le_refl (0:ℝ),hs,i))
+    (η : PontryaginDual C₁) (hsep : separates(χ,a,0,s,η)) (φ : BruhatCompactSupport C𝔽) (hφ : hom(φ,η))
+    (U : H(a,le_refl (0:ℝ),hs) →L[ℂ] H(a,le_refl (0:ℝ),hs)) :
+    Summable (fun z : Z(χ,a,0) ↦ ∑ m : Fin (N(χ,a,0,s,z)), L (jet(z,m)) (A(a,le_refl (0:ℝ),hs,φ) (U (x (jet(z,m)))))) := by
+  classical
+  obtain ⟨c,hc,n,hg⟩ := site_to_jet_separation χ a s η hsep
+  obtain ⟨C,hC,d,hx⟩ := interpolant_growth χ hχ a hs x L hb hj η hc n hg
+  obtain ⟨M,hM⟩ := exists_nat_gt ((s-1)/2)
+  have hm (j : J(χ,a,0,s)) : ordD(j)≤M := Nat.le_of_lt (by exact_mod_cast ((order_cutoff j).trans hM))
+  obtain ⟨D,hD,hDJ⟩ := spectralStripJet_upperBound_of_margin χ (a:=a) (le_refl (0:ℝ)) hs M 1 one_pos
+    (fun j ↦ ⟨hm j,fun H ↦ (not_le.mpr (order_cutoff j) H).elim⟩)
+  have hi := (spectralSobolevDualEmbedding_isometry_range (F:=F) a (neg_le_self (le_refl (0:ℝ))) (le_of_lt (zero_lt_one.trans hs))).1
+  have hΛ (i : J(χ,a,0,s)) : ‖L i‖ ≤ D := by
+    have hn := hi.dist_eq (L i) 0
+    simp only [map_zero,dist_eq_norm,sub_zero,hj] at hn
+    exact hn.symm.le.trans (hDJ i)
+  let X := X(χ,a,0,s,η)
+  let Z := Z(χ,a,0)
+  let NN (z : Z) := N(χ,a,0,s,z)
+  let j (z : Z) (m : Fin (NN z)) : J(χ,a,0,s) := jet(z,m)
+  let Y (z : Z) (m : Fin (NN z)) := L (j z m) (A(a,le_refl (0:ℝ),hs,φ) (U (x (j z m))))
+  let term (z : Z) := ∑ m, Y z m
+  let E (z : Z) (k : ℕ) := ‖nuclearityTestMellin (χ z.val.1) (logTest φ k) (pt(z.val.2.1,z.val.2.2))‖
+  let W (z : Z) := ∑ k ∈ Finset.range (M+1), E z k
+  let K := ((M+1:ℕ):ℝ)*(2:ℝ)^M*D
+  have hK : 0≤K := by dsimp only [K]; positivity
+  have hn (z : Z) : NN z ≤ M+1 := by
+    by_contra! h
+    exact Nat.not_succ_le_self M (hm (j z ⟨M+1,h⟩))
+  have hW (z : Z) : 0≤W z := Finset.sum_nonneg (fun _ _ ↦ norm_nonneg _)
+  have hterm (z : Z) (m : Fin (NN z)) : ‖Y z m‖ ≤ K*‖U (x (j z m))‖*W z :=
+    action_estimate a (le_refl (0:ℝ)) hs χ L hj φ z m _ M (hm (j z m)) hD.le hΛ
+  have hzero (z : Z) (h : z ∉ range (Subtype.val : X → Z)) : term z = 0 := by
+    apply Finset.sum_eq_zero
+    intro m _
+    have hω : z.val.1 ≠ η := fun he ↦ h ⟨⟨z,he,Nat.zero_lt_of_lt m.isLt⟩,rfl⟩
+    have hw : W z = 0 := by
+      apply Finset.sum_eq_zero
+      intro k _
+      have H := spectralIsotype_mellin_eq_zero χ hχ hω (logTest φ k) (logTest_hom φ k η hφ)
+        (pt(z.val.2.1,z.val.2.2))
+      rw [(spectralConvolution_mellin_integrable _ _ _).2] at H
+      exact norm_eq_zero.mpr H
+    apply norm_le_zero_iff.mp
+    simpa only [hw,mul_zero] using hterm z m
+  change Summable term
+  apply (Subtype.val_injective.summable_iff (f:=term) hzero).mp
+  have hwS : Summable (fun z : X ↦ (1+|t(z)|)^d * W z.val) := by
+    have H (k : ℕ) : Summable (fun z : X ↦ (1+|t(z)|)^d*E z.val k) := by
+      have h := site_weighted_sum χ a s η (logTest φ k) d
+      exact h.congr (fun z ↦ congrArg (fun θ ↦ (1+|t(z)|)^d * ‖nuclearityTestMellin (χ θ) (logTest φ k)
+        (pt(b(z),t(z)))‖) z.property.1.symm)
+    have hh := summable_sum (s:=Finset.range (M+1)) (fun k _ ↦ H k)
+    exact hh.congr fun z ↦ (Finset.mul_sum ..).symm
+  let P := ((M+1:ℕ):ℝ)*(K*‖U‖*C)
+  apply Summable.of_norm
+  apply Summable.of_nonneg_of_le (fun _ ↦ norm_nonneg _) _ (hwS.mul_left P)
+  intro z
+  change ‖∑ m, Y z.val m‖ ≤ _
+  let r := (1+|t(z)|)^d
+  have hq (m : Fin (NN z.val)) : ‖Y z.val m‖ ≤ K*(‖U‖*(C*r))*W z.val := by
+    refine (hterm z.val m).trans ?_
+    exact mul_le_mul_of_nonneg_right (mul_le_mul_of_nonneg_left ((U.le_opNorm _).trans
+      (mul_le_mul_of_nonneg_left (hx (j z.val m) z.property.1) (norm_nonneg _))) hK) (hW _)
+  calc
+    _ ≤ ∑ m : Fin (NN z.val), ‖Y z.val m‖ := norm_sum_le ..
+    _ ≤ ∑ _m : Fin (NN z.val), K*(‖U‖*(C*r))*W z.val := Finset.sum_le_sum (fun m _ ↦ hq m)
+    _ = (NN z.val:ℝ)*(K*(‖U‖*(C*r))*W z.val) := by simp
+    _ ≤ ((M+1:ℕ):ℝ)*(K*(‖U‖*(C*r))*W z.val) := by
+      apply mul_le_mul_of_nonneg_right (by exact_mod_cast hn z.val)
+      exact mul_nonneg (mul_nonneg hK (mul_nonneg (norm_nonneg _) (mul_nonneg hC (by dsimp [r]; positivity)))) (hW _)
+    _ = _ := by change _ = P*(r*W z.val); dsimp only [P]; ring
+end LineCardinal
+end RiemannMasullo
+
+open Function Set Filter MeasureTheory Topology IsDedekindDomain NumberField
+open scoped NNReal ENNReal NumberField.AdeleRing
+namespace RiemannMasullo
+set_option quotPrecheck false
+variable {F : Type*} [Field F] [NumberField F]
+attribute [local instance] instIdeleClassMeasurableSpaceSec1 instIdeleClassBorelSpaceSec1
+  instIdeleClassT2Sec1 instIdeleClassLocallyCompactSec1 instIdeleClassSecondCountableSec1
+  instIdeleClassHaarMeasureSec1
+local notation "C𝔽" => IdeleClassGroup (𝓞 F) F
+local notation "C₁" => (ideleClassNorm F).ker
+local notation "μ𝔽" => ideleClassTamagawaMeasure F
+local notation "pt(" b ", " t ")" => ((b:ℝ):ℂ)+((t:ℝ):ℂ)*Complex.I
+local notation "Z(" χ ", " a ", " α ")" => {z : PontryaginDual C₁ × ℝ × ℝ //
+  z.2.1 ∈ Icc (-α) α ∧ 0 < meromorphicOrderAt (continuedCompletedHeckeL (χ z.1)) (pt(a+z.2.1,z.2.2))}
+local notation "N(" χ ", " a ", " α ", " s ", " z ")" => spectralStripMultiplicity α s (z).val.2.1
+    (meromorphicOrderAt (continuedCompletedHeckeL (χ (z).val.1)) (pt(a+(z).val.2.1,(z).val.2.2))).untop₀.toNat
+local notation "J(" χ ", " a ", " α ", " s ")" => SpectralStripJetIndex (F := F) χ a α s
+local notation "H(" a ", " hα ", " hs ")" => spectralSobolevQuotient F a (neg_le_self hα) (le_of_lt (zero_lt_one.trans hs))
+local notation "D(" a ", " hα ", " hs ")" => spectralSobolevDualEmbedding F a (neg_le_self hα) (le_of_lt (zero_lt_one.trans hs))
+local notation "raw(" χ ", " hα ", " hs ", " i ")" => (spectralStripJet_memLp χ hα (le_of_lt (zero_lt_one.trans hs)) i).toLp _
+local notation "A(" a ", " hα ", " hs ", " φ ")" => spectralConvolution (F := F) a (neg_le_self hα) (le_of_lt (zero_lt_one.trans hs)) φ
+local notation "jet(" z ", " m ")" => ⟨((z).val.1,(z).val.2.1,(z).val.2.2,(m).val),(m).isLt⟩
+local notation "hom(" φ ", " η ")" => ∀ (k : C₁) (g : C𝔽), (φ : BruhatCompactSupport C𝔽).val (k.val⁻¹*g) = (η k : ℂ)*(φ : BruhatCompactSupport C𝔽).val g
+local notation "X(" χ ", " a ", " α ", " s ", " η ")" => {z : Z(χ,a,α) // z.val.1 = η ∧ 0 < N(χ,a,α,s,z)}
+local notation "z₀(" z ")" => (⟨0,(z).property.2⟩ : Fin _)
+local notation "form(" L ", " z ")" => L (jet((z).val,z₀(z)))
+local notation "b(" z ")" => (z).val.val.2.1
+local notation "t(" z ")" => (z).val.val.2.2
+local notation "separates(" χ ", " a ", " α ", " s ", " η ")" => ∃ c > (0:ℝ), ∃ n : ℕ,
+  ∀ z w : X(χ,a,α,s,η), z ≠ w → c/(1+|t(z)|)^n ≤ ‖pt(b(z),t(z))-pt(b(w),t(w))‖
+/-- On the zero-width line, inverse-polynomial separation of the surviving sites
+bounds the norms of the actual biorthogonal vectors polynomially in their height,
+at every admitted derivative order. -/
+theorem spectralLine_polynomiallySeparated_vectorNorm_bound
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ)
+    (a : ℝ) {s : ℝ} (hs : 1<s)
+    (x : J(χ,a,0,s) → H(a,le_refl (0:ℝ),hs)) (L : J(χ,a,0,s) → StrongDual ℂ H(a,le_refl (0:ℝ),hs))
+    (hb : IsSpectralMarkushevichBasis x L) (hj : ∀ i, D(a,le_refl (0:ℝ),hs) (L i) = raw(χ,le_refl (0:ℝ),hs,i))
+    (η : PontryaginDual C₁) (hsep : separates(χ,a,0,s,η)) :
+    ∃ C ≥ (0:ℝ), ∃ n : ℕ, ∀ i : J(χ,a,0,s), i.val.1=η → ‖x i‖ ≤ C*(1+|i.val.2.2.1|)^n := by
+  obtain ⟨c,hc,n,hn⟩ := LineCardinal.site_to_jet_separation χ a s η hsep
+  exact LineCardinal.interpolant_growth χ hχ a hs x L hb hj η hc n hn
+
+/-- Polynomial separation on a fixed angular component gives summability of the
+complete zero blocks for every homogeneous test and every bounded insertion.
+The line Sobolev exponent can be any real number greater than one. -/
+theorem spectralLine_separated_bounded_blocks
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ)
+    (a : ℝ) {s : ℝ} (hs : 1<s)
+    (x : J(χ,a,0,s) → H(a,le_refl (0:ℝ),hs)) (L : J(χ,a,0,s) → StrongDual ℂ H(a,le_refl (0:ℝ),hs))
+    (hb : IsSpectralMarkushevichBasis x L) (hj : ∀ i, D(a,le_refl (0:ℝ),hs) (L i) = raw(χ,le_refl (0:ℝ),hs,i))
+    (η : PontryaginDual C₁) (hsep : separates(χ,a,0,s,η)) (φ : BruhatCompactSupport C𝔽) (hφ : hom(φ,η))
+    (U : H(a,le_refl (0:ℝ),hs) →L[ℂ] H(a,le_refl (0:ℝ),hs)) :
+    Summable (fun z : Z(χ,a,0) ↦ ∑ m : Fin (N(χ,a,0,s,z)), L (jet(z,m)) (A(a,le_refl (0:ℝ),hs,φ) (U (x (jet(z,m)))))) :=
+  LineCardinal.line_blocks_of_separation χ hχ a hs x L hb hj η hsep φ hφ U
+
+/-- Theorem 10.3.2.1(1), pp. 453–455, on a fixed angular component at width
+zero. For every Sobolev exponent `s > 1`, the full homogeneous-test compact
+insertion assertion is equivalent to inverse-polynomial separation of the actual
+surviving sites. The strict Sobolev cutoff counts every derivative in each block. -/
+theorem spectralLine_homogeneous_blocks_iff_separation_all_exponents
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ)
+    (a : ℝ) {s : ℝ} (hs : 1<s)
+    (x : J(χ,a,0,s) → H(a,le_refl (0:ℝ),hs)) (L : J(χ,a,0,s) → StrongDual ℂ H(a,le_refl (0:ℝ),hs))
+    (hb : IsSpectralMarkushevichBasis x L) (hj : ∀ i, D(a,le_refl (0:ℝ),hs) (L i) = raw(χ,le_refl (0:ℝ),hs,i))
+    (η : PontryaginDual C₁) :
+    (∀ φ : BruhatCompactSupport C𝔽, (hom(φ,η)) →
+      ∀ U : compactOperator (RingHom.id ℂ) H(a,le_refl (0:ℝ),hs) H(a,le_refl (0:ℝ),hs),
+      Summable (fun z : Z(χ,a,0) ↦ ∑ m : Fin (N(χ,a,0,s,z)), L (jet(z,m)) (A(a,le_refl (0:ℝ),hs,φ) (U.val (x (jet(z,m))))))) ↔
+    separates(χ,a,0,s,η) := by
+  exact ⟨spectralStrip_homogeneous_blocks_require_polynomial_separation χ hχ a (le_refl (0:ℝ)) hs x L hb hj η,
+    fun h φ hφ U ↦ spectralLine_separated_bounded_blocks χ hχ a hs x L hb hj η h φ hφ U.val⟩
+#print axioms spectralLine_polynomiallySeparated_vectorNorm_bound
+#print axioms spectralLine_separated_bounded_blocks
+#print axioms spectralLine_homogeneous_blocks_iff_separation_all_exponents
 end RiemannMasullo
