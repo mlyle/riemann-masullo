@@ -1507,6 +1507,8 @@ theorem spectralStrip_exists_divergent_rankOne_of_no_polynomial_separation
 #print axioms spectralStrip_homogeneous_blocks_require_polynomial_separation
 #print axioms spectralStrip_exists_divergent_rankOne_of_no_polynomial_separation
 
+set_option maxHeartbeats 2000000
+
 open Filter Function MeasureTheory Topology Set FourierTransform
 namespace LineCardinal
 local notation "S" => SchwartzMap ℝ ℂ
@@ -1710,19 +1712,18 @@ namespace LineCardinal
 set_option quotPrecheck false
 local notation "S" => SchwartzMap ℝ ℂ
 local notation "l" => logIdeleClassNorm F
-local notation "J(" χ ", " a ", " s ")" => SpectralStripJetIndex (F:=F) χ a 0 s
 private abbrev lineSpace (F : Type*) [Field F] [NumberField F] (a : ℝ) {s : ℝ} (hs : 1<s) :=
   spectralSobolevQuotient F a (neg_le_self (le_refl (0:ℝ))) (le_of_lt (zero_lt_one.trans hs))
 private abbrev lineEmbedding (F : Type*) [Field F] [NumberField F] (a : ℝ) {s : ℝ} (hs : 1<s) :=
   spectralSobolevDualEmbedding F a (neg_le_self (le_refl (0:ℝ))) (le_of_lt (zero_lt_one.trans hs))
 private abbrev lineJetRepresentative (χ : PontryaginDual C₁ → PontryaginDual C𝔽) {a s : ℝ} (hs : 1<s)
-    (i : J(χ,a,s)) := (spectralStripJet_memLp χ (le_refl (0:ℝ)) (le_of_lt (zero_lt_one.trans hs)) i).toLp _
+    (i : J(χ,a,0,s)) := (spectralStripJet_memLp χ (le_refl (0:ℝ)) (le_of_lt (zero_lt_one.trans hs)) i).toLp _
 local notation "ordD(" j ")" => (j).val.2.2.2
 local notation "freq(" j ")" => (j).val.2.2.1
 local notation "ang(" j ")" => (j).val.1
-private theorem line_coord {χ : PontryaginDual C₁ → PontryaginDual C𝔽} {a s : ℝ} (j : J(χ,a,s)) :
+private theorem line_coord {χ : PontryaginDual C₁ → PontryaginDual C𝔽} {a s : ℝ} (j : J(χ,a,0,s)) :
     j.val.2.1 = 0 := by simpa only [neg_zero,Icc_self,mem_singleton_iff] using (j.mem_strip_order_pos (le_refl (0:ℝ))).1
-private theorem order_cutoff {χ : PontryaginDual C₁ → PontryaginDual C𝔽} {a s : ℝ} (j : J(χ,a,s)) :
+private theorem order_cutoff {χ : PontryaginDual C₁ → PontryaginDual C𝔽} {a s : ℝ} (j : J(χ,a,0,s)) :
     (ordD(j):ℝ) < (s-1)/2 := by
   have h := j.property
   rw [spectralStripMultiplicity_boundary (le_refl (0:ℝ)) (Or.inr (line_coord j))] at h
@@ -1731,8 +1732,8 @@ private theorem order_cutoff {χ : PontryaginDual C₁ → PontryaginDual C𝔽}
 open Classical in
 private theorem fourier_jet_map (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
     (hχ : IsSpectralBasepointChoice χ) (a : ℝ) {s : ℝ} (hs : 1<s)
-    (L : J(χ,a,s) → StrongDual ℂ (lineSpace F a hs)) (hj : ∀ j, (lineEmbedding F a hs) (L j) = (lineJetRepresentative χ hs j)) (η : PontryaginDual C₁) :
-    ∃ P : S →L[ℂ] (lineSpace F a hs), ∀ (f : S) (j : J(χ,a,s)),
+    (L : J(χ,a,0,s) → StrongDual ℂ (lineSpace F a hs)) (hj : ∀ j, (lineEmbedding F a hs) (L j) = (lineJetRepresentative χ hs j)) (η : PontryaginDual C₁) :
+    ∃ P : S →L[ℂ] (lineSpace F a hs), ∀ (f : S) (j : J(χ,a,0,s)),
       L j (P f) = if ang(j)=η then (LineModulation.radScale F:ℂ)*K⁻¹^ordD(j)*
         iteratedDeriv ordD(j) f (freq(j)/(2*Real.pi)) else 0 := by
   let hs₀ := le_of_lt (zero_lt_one.trans hs)
@@ -1808,12 +1809,12 @@ private theorem numeric_radius_bound {c : ℝ} (hc : 0<c) (n : ℕ) :
 open Classical in
 private theorem interpolant_growth (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
     (hχ : IsSpectralBasepointChoice χ) (a : ℝ) {s : ℝ} (hs : 1<s)
-    (x : J(χ,a,s) → (lineSpace F a hs)) (L : J(χ,a,s) → StrongDual ℂ (lineSpace F a hs))
+    (x : J(χ,a,0,s) → (lineSpace F a hs)) (L : J(χ,a,0,s) → StrongDual ℂ (lineSpace F a hs))
     (hb : IsSpectralMarkushevichBasis x L) (hj : ∀ j, (lineEmbedding F a hs) (L j) = (lineJetRepresentative χ hs j)) (η : PontryaginDual C₁)
     {c : ℝ} (hc : 0<c) (n : ℕ)
-    (sep : ∀ i j : J(χ,a,s), ang(i)=η → ang(j)=η → freq(i)≠freq(j) →
+    (sep : ∀ i j : J(χ,a,0,s), ang(i)=η → ang(j)=η → freq(i)≠freq(j) →
       c/(1+|freq(i)|)^n ≤ |freq(j)-freq(i)|) :
-    ∃ C ≥ (0:ℝ), ∃ d : ℕ, ∀ i : J(χ,a,s), ang(i)=η → ‖x i‖ ≤ C*(1+|freq(i)|)^d := by
+    ∃ C ≥ (0:ℝ), ∃ d : ℕ, ∀ i : J(χ,a,0,s), ang(i)=η → ‖x i‖ ≤ C*(1+|freq(i)|)^d := by
   obtain ⟨M,hM⟩ := exists_nat_gt ((s-1)/2)
   obtain ⟨P,hP⟩ := fourier_jet_map χ hχ a hs L hj η
   obtain ⟨V,hV,d,hVd⟩ := images_bounded P M
@@ -1836,7 +1837,7 @@ private theorem interpolant_growth (χ : PontryaginDual C₁ → PontryaginDual 
   let b : ℂ := C*K⁻¹^k*(h⁻¹)^k*(k.factorial:ℂ)
   have hbn : b ≠ 0 := by dsimp only [b]; exact mul_ne_zero (mul_ne_zero (mul_ne_zero hC (pow_ne_zero _ (inv_ne_zero K_ne)))
     (pow_ne_zero _ (Complex.ofReal_ne_zero.mpr (inv_ne_zero hh.ne')))) (Nat.cast_ne_zero.mpr (Nat.factorial_ne_zero _))
-  have hsel (j : J(χ,a,s)) : L j (P f) = if j=i then b else 0 := by
+  have hsel (j : J(χ,a,0,s)) : L j (P f) = if j=i then b else 0 := by
     rw [hP]
     by_cases hang : ang(j)=η
     · rw [ite_eq_left hang,shifted_derivs]
@@ -1848,8 +1849,8 @@ private theorem interpolant_growth (χ : PontryaginDual C₁ → PontryaginDual 
               (Prod.ext ((line_coord j).trans (line_coord i).symm) (Prod.ext ht hm))))
           simp [hkm,hji]
       · have hdist := select_radius hr (sep i j hi hang (Ne.symm ht))
-        rw [B_outside _ _ hdist,smul_zero,mul_zero,ite_eq_right (fun eq ↦ ht (congrArg (fun j : J(χ,a,s) ↦ freq(j)) eq))]
-    · rw [ite_eq_right hang,ite_eq_right (show j≠i from fun eq ↦ hang ((congrArg (fun j : J(χ,a,s) ↦ ang(j)) eq).trans hi))]
+        rw [B_outside _ _ hdist,smul_zero,mul_zero,ite_eq_right (fun eq ↦ ht (congrArg (fun j : J(χ,a,0,s) ↦ freq(j)) eq))]
+    · rw [ite_eq_right hang,ite_eq_right (show j≠i from fun eq ↦ hang ((congrArg (fun j : J(χ,a,0,s) ↦ ang(j)) eq).trans hi))]
   have he : x i = b⁻¹ • P f := by
     apply (SeparatingDual.eq_iff_forall_dual_eq (R:=ℂ)).mpr
     have H : ContinuousLinearMap.apply ℂ ℂ (x i) = ContinuousLinearMap.apply ℂ ℂ (b⁻¹ • P f) := by
@@ -1887,22 +1888,11 @@ local notation "Θ(" a ", " hI ", " hs ")" => globalThetaSobolev F a hI hs
 local notation "Q(" a ", " hI ", " hs ")" => spectralSobolevQuotient F a hI hs
 local notation "hStrip(" hα ")" => (neg_nonpos.mpr hα |>.trans hα)
 local notation "hs₀(" hs ")" => le_of_lt (zero_lt_one.trans hs)
-local notation "shift(" b ", " t ")" => ((b:ℝ):ℂ)+((t:ℝ):ℂ)*Complex.I
-local notation "order(" ψ ", " z ")" => meromorphicOrderAt (continuedCompletedHeckeL (F:=F) ψ) z
-local notation "mult(" ψ ", " z ")" => (order(ψ,z)).untop₀.toNat
 variable (a : ℝ)
-local notation "Z(" χ ", " α ")" => {z : PontryaginDual C₁ × ℝ × ℝ //
-  z.2.1 ∈ Icc (-α) α ∧ 0 < order(χ z.1, shift(a + z.2.1, z.2.2))}
-local notation "N(" χ ", " α ", " s ", " z ")" => spectralStripMultiplicity α s (z).val.2.1
-  (mult(χ (z).val.1, shift(a + (z).val.2.1, (z).val.2.2)))
 
 variable {α s : ℝ} (hα : 0 ≤ α) (hs : 1 < s)
 
 local notation "logNorm" => (logIdeleClassNorm F)
-local notation "D" => spectralSobolevDualEmbedding F a (hStrip(hα)) hs₀(hs)
-local notation "raw(" χ ", " j ")" =>
-  spectralZeroJet (F := F) (χ (j).val.1) (j).val.2.1 (j).val.2.2.1 (j).val.2.2.2
-local notation "J(" χ ")" => SpectralStripJetIndex (F := F) χ a α s
 
 private def logTest (φ : BruhatCompactSupport C𝔽) (k : ℕ) : BruhatCompactSupport C𝔽 := by
   have hb := IsBruhatSmooth.mul_comp_realHom ((mem_bruhatSmoothSubmodule_iff _).mp φ.property.1)
@@ -1923,7 +1913,7 @@ private theorem translation_sum (η : PontryaginDual C𝔽) (b t : ℝ)
     (g : C𝔽) :
     let τ := hardySobolevTranslation μ𝔽 m𝔽 (-α) α s (hStrip(hα)) hs₀(hs)
     ∫ y, τ g v y * spectralZeroJet η b t m y ∂μ𝔽 =
-      ∑ i ∈ Finset.range (m+1), (ideleClassNormTwist η (shift(b,t)) g * (logNorm g:ℂ)^(m-i) * (m.choose i:ℂ)) *
+      ∑ i ∈ Finset.range (m+1), (ideleClassNormTwist η (pt(b,t)) g * (logNorm g:ℂ)^(m-i) * (m.choose i:ℂ)) *
         ∫ y, v y * spectralZeroJet η b t i y ∂μ𝔽 := by
   intro τ
   let T := ideleClassNormTwist η ((b : ℂ) + (t : ℂ) * Complex.I)
@@ -1958,25 +1948,25 @@ private theorem translation_sum (η : PontryaginDual C𝔽) (b t : ℝ)
       rfl
 
 private theorem convolution_sum (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
-    (f : J(χ) → StrongDual ℂ Q(a, hStrip(hα), hs₀(hs)))
-    (hj : ∀ j, D (f j) = (spectralStripJet_memLp χ hα hs₀(hs) j).toLp (raw(χ, j)))
-    (φ : BruhatCompactSupport C𝔽) (z : Z(χ, α)) (m : Fin (N(χ, α, s, z)))
+    (f : J(χ,a,α,s) → StrongDual ℂ Q(a, hStrip(hα), hs₀(hs)))
+    (hj : ∀ j, D(a,hα,hs) (f j) = raw(χ,hα,hs,j))
+    (φ : BruhatCompactSupport C𝔽) (z : Z(χ,a,α)) (m : Fin (N(χ,a,α,s,z)))
     (u : Q(a, hStrip(hα), hs₀(hs))) :
-    let lower (i : Fin (m.val+1)) : Fin (N(χ,α,s,z)) := ⟨i.val,(Nat.le_of_lt_succ i.isLt).trans_lt m.isLt⟩
+    let lower (i : Fin (m.val+1)) : Fin (N(χ,a,α,s,z)) := ⟨i.val,(Nat.le_of_lt_succ i.isLt).trans_lt m.isLt⟩
     f (jet(z,m)) (spectralConvolution (F:=F) a (hStrip(hα)) hs₀(hs) φ u) =
-      ∑ i : Fin (m.val+1), nuclearityTestMellin (χ z.val.1) (logTest φ (m.val-i.val)) (shift(z.val.2.1,z.val.2.2)) *
+      ∑ i : Fin (m.val+1), nuclearityTestMellin (χ z.val.1) (logTest φ (m.val-i.val)) (pt(z.val.2.1,z.val.2.2)) *
         ((m.val.choose i.val : ℂ) * f (jet(z,lower i)) u) := by
   intro lower
   let θ := globalThetaSobolev F a (hStrip(hα)) hs₀(hs)
   obtain ⟨v,hv⟩ := θ.mkQ_surjective u
   let J (i : ℕ) := spectralZeroJet (χ z.val.1) z.val.2.1 z.val.2.2 i
-  let j : J(χ) := jet(z,m)
+  let j : J(χ,a,α,s) := jet(z,m)
   let τ := hardySobolevTranslation μ𝔽 m𝔽 (-α) α s (hStrip(hα)) hs₀(hs)
   let ℓ := (f j).comp θ.mkQL
-  let η := ideleClassNormTwist (χ z.val.1) (shift(z.val.2.1,z.val.2.2))
-  have heval (j : J(χ)) (w : W(-α,α,s)) := spectralStripConvolution_jet_eval (a:=a) hα hs χ j (f j) (hj j) w
+  let η := ideleClassNormTwist (χ z.val.1) (pt(z.val.2.1,z.val.2.2))
+  have heval (j : J(χ,a,α,s)) (w : W(-α,α,s)) := spectralStripConvolution_jet_eval (a:=a) hα hs χ j (f j) (hj j) w
   have hint (i : ℕ) (hi : i≤m.val) : Integrable (fun y ↦ v y*J i y) μ𝔽 := by
-    let k : Fin (N(χ,α,s,z)) := ⟨i,hi.trans_lt m.isLt⟩
+    let k : Fin (N(χ,a,α,s,z)) := ⟨i,hi.trans_lt m.isLt⟩
     exact (heval (jet(z,k)) v).1
   let B (i : Fin (m.val+1)) := (m.val.choose i.val : ℂ) * f (jet(z,lower i)) u
   have hτ (g : C𝔽) : ℓ (τ g v) = ∑ i : Fin (m.val+1), (η g*(logNorm g:ℂ)^(m.val-i.val))*B i := by
@@ -2016,17 +2006,17 @@ private theorem convolution_sum (χ : PontryaginDual C₁ → PontryaginDual C�
       rfl
 
 private theorem action_estimate (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
-    (L : J(χ) → StrongDual ℂ Q(a, hStrip(hα), hs₀(hs)))
-    (hj : ∀ j, D (L j) = (spectralStripJet_memLp χ hα hs₀(hs) j).toLp (raw(χ, j)))
-    (φ : BruhatCompactSupport C𝔽) (z : Z(χ, α)) (m : Fin (N(χ, α, s, z)))
+    (L : J(χ,a,α,s) → StrongDual ℂ Q(a, hStrip(hα), hs₀(hs)))
+    (hj : ∀ j, D(a,hα,hs) (L j) = raw(χ,hα,hs,j))
+    (φ : BruhatCompactSupport C𝔽) (z : Z(χ,a,α)) (m : Fin (N(χ,a,α,s,z)))
     (u : Q(a, hStrip(hα), hs₀(hs))) (M : ℕ) (hm : m.val≤M) {C : ℝ} (hC : 0≤C) (hL : ∀ i, ‖L i‖ ≤ C) :
     ‖L (jet(z,m)) (spectralConvolution (F:=F) a (hStrip(hα)) hs₀(hs) φ u)‖ ≤
       ((M+1:ℕ):ℝ)*(2:ℝ)^M*C*‖u‖*
-        ∑ k ∈ Finset.range (M+1), ‖nuclearityTestMellin (χ z.val.1) (logTest φ k) (shift(z.val.2.1,z.val.2.2))‖ := by
-  let V (k : ℕ) := ‖nuclearityTestMellin (χ z.val.1) (logTest φ k) (shift(z.val.2.1,z.val.2.2))‖
+        ∑ k ∈ Finset.range (M+1), ‖nuclearityTestMellin (χ z.val.1) (logTest φ k) (pt(z.val.2.1,z.val.2.2))‖ := by
+  let V (k : ℕ) := ‖nuclearityTestMellin (χ z.val.1) (logTest φ k) (pt(z.val.2.1,z.val.2.2))‖
   let W := ∑ k ∈ Finset.range (M+1), V k
   have hW : 0≤W := Finset.sum_nonneg (fun _ _ ↦ norm_nonneg _)
-  let lower (i : Fin (m.val+1)) : Fin (N(χ,α,s,z)) := ⟨i.val,(Nat.le_of_lt_succ i.isLt).trans_lt m.isLt⟩
+  let lower (i : Fin (m.val+1)) : Fin (N(χ,a,α,s,z)) := ⟨i.val,(Nat.le_of_lt_succ i.isLt).trans_lt m.isLt⟩
   rw [convolution_sum a hα hs χ L hj φ z m u]
   refine (norm_sum_le ..).trans ?_
   have bound (i : Fin (m.val+1)) : V (m.val-i.val) * ((m.val.choose i.val:ℝ) * ‖L (jet(z,lower i)) u‖) ≤
