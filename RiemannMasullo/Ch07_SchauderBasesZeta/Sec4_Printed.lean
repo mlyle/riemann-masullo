@@ -1,6 +1,7 @@
 module
 
 public import RiemannMasullo.Ch07_SchauderBasesZeta.Sec4
+import RiemannMasullo.ForMathlib.NumberTheory.NumberField.DedekindZeta.MultipleZero
 import RiemannMasullo.ForMathlib.NumberTheory.NumberField.InfiniteAdeleRing
 import RiemannMasullo.Ch01_Introduction.Sec4
 import RiemannMasullo.ForMathlib.Analysis.LocallyConvex.WithSeminorms
@@ -61,13 +62,188 @@ def Printed.spectralNuclearity_trace : Prop :=
           (fun n ↦ r.coeff n * r.functional n (r.vector n).val)
           (∑' z : Zeros, ((min N (order z) : ℕ) : ℂ) * nuclearityTestMellin χ φ z.val)
 
+open MeasureTheory in
+/-- Differentiate a compactly supported radial test in the log-norm coordinate. -/
+private theorem spectralNuclearity_trace_false_moment {X : Type*} [TopologicalSpace X]
+    [MeasurableSpace X] [OpensMeasurableSpace X] (μ : Measure X) [IsFiniteMeasureOnCompacts μ]
+    (f : X → ℂ) (hf : Continuous f) (hfc : HasCompactSupport f)
+    (l : X → ℝ) (hl : Continuous l) (z : ℂ) :
+    HasDerivAt (fun w : ℂ ↦ ∫ x, f x * Complex.exp ((l x : ℂ) * w) ∂μ)
+      (∫ x, f x * (Complex.exp ((l x : ℂ) * z) * (l x : ℂ)) ∂μ) z := by
+  let d (p : ℂ × X) := Complex.exp ((l p.2 : ℂ) * p.1) * (l p.2 : ℂ)
+  have hc : Continuous d := by dsimp [d]; fun_prop
+  obtain ⟨C, hC⟩ := ((isCompact_closedBall z 1).prod hfc).exists_bound_of_continuousOn hc.continuousOn
+  have hcont (s : ℂ) : Continuous (fun x ↦ f x * Complex.exp ((l x : ℂ) * s)) := by fun_prop
+  apply (hasDerivAt_integral_of_dominated_loc_of_deriv_le (μ := μ)
+    (F := fun w x ↦ f x * Complex.exp ((l x : ℂ) * w))
+    (F' := fun w x ↦ f x * d (w, x))
+    (bound := fun x ↦ ‖f x‖ * C) (Metric.ball_mem_nhds z one_pos)
+    (.of_forall fun w ↦ (hcont w).aestronglyMeasurable)
+    ((hcont z).integrable_of_hasCompactSupport hfc.mul_right)
+    ((hf.mul (hc.comp (continuous_const.prodMk continuous_id))).aestronglyMeasurable)
+    (.of_forall fun x w hw ↦ ?_)
+    ((hf.integrable_of_hasCompactSupport hfc).norm.mul_const C)
+    (.of_forall fun x w _ ↦ ?_)).2
+  · by_cases hx : x ∈ tsupport f
+    · rw [norm_mul]
+      exact mul_le_mul_of_nonneg_left (hC (w, x) ⟨Metric.ball_subset_closedBall hw, hx⟩) (norm_nonneg _)
+    · simp [image_eq_zero_of_notMem_tsupport hx]
+  · simpa only [d, id_eq, mul_one] using
+      (((hasDerivAt_id w).const_mul (l x : ℂ)).cexp.const_mul (f x))
+
+open MeasureTheory in
+/-- At any prescribed complex point, cancel its norm power in a smooth radial test.
+The first Mellin derivative becomes a positive second log moment of a bump. -/
+private theorem spectralNuclearity_trace_false_test (F : Type) [Field F] [NumberField F] (z : ℂ) :
+    ∃ (φ : BruhatCompactSupport C[F]) (v : ℂ), v ≠ 0 ∧
+      HasDerivAt (nuclearityTestMellin (1 : U[F]) φ) v z := by
+  let : MeasurableSpace C[F] := borel _
+  let : BorelSpace C[F] := ⟨rfl⟩
+  let : (ideleClassTamagawaMeasure F).IsHaarMeasure := (ideleClassTamagawaMeasure_isWeil F).1
+  let l (g : C[F]) := Real.log ((ideleClassNorm F g).val : ℝ)
+  have hn (g : C[F]) : 0 < ((ideleClassNorm F g).val : ℝ) := NNReal.coe_pos.mpr (Units.zero_lt _)
+  have hl : Continuous l := (NNReal.continuous_coe.comp
+    (Units.continuous_val.comp (isProperMap_ideleClassNorm F).continuous)).log fun g ↦ (hn g).ne'
+  let b : ContDiffBump (1 : ℝ) := ⟨1 / 32, 1 / 16, by norm_num, by norm_num⟩
+  let p (t : ℝ) := ((b t : ℂ) * (t : ℂ)) * Complex.exp (-((t : ℂ) * z))
+  have hp : ContDiff ℝ (⊤ : ℕ∞) p :=
+    ((Complex.ofRealCLM.contDiff.comp b.contDiff).mul Complex.ofRealCLM.contDiff).mul
+      ((Complex.ofRealCLM.contDiff.mul (contDiff_const (c := z))).neg.cexp)
+  obtain ⟨φ, hφ⟩ := exists_normTest (F := F) p hp (by
+    exact (b.hasCompactSupport.comp_left Complex.ofReal_zero).mul_right.mul_right)
+  have hc : Continuous φ.val := by
+    rw [show φ.val = p ∘ l from funext hφ]
+    exact hp.continuous.comp hl
+  let μ := ideleClassTamagawaMeasure F
+  let m (g : C[F]) := b (l g) * l g * l g
+  have hm : Continuous m := ((b.continuous.comp hl).mul hl).mul hl
+  have hmc : HasCompactSupport m := by
+    apply HasCompactSupport.of_support_subset_isCompact (show HasCompactSupport φ.val from φ.property.2)
+    intro g hg
+    apply subset_tsupport
+    change φ.val g ≠ 0
+    rw [hφ]
+    change ((b (l g) : ℂ) * (l g : ℂ)) * Complex.exp _ ≠ 0
+    have hh : b (l g) * l g ≠ 0 := left_ne_zero_of_mul (show m g ≠ 0 from hg)
+    exact mul_ne_zero (by exact_mod_cast hh) (Complex.exp_ne_zero _)
+  let t := positiveRealLogEquiv.symm (Multiplicative.ofAdd (1 : ℝ))
+  let g₁ : C[F] := QuotientGroup.mk (canonicalIdeleNormSection F t)
+  have h₁ : l g₁ = 1 := by
+    dsimp only [l]
+    rw [show ideleClassNorm F g₁ = t from canonicalIdeleNormSection_rightInverse F t,
+      ← positiveRealLogEquiv_apply, positiveRealLogEquiv.apply_symm_apply]
+    rfl
+  have hpos : 0 < ∫ g, m g ∂μ := by
+    apply hm.integral_pos_of_hasCompactSupport_nonneg_ne_zero hmc (x := g₁)
+    · intro g
+      change 0 ≤ b (l g) * l g * l g
+      simpa only [mul_assoc] using mul_nonneg (b.nonneg) (mul_self_nonneg (l g))
+    · change b (l g₁) * l g₁ * l g₁ ≠ 0
+      rw [h₁, b.one_of_mem_closedBall (Metric.mem_closedBall_self b.rIn_pos.le), mul_one, mul_one]
+      exact one_ne_zero
+  have hd := spectralNuclearity_trace_false_moment μ φ.val hc φ.property.2 l hl z
+  have he (s : ℂ) (g : C[F]) :
+      ideleClassNormTwist (1 : U[F]) s g = Complex.exp ((l g : ℂ) * s) := by
+    change 1 * (((ideleClassNorm F g).val : ℝ) : ℂ) ^ s = _
+    rw [one_mul, Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr (hn g).ne'),
+      ← Complex.ofReal_log (hn g).le]
+  have hv (g : C[F]) : φ.val g * (Complex.exp ((l g : ℂ) * z) * (l g : ℂ)) = (m g : ℂ) := by
+    rw [hφ]
+    change ((b (l g) : ℂ) * (l g : ℂ) * Complex.exp (-((l g : ℂ) * z))) * _ = _
+    simp [m, Complex.exp_neg, mul_assoc]
+  refine ⟨φ, ((∫ g, m g ∂μ : ℝ) : ℂ), Complex.ofReal_ne_zero.mpr hpos.ne', ?_⟩
+  change HasDerivAt (fun s ↦ ∫ g, φ.val g * ideleClassNormTwist (1 : U[F]) s g ∂μ) _ z
+  simpa only [he, hv, integral_complex_ofReal] using hd
+
+/-- Pole removal preserves the multiplicity in the open critical strip. -/
+private theorem spectralNuclearity_trace_false_order (F : Type) [Field F] [NumberField F]
+    (τ : ℝ≥0ˣ →ₜ* I[F]) (hτ : RightInverse τ (ideleNorm F))
+    (z : ℂ) (h₀ : 0 < z.re) (h₁ : z.re < 1)
+    (hz : 1 < (meromorphicOrderAt (continuedCompletedHeckeL (1 : U[F])) z).untop₀.toNat) :
+    let χ := (1 : U[F])
+    let G := regularizedCompletedHeckeL χ τ hτ (continuedCompletedHeckeL χ)
+      (continuedCompletedHeckeL_spec χ).1 (continuedCompletedHeckeL_spec χ).2
+    1 < (analyticOrderAt (G.val : ℂ → ℂ) z).toNat := by
+  intro χ G
+  let x := (existsUnique_ideleNormSection_character_phase χ τ hτ).exists.choose
+  let b := (x : ℂ) * Complex.I
+  let P (s : ℂ) := (s + b) * (1 - s - b)
+  have hb : b.re = 0 := by simp [b, Complex.mul_re]
+  have hP : ∀ w : ℂ, AnalyticAt ℂ P w := by dsimp [P]; fun_prop
+  have hn : P z ≠ 0 := by
+    apply mul_ne_zero <;> intro he <;> have hh := congrArg Complex.re he <;>
+      simp only [Complex.add_re, Complex.sub_re, Complex.one_re, Complex.zero_re, hb] at hh <;> linarith
+  have hL := (continuedCompletedHeckeL_spec χ).1.meromorphicOn
+  have hfun : (G.val : ℂ → ℂ) = toMeromorphicNFOn (P * continuedCompletedHeckeL χ) univ := by
+    have hχ : χ.toMonoidHom.comp (ideleClassNorm F).ker.subtype = 1 := rfl
+    simp only [G, regularizedCompletedHeckeL, ite_eq_left hχ, pow_one]
+    rfl
+  have hPL : MeromorphicOn (P * continuedCompletedHeckeL χ) univ := fun w hw ↦
+    (hP w).meromorphicAt.mul (hL w hw)
+  have ho := (G.property.analyticAt z).meromorphicOrderAt_eq
+  rw [hfun, meromorphicOrderAt_toMeromorphicNFOn hPL (mem_univ _),
+    meromorphicOrderAt_mul_of_ne_zero (hP z) hn] at ho
+  rw [hfun]
+  change 1 < (meromorphicOrderAt (continuedCompletedHeckeL χ) z).untop₀.toNat at hz
+  rw [ho] at hz
+  generalize analyticOrderAt (toMeromorphicNFOn (P * continuedCompletedHeckeL χ) univ) z = n at hz ⊢
+  cases n using ENat.recTopCoe with
+  | top => simp at hz
+  | coe n => simpa using hz
+
 /-- Paper: Theorem 7.4.1.1(2), equation (7.4.1.1), p. 366.
-Take the trivial character of a field with a multiple central zeta zero, as on
-p. 529, a = 0 and N = 1. A nonzero nonnegative radial test supported at norms
-between 2 and 3 has positive Mellin derivative at 1/2. The first-derivative
-functional there vanishes on the printed closed span, yet takes this positive
-value on the ambient image of its zeroth biorthogonal vector. -/
-theorem Printed.spectralNuclearity_trace_false : ¬ Printed.spectralNuclearity_trace := by sorry
+At a multiple zeta zero of the splitting field of X³ − 2, take a = 0 and N = 1.
+The first-derivative functional vanishes on the printed closed span. A radial
+test with nonzero Mellin derivative sends the retained value vector outside it. -/
+theorem Printed.spectralNuclearity_trace_false : ¬ Printed.spectralNuclearity_trace := by
+  classical
+  intro h
+  obtain ⟨F, _, _, z, h₀, h₁, hz⟩ := exists_completedDedekindZeta_multipleZero
+  let χ : U[F] := 1
+  let τ : ℝ≥0ˣ →ₜ* I[F] := ⟨canonicalIdeleNormSection F, canonicalIdeleNormSection_continuous F⟩
+  have hτ : RightInverse τ (ideleNorm F) := canonicalIdeleNormSection_rightInverse F
+  let G := regularizedCompletedHeckeL χ τ hτ (continuedCompletedHeckeL χ)
+    (continuedCompletedHeckeL_spec χ).1 (continuedCompletedHeckeL_spec χ).2
+  let ord (s : ℂ) := analyticOrderAt (G.val : ℂ → ℂ) s
+  have htwo : 1 < (ord z).toNat := spectralNuclearity_trace_false_order F τ hτ z h₀ h₁ hz
+  have hpos : 0 < ord z := pos_iff_ne_zero.mpr fun he ↦ by simp [he] at htwo
+  let Z := {s : ℂ // 0 < ord s}
+  let J := Σ s : Z, Fin (ord s.val).toNat
+  let j₀ : J := ⟨⟨z, hpos⟩, 0, Nat.zero_lt_one.trans htwo⟩
+  let j₁ : J := ⟨⟨z, hpos⟩, 1, htwo⟩
+  let D := spectralNuclearityDenominator χ τ hτ 0
+  obtain ⟨d, b, hd, hb⟩ := exists_spectralNuclearityBiorthogonal χ τ hτ 0
+  obtain ⟨φ, v, hv, hφ⟩ := spectralNuclearity_trace_false_test F z
+  obtain ⟨A, Aq, T, hA, hAq, hT, _⟩ := h F χ τ hτ 0 1 one_pos φ d b hd hb
+  let E := (Submodule.span ℂ (b '' {i : J | i.2.val < 1})).topologicalClosure
+  have hker : E ≤ (d j₁).ker := by
+    apply Submodule.topologicalClosure_minimal _ _ (d j₁).isClosed_ker
+    apply Submodule.span_le.mpr
+    rintro _ ⟨i, hi, rfl⟩
+    have hne : j₁ ≠ i := by rintro rfl; exact (lt_irrefl 1) hi
+    exact (hb j₁ i).trans (ite_eq_right hne)
+  have hmem : b j₀ ∈ E :=
+    Submodule.le_topologicalClosure _ (Submodule.subset_span ⟨j₀, Nat.zero_lt_one, rfl⟩)
+  have hout : d j₁ (Aq (b j₀)) = 0 := by
+    rw [← hT (⟨b j₀, hmem⟩ : E)]
+    exact hker (T ⟨b j₀, hmem⟩).property
+  obtain ⟨f, hf⟩ := D.mkQ_surjective (b j₀)
+  have hval := hd j₀ f
+  have hder := hd j₁ f
+  rw [show D.mkQ f = b j₀ from hf, hb] at hval hder
+  have hne : j₁ ≠ j₀ := fun e ↦ Nat.one_ne_zero (congrArg (fun i : J ↦ i.2.val) e)
+  have hf₀ : f.val z = 1 := by simpa [j₀] using hval.symm
+  have hf₁ : deriv f.val z = 0 := by
+    rw [ite_eq_right hne] at hder
+    simpa [j₁, iteratedDeriv_one] using hder.symm
+  have hdiff := (f.property.2.1 z (mem_univ _)).differentiableAt (Filter.univ_mem' fun _ ↦ mem_univ _)
+  have hprod : (A f).val = nuclearityTestMellin χ φ * f.val := funext (hA f)
+  rw [← hf, hAq, hd] at hout
+  change iteratedDeriv 1 (A f).val (z - ((0 : ℝ) : ℂ)) = 0 at hout
+  change HasDerivAt (nuclearityTestMellin χ φ) v z at hφ
+  rw [Complex.ofReal_zero, sub_zero, iteratedDeriv_one, hprod,
+    (hφ.mul hdiff.hasDerivAt).deriv, hf₀, hf₁, mul_one, mul_zero, add_zero] at hout
+  exact hv hout
 
 section FactorialNormalization
 

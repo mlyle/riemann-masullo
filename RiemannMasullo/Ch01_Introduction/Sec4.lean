@@ -8027,15 +8027,36 @@ on the norm section, as in the chart: a norm twist of the trivial character
 moves the pole of its finite L-function off the real axis, where the
 correction term does not cancel it.
 
-Gap: The paper asserts this continuation on p. 30 without proof. For every a > 0 it says that
-the finite Hecke L-function of a character trivial on the norm section has no zero with
-Re s > 1/2 + a. -/
+Subtracting the cutoff terms at `z+2` gives convergent spectral and archimedean
+differences for the same matched family. The overlap identity used to identify
+their sum depends on `traceFormula_exteriorZeros`. -/
 private theorem introTrace_combined_limit_extension_analytic (τ : ℝ≥0ˣ →ₜ* C𝔽)
     (_hτ : RightInverse τ (ideleClassNorm F)) (χ : U𝔽) (_hχ : ∀ t, χ (τ t) = 1)
     {a : ℝ} (_ha : 0 < a) :
     ∃ H : ℂ → ℂ, AnalyticOnNhd ℂ H right(a) ∧
       EqOn H (fun z ↦ logDeriv finiteL(χ) (z + 1 / 2) +
-        if χ = 1 then 1 / (z + 1 / 2) + 1 / (z - 1 / 2) else 0) right(max a 1) := by sorry
+        if χ = 1 then 1 / (z + 1 / 2) + 1 / (z - 1 / 2) else 0) right(max a 1) := by
+  obtain ⟨h, ρ, hA, hmatch, hspec⟩ := introTraceApprox_exists_reference_spectral_matched (F := F)
+  have hshift : MapsTo (fun z : ℂ ↦ z + 2) right(a) right(a) := by
+    intro z hz
+    change a < z.re + 2
+    linarith [show a < z.re from hz]
+  have hs := hspec χ a _ha.le _ hshift (by fun_prop)
+  have harch := introTraceApprox_archimedean_sub_shiftTwo_matched_sum χ h ρ hA hmatch
+  have hc := introTrace_combined_limit_extension_overlap τ _hτ χ _hχ _ha h ρ hA
+  apply introTrace_narrow_continuation_of_shiftTwo_comparison χ a _ha.le
+  intro z hz
+  have hzₐ : a < z.re := (le_max_left a 1).trans_lt hz
+  have hz' : z + 2 ∈ right(max a 1) := by
+    change max a 1 < z.re + 2
+    linarith [show max a 1 < z.re from hz]
+  have hzarch : z ∈ right(-(1 / 2 : ℝ)) := by
+    change -(1 / 2 : ℝ) < z.re
+    linarith
+  apply tendsto_nhds_unique (hs.tendsto_at (a := z) hzₐ)
+  apply (((hc.tendsto_at hz).sub (hc.tendsto_at hz')).sub (harch.tendsto_at hzarch)).congr
+  intro n
+  ring
 
 /-- Paper: §1.4.5, pp. 29–30. In each normalized chart a holomorphic function
 on the right of the window agrees on the common half-plane with the limit of

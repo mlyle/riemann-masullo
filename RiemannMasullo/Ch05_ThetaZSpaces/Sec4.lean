@@ -773,11 +773,149 @@ theorem sLocalZetaPair_range (χ : PontryaginDual Jₛ) :
   le_antisymm (sLocalZetaPair_range_le_matching (F := F) (S := S) χ)
     (sLocalZetaPair_matching_le_range (F := F) (S := S) χ)
 
+/-- A norm twist of the chosen lift reaches every character with the same restriction.
+This is the split-norm argument of `exists_normTwist_of_agree_on_ker` in §5.2b. -/
+private theorem sLocalZetaPair_isEmbedding_chart (χ : PontryaginDual Jₛ)
+    (c : QuasiCharacter Jₛ) (hc : ∀ u : J₁, c u.val = (χ u.val : ℂ)) :
+    ∃ z, normChart(χ) z = c := by
+  obtain ⟨σ, hσ⟩ := sIdeleQuotientNorm_exists_section F S
+  let b := (⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp χ
+  obtain ⟨u, hu, -⟩ := existsUnique_complexPower (b.comp σ)
+  obtain ⟨v, hv, -⟩ := existsUnique_complexPower (c.comp σ)
+  refine ⟨v - u, ContinuousMonoidHom.ext fun x ↦ ?_⟩
+  let t := mₛ x
+  let y : J₁ := ⟨x / σ t, by simp [MonoidHom.mem_ker, t, hσ (mₛ x)]⟩
+  have hxy : y.val * σ t = x := div_mul_cancel x _
+  have split (d : QuasiCharacter Jₛ) : d x = d y.val * d (σ t) :=
+    (congrArg d hxy).symm.trans (map_mul d _ _)
+  change b x * (((t.val : ℝ) : ℂ)) ^ (v - u) = c x
+  rw [split b, split c, show c y.val = b y.val from hc y,
+    show b (σ t) = (((t.val : ℝ) : ℂ)) ^ u from hu t,
+    show c (σ t) = (((t.val : ℝ) : ℂ)) ^ v from hv t, mul_assoc,
+    ← Complex.cpow_add _ _ (Complex.ofReal_ne_zero.mpr (NNReal.coe_ne_zero.mpr t.ne_zero)),
+    add_sub_cancel]
+
+/-- Vanishing of the first component forces vanishing on the whole character component
+by meromorphic uniqueness, and hence vanishing of the homogeneous theta class. -/
+private theorem sLocalZetaPair_isEmbedding_injective (χ : PontryaginDual Jₛ) :
+    Injective (sLocalZetaPair (F := F) (S := S) χ) := by
+  apply LinearMap.ker_eq_bot.mp
+  apply LinearMap.ker_eq_bot'.mpr
+  intro x hx
+  let K := LinearMap.ker (φω(restrict₁(χ)))
+  obtain ⟨f, rfl⟩ := K.mkQ_surjective x
+  have hz := eq_of_agree_rightHalf (sLocalIdelicZFunction_meromorphic f χ)
+    (V := 0) (fun _ _ ↦ analyticAt_const.meromorphicNFAt) 0 (fun z h ↦
+      ((sLocalZetaPair_mk χ f).1 h).symm.trans (congrArg (fun p : B⁺ × B⁻ ↦ p.1.val z) hx))
+  apply (Submodule.Quotient.mk_eq_zero K).mpr
+  apply (mem_sLocalHomogeneousAdelicTheta_ker_iff (restrict₁(χ)) f).mpr
+  intro c hc
+  obtain ⟨z, he⟩ := sLocalZetaPair_isEmbedding_chart χ c.val hc
+  change Zₛ f c.val = 0
+  exact he ▸ congrFun hz z
+
+/-- The range description identifies the image with a closed kernel in a product
+of Fréchet spaces. -/
+private theorem sLocalZetaPair_isEmbedding_range_frechet (χ : PontryaginDual Jₛ) :
+    IsFrechetTVS (sLocalZetaPair (F := F) (S := S) χ).range := by
+  rw [sLocalZetaPair_range]
+  obtain ⟨_, _, hMp, hCp⟩ := schwartzBergman_frechet rightInterval isOpen_Ioi
+    ordConnected_Ioi ⟨1, one_pos⟩
+  obtain ⟨_, _, hMm, hCm⟩ := schwartzBergman_frechet leftInterval isOpen_Iio
+    ordConnected_Iio ⟨0, zero_lt_one⟩
+  let : MetrizableSpace B⁺ := hMp
+  let : MetrizableSpace B⁻ := hMm
+  let : CompleteSpace B⁺ := hCp
+  let : CompleteSpace B⁻ := hCm
+  let : MetrizableSpace B⁰ :=
+    (schwartzBergman_frechet overlapInterval isOpen_Ioo ordConnected_Ioo ⟨1/2, by norm_num⟩).2.2.1
+  have hclosed : IsClosed (sLocalZetaMatching (F := F) (S := S) χ : Set (B⁺ × B⁻)) :=
+    ContinuousLinearMap.isClosed_ker _
+  let : IsUniformAddGroup (sLocalZetaMatching (F := F) (S := S) χ) :=
+    (sLocalZetaMatching χ).toAddSubgroup.isUniformAddGroup
+  refine ⟨inferInstance, inferInstance, MetrizableSpace.subtype _, ?_⟩
+  rw [IsUniformAddGroup.rightUniformSpace_eq]
+  exact hclosed.completeSpace_coe
+
+/-- A linear bijection from an LF-space to a Fréchet space is a homeomorphism if
+a separating family of linear evaluations is continuous on both sides. Factor the
+inverse through one LF stage in the space of evaluations, then use open mapping. -/
+private theorem sLocalZetaPair_isEmbedding_of_evaluations {E W ι : Type*}
+    [AddCommGroup E] [Module ℂ E] [TopologicalSpace E]
+    [AddCommGroup W] [Module ℂ W] [TopologicalSpace W]
+    (hE : IsLFSpace E) (hW : IsFrechetTVS W) (e : E ≃ₗ[ℂ] W)
+    (j : W →L[ℂ] (ι → ℂ)) (hj : Injective j) (hc : Continuous (j ∘ e)) :
+    IsEmbedding e := by
+  let R := j.toLinearMap.range
+  let b := j.codRestrict R (LinearMap.mem_range_self j.toLinearMap)
+  let a : E →L[ℂ] R := ⟨b.toLinearMap.comp e.toLinearMap, hc.subtype_mk _⟩
+  have ha : Injective a := fun _ _ h ↦ e.injective (hj (congrArg Subtype.val h))
+  obtain ⟨X, _, _, _, hX, u, i, h⟩ := hE.2
+  let stage (n : ℕ) := a.comp (i n)
+  have hcov (p : R) : ∃ n, p ∈ range (stage n) := by
+    obtain ⟨w, hw⟩ := p.property
+    obtain ⟨n, x, hx⟩ := h.exhaustive (e.symm w)
+    refine ⟨n, x, Subtype.ext ?_⟩
+    change j (e (i n x)) = p.val
+    rw [hx, e.apply_symm_apply]
+    exact hw
+  obtain ⟨n, v, hv⟩ := frechet_factorization hX stage
+    (fun k ↦ ha.comp (h.injective k))
+    (fun k _ ⟨x, hx⟩ ↦ ⟨u k x, (congrArg a (DFunLike.congr_fun (h.compatible k) x)).trans hx⟩)
+    hcov hW b
+  have hinv : Continuous e.symm := by
+    refine ((i n).continuous.comp v.continuous).congr fun w ↦ e.injective ?_
+    exact (hj (congrArg Subtype.val (DFunLike.congr_fun hv w))).trans (e.apply_symm_apply w).symm
+  let inv : W →L[ℂ] E := ⟨e.symm.toLinearMap, hinv⟩
+  have hopen : IsOpenMap inv := by
+    obtain ⟨hadd, hpoly, hmetr, hcomp⟩ := hW
+    exact isOpenMap_of_surjective_toLF hE (X := fun _ ↦ W) (fun _ ↦ ⟨hadd, hpoly, hmetr, hcomp⟩)
+      (fun _ ↦ ContinuousLinearMap.id ℂ W) (fun _ ↦ Subset.rfl) (fun w ↦ ⟨0, w, rfl⟩)
+      inv e.symm.surjective
+  exact (e.symm.toEquiv.toHomeomorphOfContinuousOpen hinv hopen).symm.isEmbedding
+
 /-- Paper: Theorem 5.4.1.1(1), p. 266.
 The zeta pair induces the topology of the homogeneous theta space: a theta class is close
 to zero exactly when both of its zeta coordinates are close to zero on their half-planes. -/
 theorem sLocalZetaPair_isEmbedding (χ : PontryaginDual Jₛ) :
-    IsEmbedding (sLocalZetaPair (F := F) (S := S) χ) := by sorry
+    IsEmbedding (sLocalZetaPair (F := F) (S := S) χ) := by
+  let Z := sLocalZetaPair (F := F) (S := S) χ
+  let W := Z.range
+  let e := LinearEquiv.ofInjective Z (sLocalZetaPair_isEmbedding_injective χ)
+  let j : W →L[ℂ] (rightHalf → ℂ) :=
+    { toFun := fun p z ↦ p.val.1.val z
+      map_add' := fun _ _ ↦ rfl
+      map_smul' := fun _ _ ↦ rfl
+      cont := by
+        obtain ⟨T, hT, he⟩ := schwartzBergman_schwartzLine_topology rightInterval isOpen_Ioi
+          ordConnected_Ioi ⟨1, one_pos⟩
+        apply continuous_pi
+        intro z
+        let a : rightInterval := ⟨z.val.re, z.property⟩
+        have ht : Continuous fun p : W ↦ T p.val.1 a z.val.im :=
+          (continuous_eval_const (F := BoundedContinuousFunction ℝ ℂ) z.val.im).comp
+            ((SchwartzMap.toBoundedContinuousFunctionCLM ℂ ℝ ℂ).continuous.comp
+              ((continuous_apply a).comp (he.continuous.comp (continuous_fst.comp continuous_subtype_val))))
+        exact ht.congr fun p ↦ (hT p.val.1 a z.val.im).trans (by
+          simp only [weightedVerticalTrace, pow_zero, one_mul, a, Complex.re_add_im]) }
+  have hj : Injective j := by
+    intro p q h
+    have hpos : EqOn p.val.1.val q.val.1.val rightHalf := fun z hz ↦ congrFun h ⟨z, hz⟩
+    have hmatch (w : W) := (mem_sLocalZetaMatching χ _).mp (sLocalZetaPair_range_le_matching χ w.property)
+    exact Subtype.ext (Prod.ext (existsUnique_sLocalZetaPair_ext hpos)
+      (existsUnique_sLocalZetaPair_left_ext χ _ _ fun z hz ↦
+        (hmatch p hz).symm.trans ((hpos hz.1).trans (hmatch q hz))))
+  apply IsEmbedding.subtypeVal.comp (f := e)
+  apply sLocalZetaPair_isEmbedding_of_evaluations (sLocalHomogeneousThetaSpace_lf (restrict₁(χ)))
+    (sLocalZetaPair_isEmbedding_range_frechet χ) e j hj
+  apply (LinearMap.ker (φω(restrict₁(χ)))).isQuotientMap_mkQ.continuous_iff.mpr
+  apply continuous_pi
+  intro z
+  have hd : ∃ (ψ : PontryaginDual Jₛ) (s : ℂ), 0 < s.re ∧ normChart(χ) z.val = normChart(ψ) s :=
+    ⟨χ, z.val, z.property, rfl⟩
+  obtain ⟨T, hT⟩ := sLocalIdelicZetaIntegral_tempered _ hd
+  exact T.continuous.congr fun f ↦ (hT f).trans ((sLocalIdelicZFunction_eq_integral f hd).symm.trans
+    ((sLocalZetaPair_mk χ f).1 z.property).symm)
 
 /-- Paper: Theorem 5.4.1.1(1), p. 266.
 The zeta pair has closed range. A pair is the zeta pair of a theta class exactly when its

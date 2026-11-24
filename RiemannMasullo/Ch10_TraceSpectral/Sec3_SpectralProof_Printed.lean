@@ -1285,11 +1285,14 @@ bound controls. At a prescribed frequency it does not vanish for a suitable test
 test trivial on the norm-one subgroup, with norm profile a nonzero smooth bump multiplied by
 the inverse of the oscillation `r ↦ r ^ (i t)`, so that the Mellin integral at `shift(0, t)`
 becomes the integral of the bump against the multiplicative Haar measure, hence is nonzero.
+The map `τ` is a section of the idelic norm, as on p. 455; without that the statement fails
+(for the constant map every test has Mellin value zero, #6741).
 Missing input: the construction of an element of `BruhatCompactSupport` from a norm profile
 on the idele class group of `ℚ`, and the identification of `positiveRealHaar` with Lebesgue
 measure in the logarithmic coordinate. -/
 private theorem spectralStripMellinJet_norm_le_false_exists_mellin
-    (τ : ℝ≥0ˣ →ₜ* C𝔽(ℚ)) (ω : PontryaginDual C₁(ℚ)) (t : ℝ) :
+    (τ : ℝ≥0ˣ →ₜ* C𝔽(ℚ)) (_hτ : Function.RightInverse τ (ideleClassNorm ℚ))
+    (ω : PontryaginDual C₁(ℚ)) (t : ℝ) :
     ∃ φ : BruhatCompactSupport C𝔽(ℚ),
       (∫ r : ℝ≥0ˣ, ((r.val : ℝ) : ℂ) ^ (shift(0, t)) *
         (∫ k : C₁(ℚ), (ω k : ℂ) * φ.val (τ r * k.val)
@@ -1314,7 +1317,7 @@ theorem Printed.spectralStripMellinJet_norm_le_false :
   have hτ : Function.RightInverse τ (ideleClassNorm ℚ) :=
     canonicalIdeleNormSection_rightInverse ℚ
   obtain ⟨ω, t, ht, hord, hmult⟩ := spectralStripMellinJet_norm_le_false_exists_zero χ hχ
-  obtain ⟨φ, hφ⟩ := spectralStripMellinJet_norm_le_false_exists_mellin τ ω t
+  obtain ⟨φ, hφ⟩ := spectralStripMellinJet_norm_le_false_exists_mellin τ hτ ω t
   obtain ⟨C, hC, hbound⟩ :=
     h ℚ χ hχ τ hτ (1 / 2) 3 2 (by norm_num) (by norm_num) φ 2 (by norm_num)
   have hmem : (0 : ℝ) ∈ Set.Icc (-3 : ℝ) 3 := by norm_num
