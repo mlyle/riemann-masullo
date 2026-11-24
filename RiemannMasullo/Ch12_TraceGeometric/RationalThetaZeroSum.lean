@@ -8,7 +8,7 @@ import RiemannMasullo.Ch13_ZerosHecke.Targets
 
 A four-modulus theta approximation on the negative log-norm half-line supplies one
 numerical error for the finite zero product. Over the rationals its principal
-character gives a bound on the sum of the normalized displacements of all distinct
+character gives a bound on the sum of the normalized displacements, including multiplicities, of all
 zeta zeros to the right of the critical line, and a closed zero-free disk.
 -/
 
@@ -21,12 +21,11 @@ local notation "CQ" => IdeleClassGroup (𝓞 ℚ) ℚ
 local notation "IQ" => IdeleGroup (𝓞 ℚ) ℚ
 local instance : MeasurableSpace CQ := borel _
 
-private theorem rationalTheta_zero_bounds :
-    let Z := {ρ : ℂ // 1 / 2 < ρ.re ∧
-      0 < meromorphicOrderAt (continuedCompletedHeckeL (1 : PontryaginDual CQ)) ρ}
-    let d (ρ : Z) := (2 * ρ.val.re - 1) / ‖ρ.val‖ ^ 2
-    (∀ ρ : Z, d ρ < 1 / 25) ∧ Summable d ∧ ∑' ρ : Z, d ρ < Real.log (25 / 24) := by
-  intro Z d
+private theorem rationalTheta_supported_test :
+    ∃ (σ : ℝ≥0ˣ →ₜ* IQ), RightInverse σ (ideleNorm ℚ) ∧ ∃ f : adelePolarSubspace ℚ,
+      (∀ x : ℝ, 0 < x → centeredLogThetaLift (1 : PontryaginDual CQ) σ f x = 0) ∧
+      hiddenThetaCost 0 0 0 (fun x ↦ Complex.exp ((x : ℂ) / 2) -
+        centeredLogThetaLift (1 : PontryaginDual CQ) σ f x) ^ 2 < 1 / 25 := by
   let σ : ℝ≥0ˣ →ₜ* IQ := ⟨canonicalIdeleNormSection ℚ, canonicalIdeleNormSection_continuous ℚ⟩
   have hσ : RightInverse σ (ideleNorm ℚ) := canonicalIdeleNormSection_rightInverse ℚ
   let e : ℝ ≃ₜ ℝ≥0ˣ := Real.expOrderIso.toHomeomorph.trans (Nonneg.unitsHomeomorphPos ℝ).symm
@@ -47,6 +46,18 @@ private theorem rationalTheta_zero_bounds :
     simpa only [E, hiddenThetaCost, neg_zero, intervalSobolevDensity, mul_zero, zero_mul, Real.exp_zero,
       max_self, zero_div, Real.rpow_zero, mul_one, hθ, Real.sq_sqrt (integral_nonneg fun _ ↦ sq_nonneg _)]
       using hdist g hg
+  exact ⟨σ, hσ, f, hs, hE⟩
+
+private theorem rationalTheta_zero_bounds :
+    let Z := {ρ : ℂ // 1 / 2 < ρ.re ∧
+      0 < meromorphicOrderAt (continuedCompletedHeckeL (1 : PontryaginDual CQ)) ρ}
+    let d (ρ : Z) := (2 * ρ.val.re - 1) / ‖ρ.val‖ ^ 2
+    (∀ ρ : Z, d ρ < 1 / 25) ∧ Summable d ∧ ∑' ρ : Z, d ρ < Real.log (25 / 24) := by
+  intro Z d
+  obtain ⟨σ, hσ, f, hs, hError⟩ := rationalTheta_supported_test
+  let E := hiddenThetaCost 0 0 0 (fun x ↦ Complex.exp ((x : ℂ) / 2) -
+      centeredLogThetaLift (1 : PontryaginDual CQ) σ f x) ^ 2
+  have hE : E < 1 / 25 := hError
   obtain ⟨h1, h2⟩ := centeredLogThetaLift_right_zero_sum (1 : PontryaginDual CQ) σ hσ f hs (lt_trans hE (by norm_num))
   have hsingle (ρ : Z) : d ρ < 1 / 25 := by
     have h := centeredLogThetaLift_halfLine_distance (1 : PontryaginDual CQ) σ hσ f hs ρ.val
@@ -63,15 +74,22 @@ private theorem rationalTheta_zero_bounds :
   rw [inv_eq_one_div, div_lt_iff₀ (by linarith)]
   linarith
 
+private theorem rationalTheta_order_eq (s : ℂ) (hs : 1 / 2 < s.re) :
+    meromorphicOrderAt riemannZeta s = meromorphicOrderAt (continuedCompletedHeckeL (1 : PontryaginDual CQ)) s := by
+  have hm : MeromorphicOn riemannZeta univ := by
+    simpa only [DirichletCharacter.LFunction_modOne_eq] using
+      meromorphic_dirichletLFunction (1 : DirichletCharacter ℂ 1)
+  exact meromorphicOrderAt_finiteHeckeL_continuation (1 : PontryaginDual CQ) hm (fun t ↦
+    (dedekindZeta_rat_eq_riemannZeta t.property).symm.trans
+      (finiteHeckeL_one_eq_dedekindZeta (K := ℚ) t).symm) (by linarith : 0 < s.re)
+
 private theorem riemannZeta_right_zero_order (s : ℂ) (hs : 1 / 2 < s.re) (hz : riemannZeta s = 0) :
     0 < meromorphicOrderAt (continuedCompletedHeckeL (1 : PontryaginDual CQ)) s := by
   have hm : MeromorphicOn riemannZeta univ := by
     simpa only [DirichletCharacter.LFunction_modOne_eq] using
       meromorphic_dirichletLFunction (1 : DirichletCharacter ℂ 1)
   have hne : s ≠ 1 := fun h ↦ riemannZeta_one_ne_zero (h ▸ hz)
-  rw [← meromorphicOrderAt_finiteHeckeL_continuation (1 : PontryaginDual CQ) hm (fun t ↦
-    (dedekindZeta_rat_eq_riemannZeta t.property).symm.trans
-      (finiteHeckeL_one_eq_dedekindZeta (K := ℚ) t).symm) (by linarith : 0 < s.re)]
+  rw [← rationalTheta_order_eq s hs]
   apply (tendsto_zero_iff_meromorphicOrderAt_pos (hm _ (mem_univ _))).mp
   rw [← hz]
   exact (differentiableAt_riemannZeta hne).continuousAt.continuousWithinAt
@@ -94,6 +112,39 @@ theorem riemannZeta_right_zero_sum_lt_log :
   have hl : ∑' ρ : Z, d ρ ≤ ∑' ρ : H, f ρ :=
     h'.tsum_le_tsum_of_inj i hi (fun a _ ↦ hf a) (fun _ ↦ le_rfl) h
   exact ⟨h', hl.trans_lt hb⟩
+
+/-- The ordinary Riemann zeta zeros to the right of the line, counted with their actual
+orders, have summable normalized displacement and total strictly below log(25/24). -/
+theorem riemannZeta_right_zero_sum_with_multiplicity_lt_log :
+    let Z := {ρ : ℂ // 1 / 2 < ρ.re ∧ riemannZeta ρ = 0}
+    let m (ρ : Z) := (meromorphicOrderAt riemannZeta ρ.val).untop₀.toNat
+    let d (ρ : Z) := (m ρ : ℝ) * ((2 * ρ.val.re - 1) / ‖ρ.val‖ ^ 2)
+    Summable d ∧ ∑' ρ : Z, d ρ < Real.log (25 / 24) := by
+  intro Z m d
+  obtain ⟨σ, hσ, f, hs, hE⟩ := rationalTheta_supported_test
+  let E := hiddenThetaCost 0 0 0 (fun x ↦ Complex.exp ((x : ℂ) / 2) -
+      centeredLogThetaLift (1 : PontryaginDual CQ) σ f x) ^ 2
+  have hE' : E < 1 / 25 := hE
+  let L := continuedCompletedHeckeL (1 : PontryaginDual CQ)
+  let H := {ρ : ℂ // 1 / 2 < ρ.re ∧ 0 < meromorphicOrderAt L ρ}
+  let D (ρ : H) := (((meromorphicOrderAt L ρ.val).untop₀.toNat : ℕ) : ℝ) *
+    ((2 * ρ.val.re - 1) / ‖ρ.val‖ ^ 2)
+  have hL : Summable D ∧ ∑' ρ : H, D ρ ≤ -Real.log (1 - E) :=
+    centeredLogThetaLift_right_zero_sum_with_multiplicity (1 : PontryaginDual CQ) σ hσ f hs
+      (lt_trans hE (by norm_num))
+  let i (ρ : Z) : H := ⟨ρ.val, ρ.property.1, riemannZeta_right_zero_order ρ.val ρ.property.1 ρ.property.2⟩
+  have hi : Injective i := fun _ _ h ↦ Subtype.ext (congrArg (fun w : H ↦ (w.val : ℂ)) h)
+  have heq (ρ : Z) : d ρ = D (i ρ) := by
+    dsimp only [d, m, D, i, L]
+    rw [rationalTheta_order_eq ρ.val ρ.property.1]
+  have h' : Summable d := (hL.1.comp_injective (i := i) hi).congr (fun ρ ↦ (heq ρ).symm)
+  have hnon (ρ : H) : 0 ≤ D ρ := mul_nonneg (Nat.cast_nonneg _) (div_nonneg (by linarith [ρ.property.1]) (sq_nonneg _))
+  refine ⟨h', (h'.tsum_le_tsum_of_inj i hi (fun a _ ↦ hnon a) (fun ρ ↦ (heq ρ).le) hL.1).trans_lt
+    (hL.2.trans_lt ?_)⟩
+  rw [← Real.log_inv]
+  apply Real.log_lt_log (inv_pos.mpr (by linarith))
+  rw [inv_eq_one_div, div_lt_iff₀ (by linarith)]
+  linarith
 
 /-- The same adelic test gives a closed zero-free disk for the ordinary Riemann zeta
 function, with center 25 and squared radius 600. -/
