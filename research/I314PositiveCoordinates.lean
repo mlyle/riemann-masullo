@@ -4,6 +4,8 @@ public import RiemannMasullo.Ch07_SchauderBasesZeta.Sec4
 import all RiemannMasullo.Ch10_TraceSpectral.Sec3
 import all RiemannMasullo.Ch10_TraceSpectral.Sec2
 import all RiemannMasullo.Ch07_SchauderBasesZeta.Sec4
+import Mathlib.LinearAlgebra.Vandermonde
+import all RiemannMasullo.AppC_LCTVS.Sec3a_part2
 import all RiemannMasullo.Ch03_IdelicZeta.Sec2
 import RiemannMasullo.Ch12_TraceGeometric.Sec5
 import Mathlib.Analysis.LocallyConvex.Barrelled
@@ -18,6 +20,13 @@ selected component retains at most one jet, universal rank-one summability
 forces that same polynomial bound. This gives an equivalence for compact
 insertions. At a site with several jets, the necessary zeroth-coordinate
 estimate in #7333 compares only with coordinates outside that site.
+
+A separate complete-block criterion below treats multiple jets without splitting
+their projections. If their number is uniformly bounded on the selected
+component, the universal compact-insertion assertion is equivalent to polynomial
+growth of the whole block projections. Rank-one insertions already imply the
+bound, and it suffices for all bounded insertions and trace-norm Cauchy tails.
+Neither criterion proves that the required bounds hold for actual Hecke zeros.
 -/
 @[expose] public noncomputable section
 open Function Set Filter MeasureTheory Topology IsDedekindDomain NumberField
@@ -604,5 +613,496 @@ theorem spectralStrip_simple_component_blocks_iff_polynomial_coordinate_norms
   · intro h φ hφ U
     exact (spectralStrip_polynomial_coordinate_norms_bounded_blocks χ hχ a hα hs x L hj η h φ hφ U.val).of_norm
 #print axioms spectralStrip_simple_component_blocks_iff_polynomial_coordinate_norms
+
+
+/-- Quotient translations act on every jet at one zero by the finite binomial matrix. -/
+private theorem strip_translation_finite_block
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (a : ℝ) {α s : ℝ}
+    (hα : 0≤α) (hs : 1<s)
+    (L : J(χ,a,α,s) → StrongDual ℂ H(a,hα,hs)) (hj : ∀ j, D(a,hα,hs) (L j) = raw(χ,hα,hs,j)) :
+    ∃ ρ : C𝔽 →* (H(a,hα,hs) →L[ℂ] H(a,hα,hs)),
+      ∀ (z : Z(χ,a,α)) (m : Fin (N(χ,a,α,s,z))) (g : C𝔽) (u : H(a,hα,hs)),
+        L (jet(z,m)) (ρ g u) = ∑ i : Fin (m.val+1),
+          (ideleClassNormTwist (χ z.val.1) (pt(z.val.2.1,z.val.2.2)) g *
+          (logIdeleClassNorm F g : ℂ)^(m.val-i.val) * (m.val.choose i.val : ℂ)) *
+          L (jet(z,(⟨i.val,(Nat.le_of_lt_succ i.isLt).trans_lt m.isLt⟩ : Fin (N(χ,a,α,s,z))))) u := by
+  let hS := le_of_lt (zero_lt_one.trans hs)
+  let hI := neg_le_self hα
+  let θ := globalThetaSobolev F (α := -α) (β := α) (s := s) a hI hS
+  obtain ⟨ρ,hρ,_⟩ := spectralSobolevIsotypeQuotient_isometry (F:=F) a hI hS (1 : PontryaginDual C₁)
+  refine ⟨ρ,?_⟩
+  intro z m g u
+  obtain ⟨v,hv⟩ := θ.mkQ_surjective u
+  let J (i : ℕ) := spectralZeroJet (χ z.val.1) z.val.2.1 z.val.2.2 i
+  let j : J(χ,a,α,s) := jet(z,m)
+  have hnorm : Continuous (ideleClassNorm F) := (isProperMap_ideleClassNorm F).continuous
+  let τ := stripJetTranslation (G := C𝔽) μ𝔽 (ideleClassNorm F) hnorm (-α) α s hI hS
+  have heval (k : J(χ,a,α,s)) := spectralStripConvolution_jet_eval (a:=a) hα hs χ k (L k) (hj k)
+  have hint (i : ℕ) (hi : i ≤ m.val) : Integrable (fun y ↦ v y * J i y) μ𝔽 := by
+    let k : Fin (N(χ,a,α,s,z)) := ⟨i, hi.trans_lt m.isLt⟩
+    exact (heval (jet(z,k)) v).1
+  have hae := stripJetTranslation_apply (G := C𝔽) μ𝔽 (ideleClassNorm F) hnorm (-α) α s hI hS g v
+  have ht := stripJet_all_translated_moments (F:=F) (α:=α) (s:=s) (χ z.val.1) z.val.2.1 z.val.2.2 m.val v hint g
+  rw [← hv, hρ]
+  refine (heval j (τ g v)).2.trans ((stripJet_integrated_product_congr μ𝔽 (J m.val) hae).trans (ht.trans ?_))
+  apply Finset.sum_congr rfl
+  intro i _
+  let k : Fin (N(χ,a,α,s,z)) := ⟨i.val,(Nat.le_of_lt_succ i.isLt).trans_lt m.isLt⟩
+  exact congrArg (_ * ·) (heval (jet(z,k)) v).2.symm
+
+open Matrix
+/-- At a uniformly bounded jet length the moment interpolation matrix is fixed once and for all. -/
+private theorem finite_jet_moment_interpolation (k : ℕ) :
+    ∃ T : (Fin k → ℂ) →L[ℂ] (Fin k → ℂ), ∀ (a : Fin k → ℂ) (q : Fin k),
+      ∑ j : Fin k, T a j * (j.val : ℂ)^q.val = a q := by
+  classical
+  let v : Fin k → ℂ := fun j ↦ (j.val : ℂ)
+  let V := Matrix.vandermonde v
+  have hv : Function.Injective v := fun i j h ↦ Fin.ext (by dsimp [v] at h; exact_mod_cast h)
+  have hd : IsUnit V.det := isUnit_iff_ne_zero.mpr (Matrix.det_vandermonde_ne_zero_iff.mpr hv)
+  refine ⟨(V⁻¹.vecMulLinear).toContinuousLinearMap,?_⟩
+  intro a q
+  change ((a ᵥ* V⁻¹) ᵥ* V) q = _
+  rw [Matrix.vecMul_vecMul, Matrix.nonsing_inv_mul _ hd, Matrix.vecMul_one]
+
+/-- On a complete block of length at most k, its convolution is a finite linear
+combination of fixed translations, with weights given by interpolation of its moments. -/
+private theorem complete_block_moment_interpolation {V : Type*} [NormedAddCommGroup V] [NormedSpace ℂ V]
+    {k n : ℕ} (hn : n ≤ k) (L : Fin n → StrongDual ℂ V) (x : Fin n → V)
+    (A : V →L[ℂ] V) (U : Fin k → (V →L[ℂ] V)) (κ : Fin k → ℂ) (hκ : ∀ j, κ j ≠ 0)
+    (b c : Fin k → ℂ)
+    (hm : ∀ q : Fin k, ∑ j : Fin k, c j * (j.val : ℂ)^q.val = b q)
+    (hA : ∀ (m : Fin n) (v : V), L m (A v) =
+      ∑ i : Fin (m.val+1), (m.val.choose i.val : ℂ) *
+        b ⟨m.val-i.val, by have H := m.isLt; omega⟩ *
+        L ⟨i.val, (Nat.le_of_lt_succ i.isLt).trans_lt m.isLt⟩ v)
+    (hU : ∀ (m : Fin n) (j : Fin k) (v : V), L m (U j v) =
+      ∑ i : Fin (m.val+1), (κ j * (j.val : ℂ)^(m.val-i.val) * (m.val.choose i.val : ℂ)) *
+        L ⟨i.val, (Nat.le_of_lt_succ i.isLt).trans_lt m.isLt⟩ v) :
+    (∑ m : Fin n, ((L m).comp A).smulRight (x m)) =
+      ∑ j : Fin k, (c j / κ j) • ((∑ m : Fin n, (L m).smulRight (x m)).comp (U j)) := by
+  classical
+  have hrow (m : Fin n) (v : V) : L m (A v) = ∑ j, (c j / κ j) * L m (U j v) := by
+    rw [hA]
+    simp_rw [hU,Finset.mul_sum]
+    rw [Finset.sum_comm (f := fun j (i : Fin (m.val+1)) ↦ _)]
+    apply Finset.sum_congr rfl
+    intro i _
+    let q : Fin k := ⟨m.val-i.val, by have H := m.isLt; omega⟩
+    let l := L ⟨i.val, (Nat.le_of_lt_succ i.isLt).trans_lt m.isLt⟩ v
+    change (m.val.choose i.val : ℂ) * b q * l = _
+    rw [← hm q,Finset.mul_sum,Finset.sum_mul]
+    refine Finset.sum_congr rfl fun j _ ↦ ?_
+    dsimp only [q,l]
+    field_simp [hκ j]
+
+  ext v
+  simp only [sum_apply, ContinuousLinearMap.smulRight_apply,
+    ContinuousLinearMap.comp_apply, smul_apply]
+  simp_rw [hrow,Finset.sum_smul,Finset.smul_sum,smul_smul]
+  exact Finset.sum_comm
+
+private theorem finite_jet_translation_insertion_norm {V : Type*} [NormedAddCommGroup V] [NormedSpace ℂ V]
+    {k : ℕ} (U : Fin k → (V →L[ℂ] V)) (P B : V →L[ℂ] V) (κ c : Fin k → ℂ)
+    (r : Fin k → ℝ) {M : ℝ} (hM : 0 ≤ M) (hr : ∀ j, ‖(κ j)⁻¹‖ ≤ r j)
+    (hc : ∀ j, ‖c j‖ ≤ M) (hB : B = ∑ j : Fin k, (c j / κ j) • (P.comp (U j))) :
+    ‖B‖ ≤ (∑ j : Fin k, r j * ‖U j‖) * M * ‖P‖ := by
+  rw [hB,Finset.sum_mul,Finset.sum_mul]
+  apply (norm_sum_le _ _).trans
+  refine Finset.sum_le_sum fun j _ ↦ ?_
+  rw [norm_smul,div_eq_mul_inv,norm_mul]
+  calc
+    _ ≤ (M*r j)*(‖P‖*‖U j‖) := mul_le_mul (mul_le_mul (hc j) (hr j) (norm_nonneg _) hM)
+      (ContinuousLinearMap.opNorm_comp_le ..) (norm_nonneg _) (mul_nonneg hM ((norm_nonneg _).trans (hr j)))
+    _ = _ := by ring
+
+private theorem strip_block_jet_moments_cauchy (χ : PontryaginDual C𝔽) (φ : BruhatCompactSupport C𝔽)
+    (w₀ : ℂ) {M : ℝ} (hM : ∀ w∈Metric.sphere w₀ 1, ‖∫ g, φ.val g * ideleClassNormTwist χ w g ∂μ𝔽‖ ≤ M)
+    (q : ℕ) : ‖∫ g, φ.val g * ideleClassNormTwist χ w₀ g * (logIdeleClassNorm F g : ℂ)^q ∂μ𝔽‖ ≤ q.factorial*M := by
+  rw [stripMellinMoment_eq_twisted_integral χ φ w₀ q]
+  have hφ := continuous_of_bruhatSmooth ((mem_bruhatSmoothSubmodule_iff _).mp φ.property.1)
+  let n : C𝔽 →ₜ* ℝ≥0ˣ := ⟨ideleClassNorm F,(isProperMap_ideleClassNorm F).continuous⟩
+  simpa only [one_pow,div_one] using
+    stripMellinMoment_cauchy μ𝔽 (logIdeleClassNorm F) (fun g : C𝔽 ↦ φ.val g * (χ g : ℂ)) (continuous_logModule' n)
+      (hφ.mul (continuous_subtype_val.comp χ.continuous)) (show HasCompactSupport φ.val from φ.property.2).mul_right w₀ q
+      (show (0:ℝ)<1 by norm_num) (fun w hw ↦ by
+        have h := stripMellinMoment_eq_twisted_integral χ φ w 0
+        simp only [pow_zero,mul_one] at h
+        exact (congrArg norm h.symm).le.trans (hM w hw))
+
+/-- The operator norm of every complete convolved zero block of at most k jets
+is controlled by its full projection and the Mellin transform on the unit circle. -/
+theorem spectralStripConvolution_complete_block_circle (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
+    (a : ℝ) {α s : ℝ} (hα : 0≤α) (hs : 1<s)
+    (x : J(χ,a,α,s) → H(a,hα,hs)) (L : J(χ,a,α,s) → StrongDual ℂ H(a,hα,hs))
+    (hj : ∀ i, D(a,hα,hs) (L i) = raw(χ,hα,hs,i)) (k : ℕ) :
+    ∃ C ≥ (0:ℝ), ∀ (z : Z(χ,a,α)), N(χ,a,α,s,z) ≤ k →
+      ∀ (φ : BruhatCompactSupport C𝔽) (M : ℝ), 0 ≤ M →
+      (∀ w∈Metric.sphere (pt(z.val.2.1,z.val.2.2)) 1, ‖∫ g, φ.val g * ideleClassNormTwist (χ z.val.1) w g ∂μ𝔽‖ ≤ M) →
+      ‖∑ m : Fin (N(χ,a,α,s,z)), ((L (jet(z,m))).comp A(a,hα,hs,φ)).smulRight (x (jet(z,m)))‖ ≤
+        C * M * ‖∑ m : Fin (N(χ,a,α,s,z)), (L (jet(z,m))).smulRight (x (jet(z,m)))‖ := by
+  obtain ⟨ρ,hρ⟩ := strip_translation_finite_block χ a hα hs L hj
+  obtain ⟨T,hT⟩ := finite_jet_moment_interpolation k
+  let e : ℝ ≃ₜ ℝ≥0ˣ := Real.expOrderIso.toHomeomorph.trans (Nonneg.unitsHomeomorphPos ℝ).symm
+  let g (j : Fin k) : C𝔽 := QuotientGroup.mk (canonicalIdeleNormSection F (e j.val))
+  have hg (j) : logIdeleClassNorm F (g j) = j.val := by
+    change Real.log ((ideleClassNorm F (g j)).val : ℝ) = _
+    rw [show ideleClassNorm F (g j) = _ from canonicalIdeleNormSection_rightInverse F (e j.val)]
+    exact Real.log_exp _
+  let U (j : Fin k) := ρ (g j)
+  let r (j : Fin k) := Real.exp (α*j.val)
+  let S := ∑ j : Fin k, r j * ‖U j‖
+  have hS : 0 ≤ S := Finset.sum_nonneg fun j _ ↦ mul_nonneg (Real.exp_pos _).le (norm_nonneg _)
+  refine ⟨S * ‖T‖ * k.factorial,by positivity,?_⟩
+  intro z hn φ M hM hc
+  let w₀ := pt(z.val.2.1,z.val.2.2)
+  let κ (j : Fin k) := ideleClassNormTwist (χ z.val.1) w₀ (g j)
+  let b (q : Fin k) := ∫ y, φ.val y * ideleClassNormTwist (χ z.val.1) w₀ y * (logIdeleClassNorm F y : ℂ)^q.val ∂μ𝔽
+  have hb : ‖b‖ ≤ k.factorial*M := by
+    apply (pi_norm_le_iff_of_nonneg (by positivity)).mpr
+    intro q
+    exact (strip_block_jet_moments_cauchy (χ z.val.1) φ w₀ hc q.val).trans
+      (mul_le_mul_of_nonneg_right (by exact_mod_cast Nat.factorial_le (Nat.le_of_lt q.isLt)) hM)
+  have hκnorm (j) : ‖κ j‖ = Real.exp (z.val.2.1 * j.val) := by
+    have hp : 0 < ((ideleClassNorm F (g j)).val : ℝ) := NNReal.coe_pos.mpr (Units.zero_lt _)
+    change ‖(χ z.val.1 (g j) : ℂ) * (((ideleClassNorm F (g j)).val : ℝ) : ℂ)^w₀‖ = _
+    rw [norm_mul,Circle.norm_coe,one_mul,Complex.norm_cpow_eq_rpow_re_of_pos hp, Real.rpow_def_of_pos hp]
+    change Real.exp (logIdeleClassNorm F (g j) * _) = _
+    rw [hg]
+    simp [w₀,mul_comm]
+  have hκ (j) : κ j ≠ 0 := norm_ne_zero_iff.mp ((hκnorm j).trans_ne (Real.exp_pos _).ne')
+  have hr (j) : ‖(κ j)⁻¹‖ ≤ r j := by
+    rw [norm_inv,hκnorm,←Real.exp_neg]; apply Real.exp_le_exp.mpr
+    rw [←neg_mul]; exact mul_le_mul_of_nonneg_right (by linarith [z.property.1.1]) (Nat.cast_nonneg _)
+  let l (m : Fin (N(χ,a,α,s,z))) := L (jet(z,m))
+  let y (m : Fin (N(χ,a,α,s,z))) := x (jet(z,m))
+  have row := complete_block_moment_interpolation hn l y A(a,hα,hs,φ) U κ hκ b (T b) (hT b)
+    (spectralStripConvolution_all_jet_coefficients a hα hs χ L hj φ z)
+    (fun m j v ↦ by simpa only [hg,Complex.ofReal_natCast] using hρ z m (g j) v)
+  have est := finite_jet_translation_insertion_norm U _ _ κ (T b) r
+    (show 0 ≤ ‖T‖*(k.factorial*M) by positivity) hr
+    (fun j ↦ (norm_le_pi_norm (T b) j).trans ((T.le_opNorm _).trans (mul_le_mul_of_nonneg_left hb (norm_nonneg _)))) row
+  convert est using 1
+  change S * ‖T‖ * _ * _ * _ = S * (_ * (_ * _)) * _
+  ring
+#print axioms spectralStripConvolution_complete_block_circle
+
+private theorem finite_block_traceNorm_le {V : Type*} [NormedAddCommGroup V] [InnerProductSpace ℂ V] [CompleteSpace V]
+    {n : ℕ} (L : Fin n → StrongDual ℂ V) (x : Fin n → V) :
+    let r (m : Fin n) : nuclearEndomorphisms V := ⟨(L m).smulRight (x m),smulRight_mem_nuclearEndomorphisms _ _⟩
+    traceNorm (∑ m, r m) ≤ n * ‖∑ m, (L m).smulRight (x m)‖ := by
+  classical
+  intro r
+  let T := ∑ m, r m
+  have hT : T.val = ∑ m, (L m).smulRight (x m) := by simp only [T, r, Submodule.coe_sum]
+  have hr : Module.rank ℂ T.val.toLinearMap.range ≤ (n : Cardinal) := by
+    let S := Submodule.span ℂ (range x)
+    have hle : T.val.toLinearMap.range ≤ S := by
+      rintro _ ⟨v,rfl⟩
+      change T.val v ∈ S
+      rw [hT,sum_apply]
+      exact Submodule.sum_mem _ (fun m _ ↦ S.smul_mem _ (Submodule.subset_span ⟨m,rfl⟩))
+    apply (Submodule.rank_mono hle).trans
+    have := FiniteDimensional.span_of_finite ℂ (Set.finite_range x)
+    rw [← Module.finrank_eq_rank]
+    exact_mod_cast (by simpa [Set.finrank,S] using finrank_range_le_card (R:=ℂ) x : Module.finrank ℂ S ≤ n)
+  have hzero (i : ℕ) (hi : i ∉ Finset.range n) : approximationNumber T.val i = 0 := by
+    exact approximationNumber_eq_zero_of_rank_le _ (hr.trans (by exact_mod_cast (by simpa using hi : n ≤ i)))
+  have he := schattenNorm_one_eq_traceNorm T
+  simp only [schattenNorm, Real.rpow_one, div_one] at he
+  change traceNorm T ≤ _
+  rw [← he,tsum_eq_sum hzero,←hT]
+  calc
+    _ ≤ ∑ _i ∈ Finset.range n, ‖T.val‖ := by
+      apply Finset.sum_le_sum
+      intro i _
+      simpa using approximationNumber_le_norm_sub T.val 0 (n:=i) (by simp)
+    _ = _ := by simp
+private theorem finite_block_trace_insertion_le {V : Type*} [NormedAddCommGroup V] [InnerProductSpace ℂ V] [CompleteSpace V]
+    {n : ℕ} (L : Fin n → StrongDual ℂ V) (x : Fin n → V) (U : V →L[ℂ] V) :
+    ‖∑ m, L m (U (x m))‖ ≤ ‖U‖ * (n * ‖∑ m, (L m).smulRight (x m)‖) := by
+  classical
+  let r (m : Fin n) (v : V) : nuclearEndomorphisms V := ⟨(L m).smulRight v,smulRight_mem_nuclearEndomorphisms _ _⟩
+  let T := ∑ m, r m (x m)
+  let D : nuclearEndomorphisms V := ⟨U*T.val, mul_mem_nuclearEndomorphisms_left _ T⟩
+  have hd : D = ∑ m, r m (U (x m)) := by
+    apply Subtype.ext
+    ext v
+    change U (T.val v) = _
+    simp only [T,r,Submodule.coe_sum,sum_apply,ContinuousLinearMap.smulRight_apply,map_sum,map_smul]
+  obtain ⟨tr,htr⟩ := hilbertTrace_linear (H:=V)
+  have ht : hilbertTrace D = ∑ m, L m (U (x m)) := by
+    rw [← htr,hd,map_sum]; simp only [htr,r,hilbertTrace_smulRight]
+  rw [← ht]
+  exact (norm_hilbertTrace_le D).trans ((traceNorm_mul_left_le U T).trans (mul_le_mul_of_nonneg_left (finite_block_traceNorm_le L x) (norm_nonneg _)))
+
+/-- A polynomial bound on the complete block projections of a component, with uniformly
+bounded surviving multiplicities on that component only, suffices for the genuine block norms. -/
+private theorem spectralStrip_polynomial_complete_projections_summable
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ) (a : ℝ) {α s : ℝ}
+    (hα : 0≤α) (hs : 1<s)
+    (x : J(χ,a,α,s) → H(a,hα,hs)) (L : J(χ,a,α,s) → StrongDual ℂ H(a,hα,hs))
+    (hj : ∀ i, D(a,hα,hs) (L i) = raw(χ,hα,hs,i)) (η : PontryaginDual C₁)
+    (k : ℕ) (hk : ∀ z : Z(χ,a,α), z.val.1=η → N(χ,a,α,s,z) ≤ k)
+    (hpoly : ∃ C≥(0:ℝ), ∃ d : ℕ, ∀ z : Z(χ,a,α), z.val.1=η →
+      ‖∑ m : Fin (N(χ,a,α,s,z)), (L (jet(z,m))).smulRight (x (jet(z,m)))‖ ≤ C*(1+|z.val.2.2|)^d)
+    (φ : BruhatCompactSupport C𝔽) (hφ : hom(φ,η)) :
+    Summable (fun z : Z(χ,a,α) ↦ (N(χ,a,α,s,z):ℝ) * ‖∑ m : Fin (N(χ,a,α,s,z)),
+      ((L (jet(z,m))).comp A(a,hα,hs,φ)).smulRight (x (jet(z,m)))‖) := by
+  classical
+  obtain ⟨C,hC,d,hP⟩ := hpoly
+  obtain ⟨B,hB,hcircle⟩ := circle_decay (χ η) φ hα (show (0:ℝ)<1 by norm_num) (d+2) (by omega)
+  obtain ⟨D,hD,hd⟩ := spectralStripConvolution_complete_block_circle χ a hα hs x L hj k
+  let Q (z : Z(χ,a,α)) := ∑ m : Fin (N(χ,a,α,s,z)), ((L (jet(z,m))).comp A(a,hα,hs,φ)).smulRight (x (jet(z,m)))
+  let P (z : Z(χ,a,α)) := ∑ m : Fin (N(χ,a,α,s,z)), (L (jet(z,m))).smulRight (x (jet(z,m)))
+  let f (z : Z(χ,a,α)) := (N(χ,a,α,s,z):ℝ)*‖Q z‖
+  let X := X(χ,a,α,s,η)
+  have hzero (z : Z(χ,a,α)) (hz : z ∉ range (Subtype.val : X → Z(χ,a,α))) : f z = 0 := by
+    by_cases he : z.val.1=η
+    · have hn : N(χ,a,α,s,z)=0 := by
+        by_contra h
+        exact hz ⟨⟨z,he,Nat.pos_of_ne_zero h⟩,rfl⟩
+      dsimp only [f]; rw [hn]; norm_num
+    · obtain ⟨D',_,hd'⟩ := spectralStripConvolution_complete_block_circle χ a hα hs x L hj (N(χ,a,α,s,z))
+      have hc (w : ℂ) (_ : w∈Metric.sphere (pt(z.val.2.1,z.val.2.2)) 1) :
+          ‖∫ y, φ.val y * ideleClassNormTwist (χ z.val.1) w y ∂μ𝔽‖ ≤ 0 := by
+        have h := spectralIsotype_mellin_eq_zero χ hχ he φ hφ w
+        rw [(spectralConvolution_mellin_integrable _ _ _).2] at h
+        simp only [h,norm_zero,le_refl]
+      have hb := hd' z le_rfl φ 0 le_rfl hc
+      have hQ : ‖Q z‖ = 0 := le_antisymm (by simpa [Q] using hb) (norm_nonneg _)
+      simp [f,hQ]
+  change Summable f
+  apply (Subtype.val_injective.summable_iff (f:=f) hzero).mp
+  apply Summable.of_nonneg_of_le (fun z ↦ mul_nonneg (Nat.cast_nonneg _) (norm_nonneg _)) _ ((positive_strip_jet_count χ a α s η).mul_left (D*B*C))
+  intro z
+  let r := 1+|t(z)|
+  have hr : 0<r := by dsimp only [r]; positivity
+  let M := B/r^(d+2)
+  have hM : 0≤M := by dsimp only [M]; positivity
+  have hcircle' (w) (hw : w∈Metric.sphere (pt(b(z),t(z))) 1) :
+      ‖∫ g, φ.val g * ideleClassNormTwist (χ z.val.val.1) w g ∂μ𝔽‖ ≤ M := by
+    rw [z.property.1]
+    simpa [nuclearityTestMellin] using hcircle (pt(b(z),t(z))) (by simpa using abs_le.mpr z.val.property.1) w hw
+  have hz := hd z.val (hk _ z.property.1) φ M hM hcircle'
+  change (N(χ,a,α,s,z.val):ℝ)*‖Q z.val‖ ≤ D*B*C*((N(χ,a,α,s,z.val):ℝ)/r^2)
+  calc
+    _ ≤ (N(χ,a,α,s,z.val):ℝ)*(D*M*(C*r^d)) := mul_le_mul_of_nonneg_left
+      (hz.trans (mul_le_mul_of_nonneg_left (hP _ z.property.1) (mul_nonneg hD hM))) (Nat.cast_nonneg _)
+    _ = _ := by dsimp only [M]; rw [pow_add]; field_simp
+
+/-- A diagonal flag of jet rows annihilates the k-th power of the centered operator. -/
+private theorem finite_block_triangular_annihilates {V : Type*} [NormedAddCommGroup V] [NormedSpace ℂ V]
+    {n k : ℕ} (hn : n ≤ k) (L : Fin n → StrongDual ℂ V) (x : Fin n → V)
+    (A : V →L[ℂ] V) (c : ℂ)
+    (ht : ∀ (m : Fin n) (u : V), (∀ i < m, L i u = 0) → L m (A u) = c*L m u) :
+    (∑ m : Fin n, (L m).smulRight (x m)) * ((c • (1 : V →L[ℂ] V)) - A)^k = 0 := by
+  let R := (c • (1 : V →L[ℂ] V)) - A
+  have hv (j : ℕ) (m : Fin n) (hm : m.val < j) (u : V) : L m ((R^j) u) = 0 := by
+    induction j generalizing m with
+    | zero => omega
+    | succ j ih =>
+      rw [pow_succ']
+      change L m (c • ((R^j) u) - A ((R^j) u)) = 0
+      rw [map_sub,map_smul, ht m _ (fun i hi ↦ ih i (by change i.val < m.val at hi; omega))]
+      exact sub_self _
+  ext u
+  change (∑ m : Fin n, (L m).smulRight (x m)) ((R^k) u) = 0
+  simp only [sum_apply,ContinuousLinearMap.smulRight_apply]
+  exact Finset.sum_eq_zero (fun m _ ↦ by rw [hv k m (m.isLt.trans_le hn),zero_smul])
+
+/-- From a fixed uniform bound for the spectral parameter and the convolved blocks,
+the eigenvalue to the power k controls each whole block. -/
+private theorem bounded_blocks_control_power {V : Type*} [NormedAddCommGroup V] [NormedSpace ℂ V]
+    (A : V →L[ℂ] V) (k : ℕ) (M : ℝ) (hM : 0 ≤ M) :
+    ∃ B ≥ (0:ℝ), ∀ (P : V →L[ℂ] V) (c : ℂ), ‖c‖ ≤ M →
+      P * (c • (1 : V →L[ℂ] V) - A)^k = 0 → ‖c‖^k * ‖P‖ ≤ ‖P*A‖ * B := by
+  rcases subsingleton_or_nontrivial V with h | h
+  · exact ⟨0,le_rfl,fun P _ _ _ ↦ by rw [Subsingleton.elim P 0]; simp⟩
+  let := h
+  let R := 1 + M * ‖(1 : V →L[ℂ] V)‖ + ‖A‖
+  have hR : 1 ≤ R := by dsimp [R]; linarith [mul_nonneg hM (norm_nonneg (1 : V →L[ℂ] V)),norm_nonneg A]
+  refine ⟨k*R^k,by positivity,?_⟩
+  intro P c hc hnil
+  let X := c • (1 : V →L[ℂ] V)
+  let Y := X-A
+  have hXY : Commute X Y := (Commute.refl X).sub_right ((Commute.one_left A).smul_left c)
+  let W := ∑ i ∈ Finset.range k, X^i * Y^(k-1-i)
+  have he : A * W = X^k - Y^k := by simpa only [Y,sub_sub_cancel] using hXY.mul_geom_sum₂ k
+  have hPW : P*A*W = (c^k) • P := by
+    rw [mul_assoc,he,mul_sub,hnil,sub_zero,show X^k = c^k • (1 : V →L[ℂ] V) by simp [X,smul_pow]]
+    simp only [mul_smul_comm,mul_one]
+  have hX : ‖X‖ ≤ M*‖(1 : V →L[ℂ] V)‖ := by rw [show ‖X‖ = _ from norm_smul c _]; gcongr
+  have hx : ‖X‖ ≤ R := hX.trans (by dsimp [R]; linarith [norm_nonneg A])
+  have hy : ‖Y‖ ≤ R := (norm_sub_le _ _).trans (by dsimp only [R]; linarith)
+  have hW : ‖W‖ ≤ k*R^k := by
+    apply (norm_sum_le _ _).trans
+    calc
+      _ ≤ ∑ _i ∈ Finset.range k, R^k := by
+        refine Finset.sum_le_sum fun i hi ↦ ?_
+        apply (norm_mul_le ..).trans
+        apply (mul_le_mul ((norm_pow_le ..).trans (pow_le_pow_left₀ (norm_nonneg _) hx _)) ((norm_pow_le ..).trans
+          (pow_le_pow_left₀ (norm_nonneg _) hy _)) (norm_nonneg _) (by positivity)).trans
+        rw [← pow_add]; apply pow_le_pow_right₀ hR; have := Finset.mem_range.mp hi; omega
+      _ = _ := by simp
+  calc
+    _ = ‖P*A*W‖ := by rw [hPW,norm_smul,norm_pow]
+    _ ≤ ‖P*A‖ * (k*R^k) := (norm_mul_le ..).trans (mul_le_mul_of_nonneg_left hW (norm_nonneg _))
+
+/-- For uniformly bounded complete jet multiplicities, rank-one summability for all
+homogeneous tests forces polynomial operator-norm growth of the whole bare projections. -/
+theorem spectralStrip_complete_blocks_require_polynomial_projection_norms
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ) (a : ℝ) {α s : ℝ}
+    (hα : 0≤α) (hs : 1<s)
+    (x : J(χ,a,α,s) → H(a,hα,hs)) (L : J(χ,a,α,s) → StrongDual ℂ H(a,hα,hs))
+    (hj : ∀ i, D(a,hα,hs) (L i) = raw(χ,hα,hs,i)) (η : PontryaginDual C₁)
+    (k : ℕ) (hk : ∀ z : Z(χ,a,α), z.val.1=η → N(χ,a,α,s,z) ≤ k)
+    (hc : ∀ φ : BruhatCompactSupport C𝔽, (hom(φ,η)) →
+      ∀ (v : H(a,hα,hs)) (g : StrongDual ℂ H(a,hα,hs)),
+        Summable (fun z : Z(χ,a,α) ↦ ∑ m : Fin (N(χ,a,α,s,z)),
+          L (jet(z,m)) (A(a,hα,hs,φ) ((g.smulRight v) (x (jet(z,m))))))) :
+    ∃ C≥(0:ℝ), ∃ d : ℕ, ∀ z : Z(χ,a,α), z.val.1=η →
+      ‖∑ m : Fin (N(χ,a,α,s,z)), (L (jet(z,m))).smulRight (x (jet(z,m)))‖ ≤ C*(1+|z.val.2.2|)^d := by
+  classical
+  let K := k+1
+  have hK : K ≠ 0 := Nat.succ_ne_zero k
+  let I := {z : Z(χ,a,α) // z.val.1=η}
+  let j (z : Z(χ,a,α)) (m : Fin (N(χ,a,α,s,z))) : J(χ,a,α,s) := jet(z,m)
+  let P (z : I) := ∑ m : Fin (N(χ,a,α,s,z.val)), (L (j z.val m)).smulRight (x (j z.val m))
+  let w (z : I) := ‖P z‖^((K:ℝ)⁻¹)
+  have hw (z : I) : 0≤w z := Real.rpow_nonneg (norm_nonneg _) _
+  have hp (z : I) : w z ^ K = ‖P z‖ := Real.rpow_inv_natCast_pow (norm_nonneg _) hK
+  have hfix (φ : BruhatCompactSupport C𝔽) (hφ : hom(φ,η)) :
+      BddAbove (range fun z : I ↦ ‖nuclearityTestMellin (χ η) φ (pt(b(z),t(z)))‖ * w z) := by
+    let A := A(a,hα,hs,φ)
+    obtain ⟨C,hC,hb⟩ := spectralConvolutionFiniteSum_singleton_norm_bound A x L _ j (hc φ hφ)
+    obtain ⟨M,hM⟩ := (spectralNuclearityDenominator_closed_invariant_mellin (χ η) φ).2 (-α) α
+    obtain ⟨B,hB,hbound⟩ := bounded_blocks_control_power A K (max M 0) (le_max_right _ _)
+    refine ⟨max 1 (C*B),forall_mem_range.mpr fun z ↦ ?_⟩
+    let c := nuclearityTestMellin (χ η) φ (pt(b(z),t(z)))
+    have hce : ‖c‖ ≤ max M 0 := (hM _ (by simpa using z.val.property.1.1)
+      (by simpa using z.val.property.1.2)).trans (le_max_left _ _)
+    have hid : P z * A = spectralConvolutionFiniteSum A x L {z.val} _ j := by
+      ext u
+      change (P z) (A u) = _
+      simp [P,spectralConvolutionFiniteSum,sum_apply]
+    have heq := finite_block_triangular_annihilates ((hk z.val z.property).trans (Nat.le_succ _))
+      (fun m ↦ L (j z.val m)) (fun m ↦ x (j z.val m)) A c (fun m u hu ↦ by
+        have e := spectralStripConvolution_jet_top a hα hs χ L hj φ z.val m u hu
+        rw [(spectralConvolution_mellin_integrable _ _ _).2] at e
+        simpa only [c,nuclearityTestMellin,←z.property] using e)
+    have h := hbound (P z) c hce heq
+    rw [hid] at h
+    have hpow : (‖c‖*w z)^K ≤ C*B := by
+      rw [mul_pow,hp]; exact h.trans (mul_le_mul_of_nonneg_right (hb _) hB)
+    change ‖c‖*w z ≤ _
+    rcases le_total (‖c‖*w z) 1 with hl | hl
+    · exact hl.trans (le_max_left _ _)
+    · exact (le_self_pow₀ hl hK).trans (hpow.trans (le_max_right _ _))
+  obtain ⟨C,hC,d,hd⟩ := LineModulation.homogeneous_strip_mellin_polynomial hα χ hχ η
+    (fun z : I ↦ b(z)) (fun z : I ↦ t(z)) w (fun z ↦ abs_le.mpr z.val.property.1) hw hfix
+  refine ⟨C^K,by positivity,d*K,fun z hz ↦ ?_⟩
+  let u : I := ⟨z,hz⟩
+  change ‖P u‖ ≤ _
+  rw [←hp u, pow_mul,←mul_pow]
+  exact pow_le_pow_left₀ (hw u) (hd u) K
+#print axioms spectralStrip_complete_blocks_require_polynomial_projection_norms
+
+/-- Polynomial growth of the complete projections suffices for every bounded insertion. -/
+theorem spectralStrip_complete_block_bounded_insertions
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ) (a : ℝ) {α s : ℝ}
+    (hα : 0≤α) (hs : 1<s)
+    (x : J(χ,a,α,s) → H(a,hα,hs)) (L : J(χ,a,α,s) → StrongDual ℂ H(a,hα,hs))
+    (hj : ∀ i, D(a,hα,hs) (L i) = raw(χ,hα,hs,i)) (η : PontryaginDual C₁)
+    (k : ℕ) (hk : ∀ z : Z(χ,a,α), z.val.1=η → N(χ,a,α,s,z) ≤ k)
+    (hpoly : ∃ C≥(0:ℝ), ∃ d : ℕ, ∀ z : Z(χ,a,α), z.val.1=η →
+      ‖∑ m : Fin (N(χ,a,α,s,z)), (L (jet(z,m))).smulRight (x (jet(z,m)))‖ ≤ C*(1+|z.val.2.2|)^d)
+    (φ : BruhatCompactSupport C𝔽) (hφ : hom(φ,η)) (U : H(a,hα,hs) →L[ℂ] H(a,hα,hs)) :
+    Summable (fun z : Z(χ,a,α) ↦ ‖∑ m : Fin (N(χ,a,α,s,z)), L (jet(z,m)) (A(a,hα,hs,φ) (U (x (jet(z,m)))))‖) := by
+  have hb := spectralStrip_polynomial_complete_projections_summable χ hχ a hα hs x L hj η k hk hpoly φ hφ
+  exact Summable.of_nonneg_of_le (fun _ ↦ norm_nonneg _) (fun z ↦ finite_block_trace_insertion_le
+    (fun m : Fin (N(χ,a,α,s,z)) ↦ (L (jet(z,m))).comp A(a,hα,hs,φ)) (fun m ↦ x (jet(z,m))) U) (hb.mul_left ‖U‖)
+#print axioms spectralStrip_complete_block_bounded_insertions
+
+private theorem complete_rectangles_of_rank_majorant {H J Z : Type*}
+    [NormedAddCommGroup H] [InnerProductSpace ℂ H] [CompleteSpace H]
+    (A : H →L[ℂ] H) (x : J → H) (L : J → StrongDual ℂ H) (N : Z → ℕ)
+    (j : (z : Z) → Fin (N z) → J) (e : Z ↪ ℕ × ℕ)
+    (hg : Summable (fun z ↦ (N z : ℝ)*‖∑ m, ((L (j z m)).comp A).smulRight (x (j z m))‖)) :
+    SpectralRectanglesTraceCauchy (fun i ↦ spectralConvolutionFiniteSum A x L
+      (((Finset.Iic i.1).product (Finset.Iic i.2)).preimage e e.injective.injOn) N j) := by
+  classical
+  let g (z : Z) := (N z : ℝ)*‖∑ m, ((L (j z m)).comp A).smulRight (x (j z m))‖
+  let T (z : Z) (m : Fin (N z)) : nuclearEndomorphisms H :=
+    ⟨((L (j z m)).comp A).smulRight (x (j z m)), smulRight_mem_nuclearEndomorphisms _ _⟩
+  let R (z : Z) := ∑ m, T z m
+  let : Norm (nuclearEndomorphisms H) := ⟨traceNorm⟩
+  let : NormedAddCommGroup (nuclearEndomorphisms H) :=
+    NormedAddCommGroup.ofCore (traceNorm_normedSpaceCore (H := H))
+  let : SeminormedAddCommGroup (nuclearEndomorphisms H) :=
+    (inferInstance : NormedAddCommGroup (nuclearEndomorphisms H)).toSeminormedAddCommGroup
+  let : MetricSpace (nuclearEndomorphisms H) := NormedAddCommGroup.toMetricSpace
+  let : PseudoMetricSpace (nuclearEndomorphisms H) := MetricSpace.toPseudoMetricSpace
+  let : UniformSpace (nuclearEndomorphisms H) := PseudoMetricSpace.toUniformSpace
+  have hR (z : Z) : ‖R z‖ ≤ g z :=
+    finite_block_traceNorm_le (fun m ↦ (L (j z m)).comp A) (fun m ↦ x (j z m))
+  have hc := cauchySeq_finset_of_norm_bounded_eventually hg (Eventually.of_forall hR)
+  intro ε hε
+  obtain ⟨S, hS⟩ := (Metric.cauchySeq_iff (u := fun s : Finset Z ↦ ∑ z ∈ s, R z)).mp hc ε hε
+  let i := S.sup (fun z ↦ (e z).1)
+  let k := S.sup (fun z ↦ (e z).2)
+  let E (v : ℕ × ℕ) := ((Finset.Iic v.1).product (Finset.Iic v.2)).preimage e e.injective.injOn
+  have hsub (v : ℕ × ℕ) (hv : (i, k) ≤ v) : S ≤ E v := by
+    intro z hz
+    simpa [E] using And.intro ((Finset.le_sup hz).trans hv.1) ((Finset.le_sup hz).trans hv.2)
+  have heq (v : ℕ × ℕ) : (∑ z ∈ E v, R z).val = spectralConvolutionFiniteSum A x L (E v) N j := by
+    simp only [R, T, Submodule.coe_sum, spectralConvolutionFiniteSum]
+  refine ⟨(i, k), fun v w hv hw ↦ ⟨(∑ z ∈ E v, R z) - (∑ z ∈ E w, R z), ?_,?_⟩⟩
+  · exact congrArg₂ (· - ·) (heq _) (heq _)
+  · have hdist (T U : nuclearEndomorphisms H) : dist T U = traceNorm (T - U) := by
+      rw [dist_eq_norm]
+      rfl
+    have hr := hS (E v) (hsub v hv) (E w) (hsub w hw)
+    rwa [hdist] at hr
+
+/-- The same whole-projection hypothesis gives rectangular Cauchy tails in trace norm. -/
+theorem spectralStrip_complete_block_projections_trace_cauchy
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ) (a : ℝ) {α s : ℝ}
+    (hα : 0≤α) (hs : 1<s)
+    (x : J(χ,a,α,s) → H(a,hα,hs)) (L : J(χ,a,α,s) → StrongDual ℂ H(a,hα,hs))
+    (hj : ∀ i, D(a,hα,hs) (L i) = raw(χ,hα,hs,i)) (η : PontryaginDual C₁)
+    (k : ℕ) (hk : ∀ z : Z(χ,a,α), z.val.1=η → N(χ,a,α,s,z) ≤ k)
+    (hpoly : ∃ C≥(0:ℝ), ∃ d : ℕ, ∀ z : Z(χ,a,α), z.val.1=η →
+      ‖∑ m : Fin (N(χ,a,α,s,z)), (L (jet(z,m))).smulRight (x (jet(z,m)))‖ ≤ C*(1+|z.val.2.2|)^d)
+    (φ : BruhatCompactSupport C𝔽) (hφ : hom(φ,η)) (e : Z(χ,a,α) ↪ ℕ × ℕ) :
+    SpectralRectanglesTraceCauchy (fun i ↦ spectralConvolutionFiniteSum A(a,hα,hs,φ) x L
+      (((Finset.Iic i.1).product (Finset.Iic i.2)).preimage e e.injective.injOn)
+      (fun z : Z(χ,a,α) ↦ N(χ,a,α,s,z)) (fun z m ↦ jet(z,m))) :=
+  complete_rectangles_of_rank_majorant _ _ _ _ _ e
+    (spectralStrip_polynomial_complete_projections_summable χ hχ a hα hs x L hj η k hk hpoly φ hφ)
+#print axioms spectralStrip_complete_block_projections_trace_cauchy
+
+/-- For uniformly bounded multiplicity on one actual component, the universal compact-insertion
+assertion for homogeneous tests is equivalent to polynomial growth of its whole block projections. -/
+theorem spectralStrip_bounded_multiplicity_iff_polynomial_complete_projections
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ) (a : ℝ) {α s : ℝ}
+    (hα : 0≤α) (hs : 1<s)
+    (x : J(χ,a,α,s) → H(a,hα,hs)) (L : J(χ,a,α,s) → StrongDual ℂ H(a,hα,hs))
+    (hj : ∀ i, D(a,hα,hs) (L i) = raw(χ,hα,hs,i)) (η : PontryaginDual C₁)
+    (k : ℕ) (hk : ∀ z : Z(χ,a,α), z.val.1=η → N(χ,a,α,s,z) ≤ k) :
+    (∀ φ : BruhatCompactSupport C𝔽, (hom(φ,η)) →
+      ∀ U : compactOperator (RingHom.id ℂ) H(a,hα,hs) H(a,hα,hs), Summable (fun z : Z(χ,a,α) ↦
+        ∑ m : Fin (N(χ,a,α,s,z)), L (jet(z,m)) (A(a,hα,hs,φ) (U.val (x (jet(z,m))))))) ↔
+    ∃ C≥(0:ℝ), ∃ d : ℕ, ∀ z : Z(χ,a,α), z.val.1=η →
+      ‖∑ m : Fin (N(χ,a,α,s,z)), (L (jet(z,m))).smulRight (x (jet(z,m)))‖ ≤ C*(1+|z.val.2.2|)^d := by
+  constructor
+  · intro h
+    apply spectralStrip_complete_blocks_require_polynomial_projection_norms χ hχ a hα hs x L hj η k hk
+    intro φ hφ v g
+    exact h φ hφ ⟨g.smulRight v,(isCompactOperator_of_locallyCompactSpace_rng
+      ((ContinuousLinearMap.id ℂ ℂ).smulRight v)).comp_clm g⟩
+  · intro h φ hφ U
+    exact (spectralStrip_complete_block_bounded_insertions χ hχ a hα hs x L hj η k hk h φ hφ U.val).of_norm
+#print axioms spectralStrip_bounded_multiplicity_iff_polynomial_complete_projections
 
 end RiemannMasullo
