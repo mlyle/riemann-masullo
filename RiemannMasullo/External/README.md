@@ -15,6 +15,11 @@ sources we expect to draw on.
 | [`HardyCriticalLine/`](HardyCriticalLine/) | [ArtiFish26’s Hardy proof](https://github.com/artifish26/riemann-hypothesis-lean/tree/e9b20c778b19b5bba2e9a8e14a9bb4ca0afad850) | Apache-2.0 | Infinitely many critical-line zeros of the Riemann zeta function for §10.3 |
 | [`Stacks/`](Stacks/) | <https://github.com/AxiomMath/Stacks> | Apache-2.0 | under consideration |
 
+One outside development is used without being copied here: Naganori Yamaguchi's class field
+theory ([n-yamaguchi-0729/ClassFieldTheory](https://github.com/n-yamaguchi-0729/ClassFieldTheory),
+Apache-2.0) is a Lake dependency of the package, pinned in `lakefile.toml`. Only
+[`RiemannMasulloClassField/`](../../RiemannMasulloClassField/README.md) imports it.
+
 Further material found by scouting. The exact declarations and pinned commits are listed in
 [issue #3](https://github.com/mccorvie/riemann-masullo/issues/3).
 

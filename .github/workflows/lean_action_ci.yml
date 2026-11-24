@@ -20,5 +20,8 @@ jobs:
       - name: Lint
         run: scripts/lint.sh
       - uses: leanprover/lean-action@v1
+        with:
+          # Not RiemannMasulloClassField: see the Full build workflow.
+          build-args: RiemannMasullo Challenge Main
       - name: No sorry inside definitions
         run: scripts/signatures.sh --sorry-in-defs

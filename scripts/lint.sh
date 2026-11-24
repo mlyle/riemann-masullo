@@ -13,6 +13,7 @@ buildtime='#eval|run_cmd|run_elab|run_meta|run_tac|by_elab|\bd?simproc\b|^[[:spa
 [ -d RiemannMasullo ] || { echo "lint: no RiemannMasullo directory in $PWD" >&2; exit 2; }
 # Only paths that exist: grep reports a missing path with status 2 even when it found a match.
 targets=(RiemannMasullo); [ -e Main.lean ] && targets+=(Main.lean)
+[ -d RiemannMasulloClassField ] && targets+=(RiemannMasulloClassField)
 status=0
 grep -rnE --include='*.lean' "$forbidden" "${targets[@]}" && status=1
 grep -rnE --include='*.lean' --exclude-dir=External "$buildtime" "${targets[@]}" && status=1

@@ -339,8 +339,8 @@ the words "By Chebotarev". For every unitary character `χ₀` of finite order o
 group of `F` there is a number field `L` over `F` such that, at every prime `v` of `F` that
 lies under a prime of `L` of ramification index one and residue degree one, `χ₀` is unramified
 and has local value one. (Take the class field of the kernel of `χ₀`: where `L_w = F_v` the
-local norm is the identity, so all of `F_v^×` lies in the norm group.) Stated as a proposition,
-so that what is proved from it takes it as a hypothesis by name. -/
+local norm is the identity, so all of `F_v^×` lies in the norm group.) The proof from Yamaguchi's
+class field theory is in `RiemannMasulloClassField/Remark7131.lean`. -/
 def FiniteOrderCharacterSplitsInClassField.{u} (F : Type u) [Field F] [NumberField F] : Prop :=
   ∀ χ₀ : PontryaginDual (IdeleClassGroup (𝓞 F) F), IsOfFinOrder χ₀ →
     ∃ (L : Type u) (_ : Field L) (_ : NumberField L) (_ : Algebra F L),
@@ -433,10 +433,10 @@ private theorem normTwist_of_character_field (χ χ₀ : U) (x : ℝ)
 end ClassFieldInput
 
 /-- Paper: Remark 7.1.3.1, p. 324.
-The statement `infinite_split_primes_reciprocalEulerProduct_normTwist` below, proved from the
-classical input `FiniteOrderCharacterSplitsInClassField`. The rational primes that split
-completely in the field it provides split completely in `F`, there are infinitely many of
-them, and at each of them every local factor of the character is the translated one.
+The rational primes that split completely in the field supplied by
+`FiniteOrderCharacterSplitsInClassField` also split completely in `F`. There are infinitely many,
+and at each of them every local factor of the character is the translated one. The classical input
+is proved in `RiemannMasulloClassField/Remark7131.lean` from Yamaguchi's class field theory.
 Deviation: The right side uses exponent s + ix for the character χ₀ |·|^(ix). -/
 theorem infinite_split_primes_reciprocalEulerProduct_normTwist_of_classField
     (h : FiniteOrderCharacterSplitsInClassField F)
@@ -449,43 +449,14 @@ theorem infinite_split_primes_reciprocalEulerProduct_normTwist_of_classField
   obtain ⟨L, _, _, _, hL⟩ := h χ₀ hχ₀
   exact normTwist_of_character_field χ χ₀ x hχ L hL
 
-/-- Classical input: the consequence of the existence theorem of global class field theory
-stated in `FiniteOrderCharacterSplitsInClassField` (Takagi 1920, Artin 1927). Not a statement
-of the paper and not a gap in it: a known theorem of which this project has no formal proof.
-`infinite_split_primes_reciprocalEulerProduct_normTwist` is proved from it by name. -/
-theorem finiteOrderCharacter_splitsInClassField.{u} (F : Type u) [Field F] [NumberField F] :
-    FiniteOrderCharacterSplitsInClassField F := by
-  sorry
-
-/-- Paper: Remark 7.1.3.1, p. 324.
-For a Galois-type unitary character there are infinitely many completely split primes
-where the full reciprocal Euler polynomial is a degree power in the translated coordinate.
-Deviation: The right side uses exponent s + ix for the character χ₀ |·|^(ix).
-The proof is `infinite_split_primes_reciprocalEulerProduct_normTwist_of_classField` applied to the
-classical input `finiteOrderCharacter_splitsInClassField`, which is open. -/
-theorem infinite_split_primes_reciprocalEulerProduct_normTwist
-    (χ χ₀ : U𝔽) (hχ₀ : IsOfFinOrder χ₀) (x : ℝ)
-    (hχ : ideleClassNormTwist χ 0 = ideleClassNormTwist χ₀ ((x : ℂ) * Complex.I)) :
-    {p : RatPrimes | rationalPrimeSplitsCompletely F p ∧
-      ∀ S₀ : Finset Primes, (∀ v : Primes, v.under (𝓞 ℚ) = p → v ∈ S₀) →
-        ∀ s : ℂ, reciprocalPartialHeckeEulerProduct χ overₚ(S₀, p) s =
-          (1 - (p.asIdeal.absNorm : ℂ) ^ (-(s + (x : ℂ) * Complex.I))) ^ degree}.Infinite :=
-  infinite_split_primes_reciprocalEulerProduct_normTwist_of_classField
-    (finiteOrderCharacter_splitsInClassField F) χ χ₀ hχ₀ x hχ
-
 /-- Paper: Remark 7.1.3.1, p. 323.
 There are infinitely many completely split rational primes at which the character
 is unramified at every place above the prime. -/
 theorem infinite_split_primes_unramified (χ : U𝔽) :
     {p : RatPrimes | rationalPrimeSplitsCompletely F p ∧
-      ∀ v : Primes, v.under (𝓞 ℚ) = p → (ideleClassNormTwist χ 0).IsUnramifiedAt v}.Infinite :=
-  by
-  have hsplit : {p : RatPrimes | rationalPrimeSplitsCompletely F p}.Infinite := by
-    have h := infinite_split_primes_reciprocalEulerProduct_normTwist (F := F) 1 1
-      IsOfFinOrder.one 0 (by simp)
-    apply Set.Infinite.mono _ h
-    intro p hp
-    exact hp.1
+      ∀ v : Primes, v.under (𝓞 ℚ) = p → (ideleClassNormTwist χ 0).IsUnramifiedAt v}.Infinite := by
+  have hsplit : {p : RatPrimes | rationalPrimeSplitsCompletely F p}.Infinite :=
+    infinite_rational_primes_splitting_completely F
   obtain ⟨T, hT⟩ : ∃ T : Finset Primes, ideleClassNormTwist χ 0 ∈ unramifiedOutside F T :=
     Set.mem_iUnion.mp ((iUnion_unramifiedOutside F).symm ▸ Set.mem_univ _)
   have hf := T.finite_toSet.image (fun v : Primes ↦ v.under (𝓞 ℚ))

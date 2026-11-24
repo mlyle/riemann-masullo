@@ -51,7 +51,9 @@ open Classical in
 As printed: For a finite-order character twisted by an imaginary norm power, infinitely
 many rational primes satisfy the product identity with unshifted exponent once the
 selected places contain all places above the prime. The translated formula is
-`infinite_split_primes_reciprocalEulerProduct_normTwist`. See ERRATA F95. -/
+`infinite_split_primes_reciprocalEulerProduct_normTwist` in
+`RiemannMasulloClassField/Remark7131.lean`, which proves the classical input from
+Yamaguchi's class field theory. See ERRATA F95. -/
 def Printed.infinite_split_primes_reciprocalEulerProduct_normTwist : Prop :=
   ∀ (F : Type u) [Field F] [NumberField F] (χ χ₀ : U𝔽(F)),
     IsOfFinOrder χ₀ → ∀ x : ℝ,

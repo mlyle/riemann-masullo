@@ -56,6 +56,7 @@ SORRY_WARNING = re.compile(r"^warning: (RiemannMasullo/\S+\.lean):\d+:\d+: decla
 SIGNATURE_LINE = re.compile(
     r"(theorem|def|opaque|axiom|inductive|constructor|recursor|quot) (\S+) \d+( \d+)?( SORRY)?")
 BUILD_MINUTES = 45
+BUILD_TARGETS = ("RiemannMasullo", "Challenge", "Main")
 # A type synonym whose body is this many nodes as a tree spells out other synonyms again and again
 # in its instance terms; parts of Lean walk those terms as trees and stop finishing (#5398, #5716).
 # A pull request fails if it adds such a synonym or makes one larger than on main.
@@ -207,7 +208,11 @@ class Check:
     # 3 and 4. Build.
 
     def build(self, sandboxed=True):
-        return self.lake("lake", "build", timeout=BUILD_MINUTES * 60, sandboxed=sandboxed)
+        # The targets are named: the default ones also include RiemannMasulloClassField, which
+        # needs about 1,200 modules of the class field theory dependency. A pull request that
+        # this checker accepts changes only files under RiemannMasullo/, and nothing there
+        # imports that library; the Full build workflow builds it.
+        return self.lake("lake", "build", *BUILD_TARGETS, timeout=BUILD_MINUTES * 60, sandboxed=sandboxed)
 
     def modules(self):
         found = []

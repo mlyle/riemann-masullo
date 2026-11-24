@@ -42,7 +42,7 @@ jobs:
   build:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120        # a build from scratch takes just under an hour (it was 56 minutes on 23 November)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,7 +78,9 @@ jobs:
           python3 scripts/ci/prune_build.py
           echo "FROM_SHA=$from" >>"$GITHUB_ENV"
       - name: Build
-        run: lake build
+        # The main library and the comparator files. RiemannMasulloClassField, the fourth default
+        # target, needs the class field theory dependency; the Full build workflow builds it.
+        run: lake build RiemannMasullo Challenge Main
       - name: Signatures, and no sorry inside definitions
         run: |
           mkdir main-state

@@ -1,7 +1,7 @@
 name = "RiemannMasullo"
 version = "0.1.0"
 license = "Apache-2.0"
-defaultTargets = ["RiemannMasullo", "Challenge", "Main"]
+defaultTargets = ["RiemannMasullo", "RiemannMasulloClassField", "Challenge", "Main"]
 
 [leanOptions]
 pp.unicode.fun = true
@@ -17,10 +17,25 @@ name = "mathlib"
 scope = "leanprover-community"
 rev = "v4.36.0"
 
+# Naganori Yamaguchi's formalization of class field theory, on the same Lean and the same Mathlib
+# commit as this project. Used by RiemannMasulloClassField only. See its README.
+[[require]]
+name = "Nyll"
+git = "https://github.com/n-yamaguchi-0729/ClassFieldTheory.git"
+rev = "fc644f42dade5bdc7157fc3ef2eef4dbf2d6a565"
+
 [[lean_lib]]
 name = "RiemannMasullo"
 # Every module under RiemannMasullo/ is built; there is no root import list to conflict on.
 globs = ["RiemannMasullo.+"]
+
+# The class field theory input of Remark 7.1.3.1, proved from the Nyll library. It is a library
+# of its own because it needs about 1,200 modules of that dependency: `lake build` builds it
+# with everything else, while `lake build RiemannMasullo`, which is what the checks of every
+# pull request build, does not have to compile them.
+[[lean_lib]]
+name = "RiemannMasulloClassField"
+globs = ["RiemannMasulloClassField.+"]
 
 # Comparator: `Challenge` is the statement to prove, `Main` is the solution. See comparator.json.
 [[lean_lib]]

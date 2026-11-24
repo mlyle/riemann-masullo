@@ -8544,7 +8544,10 @@ theorem spectralStripJet_lowerBound (χ : PontryaginDual C₁ → PontryaginDual
 multiplicity among multiple completed Hecke zeros, over all ordinates and chosen characters.
 The norm integral on p. 447 gives no such restriction. It would suffice to bound the
 multiplicities on the line with that real part and exclude multiple zeros on all other
-sufficiently nearby vertical lines. -/
+sufficiently nearby vertical lines.
+Gap: Neither a bound for the multiplicities of the zeros on a vertical line nor the absence
+of multiple zeros on the nearby lines is known, and Remark 10.2.1.5 and Proposition 10.2.2.2
+supply no argument for either. -/
 private theorem spectralStripJet_order_and_margin_locally_finite_multiple_zeros
     (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (_hχ : IsSpectralBasepointChoice χ) (x : ℝ) :
     ∃ U ∈ 𝓝 x, {p : ℝ × ℕ | p.1 ∈ U ∧ 1 < p.2 ∧ ∃ (ω : PontryaginDual C₁) (t : ℝ),

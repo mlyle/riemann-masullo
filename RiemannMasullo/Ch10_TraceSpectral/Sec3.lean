@@ -1823,7 +1823,9 @@ operator on the biorthogonal vectors, the scalar traces of the individual zero
 blocks are summable. The jets at each zero are summed before testing summability.
 The estimates for (10.3.2.7) involve only Mellin derivatives and give no bound for these
 pairings with a compact operator. A summable majorant for the absolute block
-traces, allowed to depend on the operator and test, would suffice. -/
+traces, allowed to depend on the operator and test, would suffice.
+Gap: The estimates on pp. 454–455 bound Mellin derivatives only. No bound for the block traces
+against an arbitrary compact operator, allowing clusters of zeros, is supplied or known to us. -/
 private theorem spectralStripConvolution_traceCauchy_compact_block_series (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
     (_hχ : IsSpectralBasepointChoice (F := F) (fun ω ↦ χ ω))
     {α s : ℝ} (hα : 0 ≤ α) (hs : 1 < s) (φ : BruhatCompactSupport C𝔽)

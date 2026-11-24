@@ -1485,7 +1485,7 @@ maximal ideals. The maps are the templates of
 `sLocalAdelicThetaSpace_strictLF_finite_idele_classes`: any other dilate differs from one
 of these by a factor fixing the template and an S-unit, which can be moved to the
 archimedean test without changing the theta function. -/
-private theorem sLocalAdelicThetaSpace_strictLF_level_generators
+theorem sLocalAdelicThetaSpace_strictLF_level_generators
     (S : Finset (HeightOneSpectrum (𝓞 F))) (n : ℕ) :
     ∃ (d : ℕ) (p : Fin d →
         (SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)) →L[ℂ] ℬₛ(S))),
