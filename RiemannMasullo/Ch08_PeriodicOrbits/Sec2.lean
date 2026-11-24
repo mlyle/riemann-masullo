@@ -207,12 +207,19 @@ adelic subspace topology on the target.
 Deviation: The adelic subspace topology is coarser than the quotient topology.
 The equality of topologies fails by ERRATA R12. -/
 theorem adeleNormOneOrbitMap_continuous : Continuous (adeleNormOneOrbitMap F) := by
-  sorry
+  refine Continuous.subtype_mk ?_ _
+  exact (continuous_subtype_val.comp continuous_fst).smul
+    (continuous_subtype_val.comp continuous_snd)
 
 /-- Paper: Lemma 8.2.0.3(2), p. 385. Every point in the global norm-one orbit union
 has a preimage under the orbit map. -/
 theorem adeleNormOneOrbitMap_surjective : Surjective (adeleNormOneOrbitMap F) := by
-  sorry
+  rintro ⟨x, hx⟩
+  simp only [adeleNormOneOrbitUnion, Set.mem_iUnion] at hx
+  obtain ⟨i, hi⟩ := hx
+  simp only [adeleNormOneOrbit, MulAction.mem_orbit_iff] at hi
+  obtain ⟨g, hg⟩ := hi
+  exact ⟨(g, ⟨adeleOrbitBasepoint F i, Set.mem_range_self i⟩), Subtype.ext hg⟩
 
 /-- Paper: Lemma 8.2.0.3(2), p. 385. The global orbit map is an open quotient map
 for its coinduced topology.
@@ -224,13 +231,30 @@ theorem adeleNormOneOrbitMap_isOpenQuotientMap :
       (adeleNormOneOrbitMap F) := by
   sorry
 
+/-- The S-adele ring is Hausdorff: it is a product of Hausdorff completions of `F`.
+The instance has to be routed through the definition, exactly as in
+`AppA_AlgebraicNT/Sec1.lean` (`adeleHausdorff_ideleLocallyCompact`). -/
+private theorem t2Space_sAdeleRing : T2Space (SAdeleRing F S) := by
+  change T2Space (((w : InfinitePlace F) → w.Completion) × ((v : S) → (v.val.adicCompletion F)))
+  infer_instance
+
 /-- Paper: Lemma 8.2.0.3, p. 385. The S-local norm-one orbit union is Hausdorff. -/
 theorem sAdeleNormOneOrbitUnion_t2Space : T2Space (sAdeleNormOneOrbitUnion F S) := by
-  sorry
+  have := t2Space_sAdeleRing F S
+  infer_instance
+
+/-- The adele ring is Hausdorff: a product of the infinite part with the restricted
+product of the finite part. The restricted product instance only fires after unfolding,
+so it is written out (`Πʳ` is not in scope in this file). -/
+private theorem t2Space_adeleRing : T2Space 𝔸[F] :=
+  inferInstanceAs (T2Space (((w : InfinitePlace F) → w.Completion) ×
+    RestrictedProduct (fun v : HeightOneSpectrum (𝓞 F) => v.adicCompletion F)
+      (fun v : HeightOneSpectrum (𝓞 F) => v.adicCompletionIntegers F) Filter.cofinite))
 
 /-- Paper: Lemma 8.2.0.3, p. 385. The global norm-one orbit union is Hausdorff. -/
 theorem adeleNormOneOrbitUnion_t2Space : T2Space (adeleNormOneOrbitUnion F) := by
-  sorry
+  have := t2Space_adeleRing F
+  infer_instance
 
 /-- Paper: Lemma 8.2.0.3, p. 385. The S-local norm-one orbit union is metrizable. -/
 theorem sAdeleNormOneOrbitUnion_metrizableSpace :
