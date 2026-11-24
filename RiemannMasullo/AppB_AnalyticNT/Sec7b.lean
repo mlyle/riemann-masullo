@@ -149,13 +149,142 @@ terms in increasing order of integer norm, starting at the first norm at least `
 def heckePrimePowerLogTail (χ : U[F]) (x : ℝ) (s : ℂ) : ℂ :=
   tsum (heckePrimePowerLogTailTerm χ x s) (SummationFilter.conditional ℕ)
 
+/-- The norm of a prime-power logarithmic term is at most the inverse real power of the
+ideal norm, since the character value has norm at most one and the exponent is positive. -/
+private theorem heckePrimePowerLogTerm_norm_le (χ : U[F]) (v : V[F]) (k : ℕ) (s : ℂ) :
+    ‖heckePrimePowerLogTerm χ v k s‖ ≤
+      ((v.asIdeal ^ (k + 1)).absNorm : ℝ) ^ (-s.re) := by
+  have hN : (0 : ℝ) < ((v.asIdeal ^ (k + 1)).absNorm : ℝ) := by
+    exact_mod_cast Nat.pos_of_ne_zero (Ideal.absNorm_eq_zero_iff.not.mpr (pow_ne_zero _ v.ne_bot))
+  have hχ : ‖heckeIdealValue (ideleClassNormTwist χ 0) (v.asIdeal ^ (k + 1))‖ ≤ 1 := by
+    rw [heckeIdealValue_prime_pow _ v (Nat.succ_pos k)]
+    split_ifs with h
+    · rw [norm_pow, norm_ideleClassNormTwist_zero_localValue, one_pow]
+    · simp
+  have hk : (1 : ℝ) ≤ ((k + 1 : ℕ) : ℝ) := by exact_mod_cast Nat.le_add_left 1 k
+  have hpow : (0 : ℝ) < ((v.asIdeal ^ (k + 1)).absNorm : ℝ) ^ s.re :=
+    Real.rpow_pos_of_pos hN _
+  calc ‖heckePrimePowerLogTerm χ v k s‖
+      = ‖heckeIdealValue (ideleClassNormTwist χ 0) (v.asIdeal ^ (k + 1))‖ /
+          (((k + 1 : ℕ) : ℝ) * ((v.asIdeal ^ (k + 1)).absNorm : ℝ) ^ s.re) := by
+        delta heckePrimePowerLogTerm
+        rw [norm_div, norm_mul, Complex.norm_natCast,
+          ← Complex.ofReal_natCast ((v.asIdeal ^ (k + 1)).absNorm),
+          Complex.norm_cpow_eq_rpow_re_of_pos hN]
+    _ ≤ 1 / (((k + 1 : ℕ) : ℝ) * ((v.asIdeal ^ (k + 1)).absNorm : ℝ) ^ s.re) :=
+        div_le_div_of_nonneg_right hχ (by positivity)
+    _ ≤ 1 / ((v.asIdeal ^ (k + 1)).absNorm : ℝ) ^ s.re :=
+        one_div_le_one_div_of_le hpow (le_mul_of_one_le_left hpow.le hk)
+    _ = ((v.asIdeal ^ (k + 1)).absNorm : ℝ) ^ (-s.re) := by
+        rw [Real.rpow_neg hN.le, one_div]
+
+/-- To the right of one, the prime-power logarithmic terms are summable over all prime
+powers, by comparison with the convergent sum of inverse ideal-norm powers. -/
+private theorem summable_heckePrimePowerLogTerm_of_one_lt_re (χ : U[F]) (s : halfPlane) :
+    Summable (fun a : V[F] × ℕ ↦ heckePrimePowerLogTerm χ a.1 a.2 s) := by
+  classical
+  let P (a : V[F] × ℕ) : {I : Ideal (𝓞 F) // I ≠ ⊥} :=
+    ⟨a.1.asIdeal ^ (a.2 + 1), pow_ne_zero _ a.1.ne_bot⟩
+  have hP : Function.Injective P := by
+    rintro ⟨v, k⟩ ⟨w, j⟩ he
+    have heq : v.asIdeal ^ (k + 1) = w.asIdeal ^ (j + 1) := congrArg Subtype.val he
+    obtain rfl := HeightOneSpectrum.eq_of_dvd_pow ((dvd_pow_self _ k.succ_ne_zero).trans heq.dvd)
+    exact Prod.ext rfl (Nat.succ.inj (pow_injective_of_not_isUnit v.prime.not_isUnit v.ne_bot heq))
+  have hr : 1 < (s : ℂ).re := s.property
+  have hs := ((summable_absNorm_rpow F hr).subtype (fun I ↦ I ≠ ⊥)).comp_injective hP
+  exact hs.of_norm_bounded (fun a ↦ heckePrimePowerLogTerm_norm_le χ a.1 a.2 s)
+
+/-- The prime powers of a fixed integer norm form a finite set, since their ideals are
+nonzero ideals of that norm. -/
+private theorem heckePrimePowerLogTail_fiber_finite (n : ℕ) :
+    Finite {a : V[F] × ℕ // a.1.asIdeal.absNorm ^ (a.2 + 1) = n} := by
+  classical
+  let P (a : {a : V[F] × ℕ // a.1.asIdeal.absNorm ^ (a.2 + 1) = n}) :
+      {I : Ideal (𝓞 F) // I ≠ ⊥ ∧ I.absNorm = n} :=
+    ⟨a.val.1.asIdeal ^ (a.val.2 + 1), pow_ne_zero _ a.val.1.ne_bot, by
+      rw [map_pow]; exact a.property⟩
+  have hP : Function.Injective P := by
+    rintro ⟨⟨v, k⟩, hk⟩ ⟨⟨w, j⟩, hj⟩ he
+    have heq : v.asIdeal ^ (k + 1) = w.asIdeal ^ (j + 1) := congrArg Subtype.val he
+    obtain rfl := HeightOneSpectrum.eq_of_dvd_pow ((dvd_pow_self _ k.succ_ne_zero).trans heq.dvd)
+    exact Subtype.ext (Prod.ext rfl
+      (Nat.succ.inj (pow_injective_of_not_isUnit v.prime.not_isUnit v.ne_bot heq)))
+  have : Finite {I : Ideal (𝓞 F) // I ≠ ⊥ ∧ I.absNorm = n} :=
+    ((Ring.HasFiniteQuotients.finite_absNorm_eq (S := 𝓞 F) n).subset
+      (show {I : Ideal (𝓞 F) | I ≠ ⊥ ∧ I.absNorm = n} ⊆ {I | I.absNorm = n} from
+        fun I hI ↦ hI.2)).to_subtype
+  exact Finite.of_injective P hP
+
 /-- Paper: Remark B.7.2.2, p. 649, and the absolute convergence on p. 653.
 To the right of one the same tail is the absolute sum over prime powers
 whose norms are at least the cutoff. -/
 theorem heckePrimePowerLogTail_hasSum_of_one_lt_re (χ : U[F]) (x : ℝ) (s : halfPlane) :
     HasSum (fun a : {a : V[F] × ℕ // x ≤ ((a.1.asIdeal.absNorm ^ (a.2 + 1) : ℕ) : ℝ)} ↦
       heckePrimePowerLogTerm χ a.val.1 a.val.2 s) (heckePrimePowerLogTail χ x s) := by
-  sorry
+  classical
+  let S := {a : V[F] × ℕ // x ≤ ((a.1.asIdeal.absNorm ^ (a.2 + 1) : ℕ) : ℝ)}
+  let f (a : S) : ℂ := heckePrimePowerLogTerm χ a.val.1 a.val.2 s
+  let Nfn (a : S) : ℕ := a.val.1.asIdeal.absNorm ^ (a.val.2 + 1)
+  have hsum : Summable f :=
+    (summable_heckePrimePowerLogTerm_of_one_lt_re χ s).subtype
+      (fun a ↦ x ≤ ((a.1.asIdeal.absNorm ^ (a.2 + 1) : ℕ) : ℝ))
+  have hfib := hsum.hasSum.tsum_fiberwise Nfn
+  have hterm : (fun n : ℕ ↦ ∑' a : Nfn ⁻¹' {n}, f a) = heckePrimePowerLogTailTerm χ x s := by
+    funext n
+    by_cases hxn : x ≤ (n : ℝ)
+    · by_cases hn : n = 0
+      · subst hn
+        haveI : IsEmpty (↥(Nfn ⁻¹' {0})) := ⟨fun a ↦ by
+          have ha : Nfn a.val = 0 := a.property
+          have hpos : 0 < Nfn a.val :=
+            pow_pos (Nat.pos_of_ne_zero (Ideal.absNorm_eq_zero_iff.not.mpr a.val.val.1.ne_bot)) _
+          exact (Nat.pos_iff_ne_zero.mp hpos) ha⟩
+        rw [tsum_empty]
+        simp only [heckePrimePowerLogTailTerm, hxn, ↓reduceIte, LSeries.term_zero]
+      · simp only [heckePrimePowerLogTailTerm, hxn, ↓reduceIte]
+        let T := {a : V[F] × ℕ // a.1.asIdeal.absNorm ^ (a.2 + 1) = n}
+        haveI : Finite T := heckePrimePowerLogTail_fiber_finite n
+        haveI : Fintype T := Fintype.ofFinite _
+        let e : ↥(Nfn ⁻¹' {n}) ≃ T :=
+          { toFun := fun a ↦ ⟨a.val.val, a.property⟩
+            invFun := fun b ↦ ⟨⟨b.val, by
+              have hb : ((b.val.1.asIdeal.absNorm ^ (b.val.2 + 1) : ℕ) : ℝ) = (n : ℝ) := by
+                exact_mod_cast b.property
+              exact hb.symm ▸ hxn⟩, b.property⟩
+            left_inv := fun _ ↦ rfl
+            right_inv := fun _ ↦ rfl }
+        haveI : Fintype ↥(Nfn ⁻¹' {n}) := Fintype.ofEquiv T e.symm
+        rw [tsum_fintype,
+          Fintype.sum_equiv e (fun a ↦ f a)
+            (fun b ↦ heckePrimePowerLogTerm χ b.val.1 b.val.2 s) (fun _ ↦ rfl)]
+        have hpoint (b : T) : heckePrimePowerLogTerm χ b.val.1 b.val.2 s =
+            (heckeIdealValue (ideleClassNormTwist χ 0) (b.val.1.asIdeal ^ (b.val.2 + 1)) /
+              ((b.val.2 + 1 : ℕ) : ℂ)) / (n : ℂ) ^ (s : ℂ) := by
+          delta heckePrimePowerLogTerm
+          have hNc : ((b.val.1.asIdeal ^ (b.val.2 + 1)).absNorm : ℂ) = (n : ℂ) := by
+            have hp : (b.val.1.asIdeal ^ (b.val.2 + 1)).absNorm =
+                b.val.1.asIdeal.absNorm ^ (b.val.2 + 1) := by rw [map_pow]
+            rw [hp]
+            exact_mod_cast b.property
+          rw [hNc, div_div]
+        simp_rw [hpoint]
+        rw [← Finset.sum_div, ← finsum_eq_sum_of_fintype,
+          ← heckePrimePowerLogCoefficient_eq_sum, LSeries.term_of_ne_zero hn]
+    · haveI : IsEmpty (↥(Nfn ⁻¹' {n})) := ⟨fun a ↦ by
+        have ha : Nfn a.val = n := a.property
+        have hx : x ≤ (Nfn a.val : ℝ) := a.val.property
+        exact hxn (by rw [ha] at hx; exact hx)⟩
+      rw [tsum_empty]
+      simp only [heckePrimePowerLogTailTerm, hxn, ↓reduceIte]
+  have hfib' : HasSum (heckePrimePowerLogTailTerm χ x s) (∑' a : S, f a) := by
+    rw [← hterm]
+    exact hfib
+  have htail : Summable (heckePrimePowerLogTailTerm χ x s) := ⟨_, hfib'⟩
+  have hL : heckePrimePowerLogTail χ x s = ∑' a : S, f a := by
+    delta heckePrimePowerLogTail
+    rw [tsum_eq_of_summable_unconditional htail, hfib'.tsum_eq]
+  rw [hL]
+  exact hsum.hasSum
 
 local notation "invLog(" n ")" => ((Real.log ((n : ℕ) : ℝ) : ℂ)⁻¹)
 

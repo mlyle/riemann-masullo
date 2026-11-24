@@ -547,6 +547,543 @@ theorem homogeneousTheta_classMellin_eq_mass_mul (χ : U) (f : ℬ) (s : halfPla
 -- TODO(paper-gap): The identities following (6.3.2.2) lose the Gaussian values.
 -- Use `globalThetaPolarValues_eq_eigendistributions` from §5.5.
 
+/-- As in `exists_normTwist_of_agree_on_ker` in §5.2b, restriction to a norm section
+determines the exponent relating two quasi-characters in the same component. -/
+private theorem globalConverse_nontrivial_chart_surjective (χ : U) (c : QuasiCharacter C𝔽)
+    (hc : ∀ h : C₁, c h.val = (χ h.val : ℂ)) : ∃ s, ideleClassNormTwist χ s = c := by
+  let σ : ℝ≥0ˣ →ₜ* C𝔽 := (⟨QuotientGroup.mk' _, continuous_quotient_mk'⟩ :
+    IdeleGroup (𝓞 F) F →ₜ* C𝔽).comp
+    ⟨canonicalIdeleNormSection F, canonicalIdeleNormSection_continuous F⟩
+  have hσ : RightInverse σ (ideleClassNorm F) := canonicalIdeleNormSection_rightInverse F
+  let b := (⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp χ
+  obtain ⟨u, hu, -⟩ := existsUnique_complexPower (b.comp σ)
+  obtain ⟨v, hv, -⟩ := existsUnique_complexPower (c.comp σ)
+  refine ⟨v - u, ContinuousMonoidHom.ext fun x ↦ ?_⟩
+  let t := ideleClassNorm F x
+  let y : C₁ := ⟨x / σ t, by simp [MonoidHom.mem_ker, t, hσ (ideleClassNorm F x)]⟩
+  have hxy : y.val * σ t = x := div_mul_cancel x _
+  have hb : b x = b y.val * (((t.val : ℝ) : ℂ)) ^ u :=
+    (congrArg b hxy).symm.trans ((map_mul b _ _).trans (congrArg (b y.val * ·) (hu t)))
+  have he : c x = c y.val * (((t.val : ℝ) : ℂ)) ^ v :=
+    (congrArg c hxy).symm.trans ((map_mul c _ _).trans (congrArg (c y.val * ·) (hv t)))
+  change b x * (((t.val : ℝ) : ℂ)) ^ (v - u) = c x
+  rw [hb, he, hc y, mul_assoc, ← Complex.cpow_add _ _ (Complex.ofReal_ne_zero.mpr
+    (NNReal.coe_ne_zero.mpr t.ne_zero)), add_sub_cancel]
+  rfl
+
+/-- In the nontrivial chart every evaluation is regular, and these evaluations
+separate homogeneous classes by (5.2.3.14). -/
+private theorem globalConverse_nontrivial_evaluations (χ : U) (hχ : χ₁(χ) ≠ 1) :
+    ∃ A : Θ(χ₁(χ)) →L[ℂ] (ℂ → ℂ), Injective A ∧
+      ∀ (f : ℬ) s, A ((K(χ₁(χ))).mkQ f) s = Z(f, χ, s) := by
+  let ω := χ₁(χ)
+  let Ω := {c : QuasiCharacter C𝔽 // ∀ h : C₁, c h.val = (ω h : ℂ)}
+  have hres (s : ℂ) (h : C₁) : ideleClassNormTwist χ s h.val = (ω h : ℂ) :=
+    normOneRestriction_unitaryChart _ (isProperMap_ideleClassNorm F).continuous χ s h
+  have ht (s : ℂ) : 0 ≤ globalIdelicOrderBound (ideleClassNormTwist χ s) := by
+    suffices hn : ¬ (ideleClassNormTwist χ s = 1 ∨
+        ideleClassNormTwist χ s = ideleClassNormTwist (1 : U) 1) by
+      simp [globalIdelicOrderBound, hn]
+    intro hp
+    apply hχ
+    ext1 h
+    apply Circle.ext
+    rw [← hres]
+    rcases hp with hp | hp
+    · rw [hp]; rfl
+    · rw [hp]
+      exact normOneRestriction_unitaryChart _ (isProperMap_ideleClassNorm F).continuous (1 : U) 1 h
+  let j (s : ℂ) : {c : Ω // 0 ≤ globalIdelicOrderBound c.val} :=
+    ⟨⟨ideleClassNormTwist χ s, hres s⟩, ht s⟩
+  have hj : Surjective j := fun c ↦ by
+    obtain ⟨s, hs⟩ := globalConverse_nontrivial_chart_surjective χ c.val.val c.val.property
+    exact ⟨s, Subtype.ext (Subtype.ext hs)⟩
+  obtain ⟨M, hi, hv⟩ := exists_globalHomogeneousThetaMellin (F := F) ω
+  let W := meromorphicNormOneComponent (ideleClassNorm F) (isProperMap_ideleClassNorm F).continuous
+    ω (globalIdelicOrderBound (F := F))
+  let A := ContinuousLinearMap.pi fun s ↦ (ContinuousMap.evalCLM ℂ (j s)).comp (W.subtypeL.comp M)
+  refine ⟨A, fun x y h ↦ hi (Subtype.ext (ContinuousMap.ext fun c ↦ ?_)), fun f s ↦ hv f (j s)⟩
+  obtain ⟨s, rfl⟩ := hj c
+  exact congrFun h s
+
+/-- The Gaussian-normalized adelic distribution supplies an entire quotient of each
+test transform by the completed Hecke function, including at its zeros. -/
+private theorem globalConverse_nontrivial_factor (χ : U) (hχ : χ₁(χ) ≠ 1) (f : ℬ) :
+    ∃ u : ℂ → ℂ, Differentiable ℂ u ∧ ∀ s, Z(f, χ, s) = continuedCompletedHeckeL χ s * u s := by
+  let D := (adelicEigendistribution_normalized χ).choose
+  let a : ℂ := ((Real.sqrt |(NumberField.discr F : ℝ)|)⁻¹ : ℝ)
+  have hD : Differentiable ℂ (fun z ↦ D z f) := fun z ↦
+    (analytic_eval_normalized (adelicEigendistribution_normalized χ).choose_spec.1 f z trivial).differentiableAt
+  have hL := completedHeckeL_continuation_entire χ _ (continuedCompletedHeckeL_spec χ).1
+    (continuedCompletedHeckeL_spec χ).2 (fun h ↦ hχ (PontryaginDual.ext fun x ↦ DFunLike.congr_fun h x))
+  have ha := hD.const_mul a
+  refine ⟨_, ha, congrFun (eq_of_agree_rightHalf (globalIdelicZFunction_meromorphic f χ)
+    (fun z _ ↦ ((hL.mul ha).analyticAt z).meromorphicNFAt) 1 fun s hs ↦ ?_)⟩
+  rw [globalIdelicZFunction_eq_integral f (globalTwist_mem_rightHalf χ hs),
+    globalIntegral_normalized_ratio χ hs f, gaussianCompletedHeckeL_eq_completedHeckeL χ s hs]
+  change a * completedHeckeL χ ⟨s, hs⟩ * D s f = continuedCompletedHeckeL χ s * (a * D s f)
+  rw [(continuedCompletedHeckeL_spec χ).2 ⟨s, hs⟩]
+  ring
+
+/-- Apply the open mapping theorem to the two projections of the closed graph. The
+graph and the range have their subspace topologies. -/
+private theorem globalConverse_nontrivial_embedding {E Y : Type*}
+    [AddCommGroup E] [Module ℂ E] [TopologicalSpace E]
+    [AddCommGroup Y] [Module ℂ Y] [TopologicalSpace Y]
+    [IsTopologicalAddGroup E] [ContinuousSMul ℂ E] [IsTopologicalAddGroup Y] [ContinuousSMul ℂ Y]
+    (hE : IsFrechetTVS E) (hY : IsFrechetTVS Y) (T : E →ₗ[ℂ] Y) (hi : Injective T)
+    (hg : IsClosed (T.graph : Set (E × Y))) (hr : IsClosed (Set.range T)) :
+    IsClosedEmbedding T := by
+  let : UniformSpace E := IsTopologicalAddGroup.rightUniformSpace E
+  let : UniformSpace Y := IsTopologicalAddGroup.rightUniformSpace Y
+  have : IsUniformAddGroup E := isUniformAddGroup_of_addCommGroup
+  have : IsUniformAddGroup Y := isUniformAddGroup_of_addCommGroup
+  have : CompleteSpace E := hE.2.2.2
+  have : CompleteSpace Y := hY.2.2.2
+  have : TopologicalSpace.MetrizableSpace E := hE.2.2.1
+  have : TopologicalSpace.MetrizableSpace Y := hY.2.2.1
+  let G := T.graph
+  let R := T.range
+  have : CompleteSpace G := hg.completeSpace_coe
+  have : CompleteSpace R := hr.completeSpace_coe
+  have : IsUniformAddGroup G := G.toAddSubgroup.isUniformAddGroup
+  have : IsUniformAddGroup R := R.toAddSubgroup.isUniformAddGroup
+  have : TopologicalSpace.MetrizableSpace G := TopologicalSpace.MetrizableSpace.subtype _
+  have : TopologicalSpace.MetrizableSpace R := TopologicalSpace.MetrizableSpace.subtype _
+  have : PolynormableSpace ℂ E := hE.2.1
+  have : PolynormableSpace ℂ Y := hY.2.1
+  have hG : IsFrechetTVS G := by
+    refine ⟨inferInstance, inferInstance, inferInstance, ?_⟩
+    rw [IsUniformAddGroup.rightUniformSpace_eq]
+    infer_instance
+  have hR : IsFrechetTVS R := by
+    refine ⟨inferInstance, inferInstance, inferInstance, ?_⟩
+    rw [IsUniformAddGroup.rightUniformSpace_eq]
+    infer_instance
+  let p := (ContinuousLinearMap.fst ℂ E Y).comp G.subtypeL
+  have hp : Bijective p := by
+    constructor
+    · intro x y h
+      exact Subtype.ext (Prod.ext h (x.property.trans ((congrArg T h).trans y.property.symm)))
+    · exact fun x ↦ ⟨⟨(x, T x), rfl⟩, rfl⟩
+  let q : G →L[ℂ] R := ((ContinuousLinearMap.snd ℂ E Y).comp G.subtypeL).codRestrict R
+    fun x ↦ ⟨x.val.1, x.property.symm⟩
+  have hq : Bijective q := by
+    constructor
+    · intro x y h
+      have h2 : x.val.2 = y.val.2 := congrArg Subtype.val h
+      exact Subtype.ext (Prod.ext (hi (x.property.symm.trans (h2.trans y.property))) h2)
+    · rintro ⟨_, x, rfl⟩
+      exact ⟨⟨(x, T x), rfl⟩, rfl⟩
+  let stages (_ : ℕ) := ContinuousLinearMap.id ℂ G
+  have cover (x : G) : ∃ k, x ∈ Set.range (stages k) := ⟨0, x, rfl⟩
+  have po := isOpenMap_of_surjective_toLF (isLFSpace_of_isFrechetTVS hE) (fun _ ↦ hG)
+    stages (fun _ ↦ le_rfl) cover p hp.2
+  have qo := isOpenMap_of_surjective_toLF (isLFSpace_of_isFrechetTVS hR) (fun _ ↦ hG)
+    stages (fun _ ↦ le_rfl) cover q hq.2
+  let e := (Equiv.ofBijective p hp).toHomeomorphOfContinuousOpen p.continuous po
+  let d := (Equiv.ofBijective q hq).toHomeomorphOfContinuousOpen q.continuous qo
+  have heq : (T : E → Y) = Subtype.val ∘ d ∘ e.symm := by
+    funext x
+    change T x = (e.symm x).val.2
+    have hx : (e.symm x).val.1 = x := e.apply_symm_apply x
+    exact (congrArg T hx.symm).trans (e.symm x).property.symm
+  rw [heq]
+  exact hr.isClosedEmbedding_subtypeVal.comp (d.isClosedEmbedding.comp e.symm.isClosedEmbedding)
+
+/-- Evaluations on Schwartz vertical lines are continuous. Holomorphic dependence then
+gives continuity of every jet by the uniform boundedness principle. -/
+private theorem globalConverse_nontrivial_jets (z : ℂ) (n : ℕ) :
+    Continuous (fun b : B ↦ iteratedDeriv n b.val z) := by
+  obtain ⟨ht, hp, hm, hc⟩ := schwartzBergman_frechet univ isOpen_univ ordConnected_univ univ_nonempty
+  let : UniformSpace B := IsTopologicalAddGroup.rightUniformSpace B
+  have : IsUniformAddGroup B := isUniformAddGroup_of_addCommGroup
+  have : CompleteSpace B := hc
+  have : (uniformity B).IsCountablyGenerated := IsUniformAddGroup.uniformity_countably_generated
+  have : BaireSpace B := BaireSpace.of_completelyPseudoMetrizable
+  have hev (s : ℂ) : ∃ L : B →L[ℂ] ℂ, ∀ b, L b = b.val s := by
+    obtain ⟨S, hs, he⟩ := schwartzBergman_schwartzLine_topology univ isOpen_univ
+      ordConnected_univ univ_nonempty
+    let a : (univ : Set ℝ) := ⟨s.re, trivial⟩
+    let ev := (BoundedContinuousFunction.evalCLM ℂ s.im).comp (SchwartzMap.toBoundedContinuousFunctionCLM ℂ ℝ ℂ)
+    refine ⟨⟨(LinearMap.proj s).comp (schwartzBergmanSubmodule univ).subtype, ?_⟩, fun _ ↦ rfl⟩
+    apply (ev.continuous.comp ((continuous_apply a).comp he.continuous)).congr
+    intro b
+    change S b a s.im = b.val s
+    simpa only [weightedVerticalTrace, a, pow_zero, one_mul, Complex.re_add_im] using hs b a s.im
+  have jets (k : ℕ) (s : ℂ) : ∃ D : B →L[ℂ] ℂ, ∀ b, D b = iteratedDeriv k b.val s := by
+    induction k generalizing s with
+    | zero => simpa only [iteratedDeriv_zero] using hev s
+    | succ k ih =>
+      choose d hd using ih
+      let A (y : ℂ) := (y - s)⁻¹ • (d y - d s)
+      have hlim : Tendsto (fun y b ↦ A y b) (𝓝[≠] s) (𝓝 fun b ↦ iteratedDeriv (k+1) b.val s) := by
+        refine tendsto_pi_nhds.mpr fun b ↦ ?_
+        have hb : Differentiable ℂ b.val := fun w ↦ (b.property.2.1 w (by simp)).differentiableAt (by simp)
+        have h := (((hb.contDiff : ContDiff ℂ (k+1) b.val).differentiable_iteratedDeriv' k) s).hasDerivAt.tendsto_slope
+        rw [iteratedDeriv_succ]
+        exact h.congr' (.of_forall fun y ↦ by simp only [slope_def_module, A, smul_apply, sub_apply, hd])
+      exact ⟨continuousLinearMapOfTendsto A hlim, fun _ ↦ rfl⟩
+  obtain ⟨D, hD⟩ := jets n z
+  exact D.continuous.congr hD
+
+/-- A positive-real slope gives the ordinary derivative after exponential reparametrization,
+as in `log_deriv_of_tendsto_unit_slope` in §2.2b. -/
+private theorem globalConverse_nontrivial_log_deriv (A : ℝ≥0ˣ → ℂ) (v : ℂ)
+    (h : Tendsto (fun t : ℝ≥0ˣ ↦ (A t - A 1) / ((((t.val : ℝ) : ℂ)) - 1)) (𝓝[≠] 1) (𝓝 v)) :
+    let E : ℝ ≃ₜ ℝ≥0ˣ := Real.expOrderIso.toHomeomorph.trans (Nonneg.unitsHomeomorphPos ℝ).symm
+    HasDerivAt (fun s : ℝ ↦ A (E s)) v 0 := by
+  intro E
+  have h0 : E 0 = 1 := Units.ext (NNReal.coe_inj.mp Real.exp_zero)
+  have hE : Tendsto E (𝓝[≠] 0) (𝓝[≠] 1) := by
+    rw [← h0]
+    refine tendsto_nhdsWithin_iff.mpr ⟨E.continuous.continuousAt.continuousWithinAt, ?_⟩
+    filter_upwards [self_mem_nhdsWithin] with t ht
+    exact fun he ↦ ht (E.injective he)
+  have he : HasDerivAt (fun t : ℝ ↦ (Real.exp t : ℂ)) 1 0 := by
+    simpa only [Real.exp_zero, Complex.ofReal_one] using (Real.hasDerivAt_exp 0).ofReal_comp
+  have hp := (h.comp hE).mul he.tendsto_slope
+  rw [mul_one] at hp
+  change HasDerivAt (A ∘ E) v 0
+  rw [hasDerivAt_iff_tendsto_slope]
+  refine hp.congr' ?_
+  filter_upwards [self_mem_nhdsWithin] with t ht
+  have hn : (Real.exp t : ℂ) - 1 ≠ 0 := sub_ne_zero.mpr fun h ↦ ht (Real.exp_injective
+    ((Complex.ofReal_injective (h.trans Complex.ofReal_one.symm)).trans Real.exp_zero.symm))
+  change ((A (E t) - A 1) / ((Real.exp t : ℂ) - 1)) * _ = _
+  simp only [slope_def_module, sub_zero, Real.exp_zero, Complex.ofReal_one, Function.comp_apply, h0,
+    Complex.real_smul]
+  field_simp [hn]
+
+/-- Translate the derivative at the identity to every point of a one-parameter orbit,
+as in `unit_orbit_hasDerivAt` in §2.2b. -/
+private theorem globalConverse_nontrivial_orbit_deriv {G : Type*} [Group G] (a : ℝ≥0ˣ →* G) (A d : G → ℂ)
+    (h : ∀ g, Tendsto (fun t : ℝ≥0ˣ ↦ (A (a t * g) - A g) / ((((t.val : ℝ) : ℂ)) - 1))
+      (𝓝[≠] 1) (𝓝 (d g))) (g : G) (s : ℝ) :
+    let E : ℝ ≃ₜ ℝ≥0ˣ := Real.expOrderIso.toHomeomorph.trans (Nonneg.unitsHomeomorphPos ℝ).symm
+    HasDerivAt (fun t : ℝ ↦ A (a (E t) * g)) (d (a (E s) * g)) s := by
+  intro E
+  let y := a (E s) * g
+  have hD : HasDerivAt (fun t : ℝ ↦ A (a (E t) * y)) (d y) (s - s) := by
+    rw [sub_self]
+    apply globalConverse_nontrivial_log_deriv (fun t ↦ A (a t * y))
+    simpa only [map_one, one_mul] using h y
+  refine (hD.comp_sub_const s s).congr_of_eventuallyEq (.of_forall fun t ↦ ?_)
+  have hmul : E (t - s) * E s = E t := Units.ext (NNReal.coe_inj.mp
+    ((Real.exp_add (t - s) s).symm.trans (congrArg Real.exp (sub_add_cancel t s))))
+  change A (a (E t) * g) = A (a (E (t - s)) * (a (E s) * g))
+  rw [← mul_assoc, ← map_mul, hmul]
+
+/-- A family of log profiles stable under differentiation and decaying at every
+exponential rate remains Schwartz after multiplication by any complex exponential. -/
+private theorem globalConverse_nontrivial_weighted_profile {E : Type*} [AddCommGroup E] [Module ℂ E]
+    (H : E →ₗ[ℂ] (ℝ → ℂ)) (D : E → E)
+    (hd : ∀ f x, HasDerivAt (H f) (H (D f) x) x)
+    (hdec : ∀ f (N : ℕ), ∃ C T : ℝ, ∀ x, T < |x| → ‖H f x‖ ≤ C * Real.exp (-(N : ℝ) * |x|))
+    (b : ℂ) (f : E) :
+    ∃ g : SchwartzMap ℝ ℂ, ∀ x, g x = Complex.exp (b * x) * H f x := by
+  let W (v : E) (x : ℝ) := Complex.exp (b * x) * H v x
+  let d (v : E) := b • v + D v
+  have hw (v : E) (x : ℝ) : HasDerivAt (W v) (W (d v) x) x := by
+    have h := (((Complex.hasDerivAt_exp _).comp _ ((hasDerivAt_id' (x : ℂ)).const_mul b)).comp_ofReal).mul (hd v x)
+    convert h using 1 <;> try rfl
+    simp only [W, d, map_add, map_smul, Pi.add_apply, Pi.smul_apply, smul_eq_mul, mul_one, Function.comp_apply]
+    ring
+  have hs (n : ℕ) (v : E) : ContDiff ℝ n (W v) := by
+    induction n generalizing v with
+    | zero => exact contDiff_zero.mpr (continuous_iff_continuousAt.mpr fun x ↦ (hw v x).continuousAt)
+    | succ n ih =>
+      refine (contDiff_succ_iff_deriv (n := (n : WithTop ℕ∞))).mpr ⟨fun x ↦ (hw v x).differentiableAt, by simp, ?_⟩
+      rw [show deriv (W v) = W (d v) from funext fun x ↦ (hw v x).deriv]
+      exact ih _
+  refine ⟨⟨W f, contDiff_infty.mpr fun n ↦ hs n f, fun k n ↦ ?_⟩, fun _ ↦ rfl⟩
+  obtain ⟨v, hv⟩ : ∃ v, iteratedDeriv n (W f) = W v := by
+    induction n with
+    | zero => exact ⟨f, iteratedDeriv_zero⟩
+    | succ n ih =>
+      obtain ⟨v, hv⟩ := ih
+      exact ⟨d v, (iteratedDeriv_succ ..).trans ((congrArg deriv hv).trans (funext fun x ↦ (hw v x).deriv))⟩
+  obtain ⟨N, hN⟩ := exists_nat_ge (1 + |b.re|)
+  obtain ⟨C, T, hT⟩ := hdec v N
+  have hc : Continuous (fun x : ℝ ↦ |x| ^ k * ‖W v x‖) :=
+    (continuous_abs.pow k).mul (continuous_iff_continuousAt.mpr fun x ↦ (hw v x).continuousAt.norm)
+  obtain ⟨K, hK⟩ := isCompact_Icc.bddAbove_image (K := Icc (-T) T) hc.continuousOn
+  refine ⟨max K (k.factorial * C), fun x ↦ ?_⟩
+  rw [norm_iteratedFDeriv_eq_norm_iteratedDeriv, hv, Real.norm_eq_abs]
+  by_cases h : T < |x|
+  · apply le_max_of_le_right
+    have hpos : 0 ≤ C := nonneg_of_mul_nonneg_left ((norm_nonneg _).trans (hT x h)) (Real.exp_pos _)
+    have hk := (div_le_iff₀ (show 0 < (k.factorial : ℝ) by positivity)).mp
+      (Real.pow_div_factorial_le_exp |x| (abs_nonneg _) k)
+    have hr : b.re * x ≤ |b.re| * |x| := (le_abs_self _).trans (abs_mul _ _).le
+    change |x| ^ k * ‖Complex.exp (b * x) * H v x‖ ≤ _
+    rw [norm_mul, Complex.norm_exp, Complex.mul_re, Complex.ofReal_re, Complex.ofReal_im, mul_zero, sub_zero]
+    calc
+      _ ≤ (Real.exp |x| * k.factorial) * (Real.exp (b.re * x) * (C * Real.exp (-(N : ℝ) * |x|))) := by
+        gcongr
+        exact hT x h
+      _ = (k.factorial * C) * Real.exp ((|x| + b.re * x) + -(N : ℝ) * |x|) := by
+        rw [Real.exp_add, Real.exp_add]; ring
+      _ ≤ (k.factorial * C) * 1 := by
+        gcongr
+        apply Real.exp_le_one_iff.mpr
+        nlinarith [mul_le_mul_of_nonneg_right hN (abs_nonneg x)]
+      _ = _ := mul_one _
+  · exact le_max_of_le_left (hK ⟨x, abs_le.mp (le_of_not_gt h), rfl⟩)
+
+/-- Logarithmic change of variables for `dt/t`, as in the Mellin integral helper
+`sLocalIdelicZFunction_entire_iff_theta_exponentialDecay_mellin` in §5.3b. -/
+private theorem globalConverse_nontrivial_log_mellin (p : ℝ → ℂ) (s : ℂ) :
+    (∫ t : ℝ≥0ˣ, p (Real.log (t.val : ℝ)) * (((t.val : ℝ) : ℂ) ^ s) ∂positiveRealHaar) =
+      mellin (fun t ↦ p (Real.log t)) s := by
+  let : BorelSpace ℝ≥0ˣ := by
+    constructor
+    change MeasurableSpace.comap Units.val (inferInstance : MeasurableSpace ℝ≥0) = _
+    rw [Units.isEmbedding_val₀.eq_induced, borel_comap, BorelSpace.measurable_eq (α := ℝ≥0)]
+  let e : ℝ ≃ₜ ℝ≥0ˣ := Real.expOrderIso.toHomeomorph.trans (Nonneg.unitsHomeomorphPos ℝ).symm
+  have he (x : ℝ) : (e x).val = (Real.exp x).toNNReal := by
+    apply NNReal.eq
+    exact (Real.coe_toNNReal _ (Real.exp_pos x).le).symm
+  have hm : positiveRealHaar = volume.map e := by
+    apply congrArg (fun a : ℝ → ℝ≥0ˣ ↦ volume.map a)
+    funext x
+    exact Units.ext (he x).symm
+  rw [hm, e.measurableEmbedding.integral_map, mellin, ← integral_comp_exp]
+  apply integral_congr_ae (.of_forall fun x ↦ ?_)
+  simp only [he, Real.coe_toNNReal _ (Real.exp_pos x).le, Real.log_exp, Complex.real_smul, smul_eq_mul]
+  rw [Complex.cpow_def_of_ne_zero (by exact_mod_cast (Real.exp_pos x).ne'),
+    Complex.cpow_def_of_ne_zero (by exact_mod_cast (Real.exp_pos x).ne'),
+    ← Complex.ofReal_log (Real.exp_pos x).le, Real.log_exp]
+  simp only [Complex.ofReal_exp, ← mul_assoc, ← Complex.exp_add]
+  rw [mul_comm (p x)]
+  congr 2
+  ring
+
+/-- The canonical norm section identifies a homogeneous theta integral with the Mellin
+transform of its logarithmic profile. All differentiated tests retain two-sided decay. -/
+private theorem globalConverse_nontrivial_bergman (χ : U) (hχ : χ₁(χ) ≠ 1) (f : ℬ) :
+    (fun s ↦ Z(f, χ, s)) ∈ schwartzBergmanSubmodule univ := by
+  let τ : ℝ≥0ˣ →ₜ* IdeleGroup (𝓞 F) F :=
+    ⟨canonicalIdeleNormSection F, canonicalIdeleNormSection_continuous F⟩
+  let σ := (⟨QuotientGroup.mk' _, continuous_quotient_mk'⟩ : IdeleGroup (𝓞 F) F →ₜ* C𝔽).comp τ
+  have hσ : RightInverse σ (ideleClassNorm F) := canonicalIdeleNormSection_rightInverse F
+  let e : ℝ ≃ₜ ℝ≥0ˣ := Real.expOrderIso.toHomeomorph.trans (Nonneg.unitsHomeomorphPos ℝ).symm
+  let H : ℬ →ₗ[ℂ] (ℝ → ℂ) := LinearMap.pi fun x ↦
+    (ContinuousMap.evalCLM ℂ (σ (e x))).toLinearMap.comp (homogeneousAdelicThetaLinearMap F χ₁(χ))
+  have hH (v : ℬ) : H v = fun x ↦ homogeneousAdelicTheta χ₁(χ) v (σ (e x)) := by
+    funext x
+    change (homogeneousAdelicThetaLinearMap F χ₁(χ) v) _ = _
+    exact DFunLike.congr_fun (homogeneousAdelicThetaLinearMap_apply χ₁(χ) v) _
+  have hd (v : ℬ) (x : ℝ) : HasDerivAt (H v) (H (adeleDirectionalDeriv τ v) x) x := by
+    rw [hH, hH]
+    have ht := globalConverse_nontrivial_orbit_deriv σ.toMonoidHom
+      (homogeneousAdelicTheta χ₁(χ) v) (homogeneousAdelicTheta χ₁(χ) (adeleDirectionalDeriv τ v))
+      (homogeneousAdelicTheta_directionalDeriv τ χ₁(χ) v) 1 x
+    change HasDerivAt (fun t ↦ homogeneousAdelicTheta χ₁(χ) v (σ (e t) * 1))
+      (homogeneousAdelicTheta χ₁(χ) (adeleDirectionalDeriv τ v) (σ (e x) * 1)) x at ht
+    simpa only [mul_one] using ht
+  have hdec (v : ℬ) (N : ℕ) : ∃ C T : ℝ, ∀ x, T < |x| → ‖H v x‖ ≤ C * Real.exp (-(N : ℝ) * |x|) := by
+    obtain ⟨C, T, _, _, h⟩ := homogeneousAdelicTheta_decay_both χ₁(χ) v (Or.inr hχ) N
+    refine ⟨C, T, fun x hx ↦ ?_⟩
+    have hn : Real.log ((ideleClassNorm F (σ (e x))).val : ℝ) = x := by rw [hσ (e x)]; exact Real.log_exp x
+    rw [hH]
+    simpa only [hn] using h (σ (e x)) (hn.symm ▸ hx)
+  obtain ⟨b, hb, -⟩ := existsUnique_complexPower
+    ((⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp (χ.comp σ))
+  let p (x : ℝ) := Complex.exp (b * x) * H f x
+  have hp : p ∈ logExponentialDecaySubmodule univ := by
+    apply (Submodule.mem_iInf _).mpr
+    intro a
+    obtain ⟨g, hg⟩ := globalConverse_nontrivial_weighted_profile H (adeleDirectionalDeriv τ)
+      hd hdec ((a.val : ℂ) + b) f
+    refine ⟨g, funext fun x ↦ ?_⟩
+    change g x = (Real.exp (a.val * x) : ℂ) * p x
+    rw [hg, add_mul, Complex.exp_add, Complex.ofReal_exp, Complex.ofReal_mul, mul_assoc]
+  let u := positiveRealFourierMellin univ isOpen_univ ordConnected_univ univ_nonempty ⟨p, hp⟩
+  have hu : Differentiable ℂ u.val := fun s ↦ (u.property.2.1 s (by simp)).differentiableAt (by simp)
+  have heq := (homogeneousThetaMellinIntegral_meromorphicContinuation τ χ₁(χ) f
+    (canonicalIdeleNormSection_rightInverse F) χ (fun _ ↦ rfl) u.val).mp
+  apply (show u.val = fun s ↦ Z(f, χ, s) from heq ⟨fun z _ ↦ (hu.analyticAt z).meromorphicNFAt, ?_⟩) ▸ u.property
+  intro s _
+  rw [show u.val s = mellin (fun t ↦ p (Real.log t)) s from
+    positiveRealFourierMellin_apply _ _ _ _ _ _ trivial]
+  rw [← globalConverse_nontrivial_log_mellin]
+  change _ = ∫ t, homogeneousAdelicTheta χ₁(χ) f (σ t) * ideleClassNormTwist χ s (σ t) ∂positiveRealHaar
+  apply integral_congr_ae (.of_forall fun t ↦ ?_)
+  have he : e (Real.log (t.val : ℝ)) = t := Units.ext (NNReal.eq (Real.exp_log (Units.zero_lt t)))
+  have hpow := hb t
+  change (χ (σ t) : ℂ) = ((t.val : ℝ) : ℂ) ^ b at hpow
+  rw [Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr (NNReal.coe_ne_zero.mpr t.ne_zero)),
+    ← Complex.ofReal_log (NNReal.coe_nonneg _), mul_comm] at hpow
+  change (p _ * _) = _ * ((χ (σ t) : ℂ) * (((ideleClassNorm F (σ t)).val : ℝ) : ℂ) ^ s)
+  dsimp only [p]
+  have hh := (congrFun (hH f) (Real.log (t.val : ℝ))).trans
+    (congrArg (fun r ↦ homogeneousAdelicTheta χ₁(χ) f (σ r)) he)
+  rw [hh, hσ t, ← hpow]
+  ring
+
+/-- As in the principal-value argument below, the local order inequalities give
+an entire quotient by removal of singularities. -/
+private theorem globalConverse_nontrivial_orders {f g : ℂ → ℂ} (hf : Differentiable ℂ f)
+    (hg : Differentiable ℂ g) :
+    (∃ u : ℂ → ℂ, Differentiable ℂ u ∧ ∀ z, f z = g z * u z) ↔
+      ∀ z, analyticOrderAt g z ≤ analyticOrderAt f z := by
+  constructor
+  · rintro ⟨u, hu, he⟩ z
+    rw [show f = g * u from funext he, analyticOrderAt_mul (hg.analyticAt z) (hu.analyticAt z)]
+    exact self_le_add_right _ _
+  · intro hord
+    let q := f / g
+    have hq : MeromorphicOn q univ := fun z _ ↦ (hf.analyticAt z).meromorphicAt.div (hg.analyticAt z).meromorphicAt
+    have hdiff : Differentiable ℂ (toMeromorphicNFOn q univ) := by
+      intro z
+      apply AnalyticAt.differentiableAt
+      have hnf := meromorphicNFOn_toMeromorphicNFOn q univ (mem_univ z)
+      apply hnf.meromorphicOrderAt_nonneg_iff_analyticAt.mp
+      rw [meromorphicOrderAt_toMeromorphicNFOn hq (mem_univ z),
+        meromorphicOrderAt_div (hf.analyticAt z).meromorphicAt (hg.analyticAt z).meromorphicAt,
+        (hf.analyticAt z).meromorphicOrderAt_eq, (hg.analyticAt z).meromorphicOrderAt_eq]
+      have hle := hord z
+      generalize analyticOrderAt f z = m at hle ⊢
+      generalize analyticOrderAt g z = n at hle ⊢
+      cases m using ENat.recTopCoe with
+      | top => simp
+      | coe m =>
+        cases n using ENat.recTopCoe with
+        | top => simp at hle
+        | coe n =>
+          exact WithTop.coe_le_coe.mpr (sub_nonneg.mpr (by exact_mod_cast hle : (n : ℤ) ≤ m))
+    refine ⟨_, hdiff, fun z ↦ ?_⟩
+    by_cases hz : g z = 0
+    · have hpos := lt_of_lt_of_le (pos_iff_ne_zero.mpr ((hg.analyticAt z).analyticOrderAt_ne_zero.mpr hz))
+          (hord z)
+      rw [hz, zero_mul]
+      exact (hf.analyticAt z).analyticOrderAt_ne_zero.mp hpos.ne'
+    · rw [toMeromorphicNFOn_eq_toMeromorphicNFAt hq (mem_univ z),
+        toMeromorphicNFAt_eq_self.mpr ((hf.analyticAt z).div (hg.analyticAt z) hz).meromorphicNFAt]
+      exact (mul_div_cancel₀ _ hz).symm
+
+/-- Each vanishing jet is a closed condition in the Schwartz–Bergman topology. -/
+private theorem globalConverse_nontrivial_closed {g : ℂ → ℂ}
+    (hg : Differentiable ℂ g) : IsClosed bergmanIdeal(g) := by
+  have hdiff (f : B) : Differentiable ℂ f.val := fun w ↦
+    (f.property.2.1 w (by simp)).differentiableAt (by simp)
+  have hset : bergmanIdeal(g) = ⋂ (z : ℂ) (n : ℕ) (_ : (n : ℕ∞) ≤ analyticOrderAt g z)
+      (i : ℕ) (_ : i < n), {f : B | iteratedDeriv i f.val z = 0} := by
+    ext f
+    simp only [mem_ofPred_eq, mem_iInter, globalConverse_nontrivial_orders (hdiff f) hg]
+    apply forall_congr'
+    intro z
+    rw [← ENat.forall_natCast_le_iff_le]
+    simp_rw [natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero ((hdiff f).analyticAt z)]
+  rw [hset]
+  exact isClosed_iInter fun z ↦ isClosed_iInter fun n ↦ isClosed_iInter fun _ ↦
+    isClosed_iInter fun i ↦ isClosed_iInter fun _ ↦
+      isClosed_eq (globalConverse_nontrivial_jets z i) continuous_const
+
+/-- For an entire multiplier whose product with the completed Hecke function is
+Schwartz on strips, the two multiplied local zeta coordinates of a normalized
+test have rapid decay on closed substrips of their respective half-planes.
+The stage contains the different, so insertion commutes with Fourier transformation.
+On pp. 306 and 308 the reciprocal estimates on selected horizontal segments do
+not by themselves give these bounds at all heights. Uniform division estimates
+on the right and reflected left half-planes would suffice. -/
+private theorem globalConverse_nontrivial_strip_bounds (χ : U) (hχ : χ₁(χ) ≠ 1)
+    (S : Finset V) (hD : ∀ v : V, v.asIdeal ∣ differentIdeal ℤ (𝓞 F) → v ∈ S)
+    (hc : χ₀(χ) ∈ unramifiedOutside F S) (η : PontryaginDual (SIdeleQuotient F S))
+    (hη : sIdeleRestriction F S ⟨χ₀(χ), hc⟩ = normChartₛ(η) 0)
+    (g : SchwartzBruhat (Multiplicative (SAdeleRing F S)))
+    (hg : ∀ s : halfPlane, globalIdelicZetaIntegral (sAdeleSchwartzToGlobal F S g)
+      (ideleClassNormTwist χ s) = completedHeckeL χ s)
+    (u : ℂ → ℂ) (hu : Differentiable ℂ u)
+    (hB : (continuedCompletedHeckeL χ * u) ∈ schwartzBergmanSubmodule univ) :
+    let p := sLocalZetaPair η (Submodule.Quotient.mk g)
+    ∀ a b : ℝ, a ≤ b → ∀ N : ℕ,
+      (0 < a → BddAbove ((fun z : ℂ ↦ ‖z ^ N * (u z * p.1.val z)‖) '' (Complex.re ⁻¹' Icc a b))) ∧
+      (b < 1 → BddAbove ((fun z : ℂ ↦ ‖z ^ N * (u z * p.2.val z)‖) '' (Complex.re ⁻¹' Icc a b))) := by
+  sorry
+
+/-- Multiply both coordinates of the normalized local pair by the same entire
+function. The local functional equation survives, so the local converse supplies
+a test. Weil's identity then identifies its global transform near two. -/
+private theorem globalConverse_nontrivial_realize (χ : U) (hχ : χ₁(χ) ≠ 1) (b : B)
+    (u : ℂ → ℂ) (hu : Differentiable ℂ u) (hb : ∀ z, b.val z = continuedCompletedHeckeL χ z * u z) :
+    ∃ f : ℬ, (fun z ↦ Z(f, χ, z)) = b.val := by
+  classical
+  obtain ⟨f₀, hf₀⟩ := exists_globalIdelicZetaIntegral_eq_completedHeckeL χ
+  obtain ⟨A, k, hk⟩ := sAdeleSchwartzToGlobal_exhaustive F f₀
+  obtain ⟨R, hR⟩ : ∃ R : Finset V, χ₀(χ) ∈ unramifiedOutside F R := by
+    apply mem_iUnion.mp
+    rw [iUnion_unramifiedOutside]
+    trivial
+  have hdiff : differentIdeal ℤ (𝓞 F) ≠ ⊥ := differentIdeal_ne_bot
+  let D := (Ideal.finite_factors hdiff).toFinset
+  let S := A ∪ (R ∪ D)
+  have hAS : A ⊆ S := Finset.subset_union_left
+  have hD (v : V) (hv : v.asIdeal ∣ differentIdeal ℤ (𝓞 F)) : v ∈ S :=
+    Finset.mem_union_right _ (Finset.mem_union_right _ (by simpa [D] using hv))
+  have hc : χ₀(χ) ∈ unramifiedOutside F S := fun v hv ↦
+    hR v fun h ↦ hv (Finset.mem_union_right _ (Finset.mem_union_left _ h))
+  let g := sAdeleSchwartzTransition F hAS k
+  have hg : sAdeleSchwartzToGlobal F S g = f₀ :=
+    (LinearMap.congr_fun (sAdeleSchwartzToGlobal_comp F hAS) k).trans hk
+  obtain ⟨η, hη⟩ := heckeEulerProductOutside_eq_finite_unitary S χ hc
+  let p := sLocalZetaPair η (Submodule.Quotient.mk g)
+  have bound := globalConverse_nontrivial_strip_bounds χ hχ S hD hc η hη g (hg ▸ hf₀) u hu
+    (show continuedCompletedHeckeL χ * u ∈ schwartzBergmanSubmodule univ from
+      (show b.val = continuedCompletedHeckeL χ * u from funext hb) ▸ b.property)
+  have mk {I : Set ℝ} (v : SchwartzBergman I)
+      (h : ∀ a b : ℝ, a ≤ b → Icc a b ⊆ I → ∀ N : ℕ,
+        BddAbove ((fun z : ℂ ↦ ‖z ^ N * (u z * v.val z)‖) '' (Complex.re ⁻¹' Icc a b))) :
+      u * v.val ∈ schwartzBergmanSubmodule I := by
+    refine ⟨fun z hz ↦ ?_, hu.differentiableOn.mul v.property.2.1, h⟩
+    change u z * v.val z = 0
+    rw [show v.val z = 0 from v.property.1 hz, mul_zero]
+  let q : SchwartzBergman (Ioi (0 : ℝ)) × SchwartzBergman (Iio (1 : ℝ)) :=
+    (⟨_, mk p.1 fun a b hab hs N ↦ (bound a b hab N).1 (hs (left_mem_Icc.mpr hab))⟩,
+     ⟨_, mk p.2 fun a b hab hs N ↦ (bound a b hab N).2 (hs (right_mem_Icc.mpr hab))⟩)
+  have hp : p ∈ sLocalZetaMatching η := (sLocalZetaPair_range η) ▸
+    (show p ∈ (sLocalZetaPair η).range from ⟨_, rfl⟩)
+  have hq : q ∈ (sLocalZetaPair η).range := by
+    rw [sLocalZetaPair_range, mem_sLocalZetaMatching]
+    intro z hz
+    change u z * p.1.val z = _ * (u z * p.2.val z)
+    rw [(mem_sLocalZetaMatching η p).mp hp hz, mul_left_comm]
+  obtain ⟨x, hx⟩ := hq
+  obtain ⟨f, rfl⟩ : ∃ f : SchwartzBruhat (Multiplicative (SAdeleRing F S)), Submodule.Quotient.mk f = x :=
+    Submodule.Quotient.mk_surjective _ x
+  refine ⟨sAdeleSchwartzToGlobal F S f, ?_⟩
+  have hlocal (z : ℂ) (hz : 0 < z.re) :
+      sLocalIdelicZFunction f (normChartₛ(η) z) = u z * sLocalIdelicZFunction g (normChartₛ(η) z) := by
+    have h := congrArg (fun v : SchwartzBergman (Ioi (0 : ℝ)) × SchwartzBergman (Iio (1 : ℝ)) ↦ v.1.val z) hx
+    exact ((sLocalZetaPair_mk η f).1 hz).symm.trans (h.trans (congrArg (u z * ·) ((sLocalZetaPair_mk η g).1 hz)))
+  obtain ⟨L, hL, hLe⟩ := finiteHeckeL_exists_continuation χ
+  have hW := fun v ↦ weilIdentity_unramifiedOutside_meromorphic S v χ hc L hL (fun z hz ↦ hLe ⟨z, hz⟩)
+  have hbase : sIdeleRestriction F S ⟨χ₀(χ), hc⟩ =
+      (⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp η := by
+    ext1 y
+    have hy := DFunLike.congr_fun hη y
+    change _ = (η y : ℂ) * _ ^ (0 : ℂ) at hy
+    change _ = (η y : ℂ)
+    simpa only [Complex.cpow_zero, mul_one] using hy
+  -- Compare on a punctured neighborhood of two, where the normalization is known.
+  have hn : ∀ᶠ z : ℂ in 𝓝 (2 : ℂ), 1 < z.re :=
+    (isOpen_lt continuous_const Complex.continuous_re).mem_nhds (by norm_num)
+  have hf := globalIdelicZFunction_entire_of_nontrivial (sAdeleSchwartzToGlobal F S f) χ
+    (fun h ↦ hχ (PontryaginDual.ext fun y ↦ DFunLike.congr_fun h y))
+  have hbd : Differentiable ℂ b.val := fun z ↦ (b.property.2.1 z (by simp)).differentiableAt (by simp)
+  apply (hf.differentiableOn.analyticOnNhd isOpen_univ).eq_of_frequently_eq
+    (hbd.differentiableOn.analyticOnNhd isOpen_univ) (z₀ := (2 : ℂ))
+  apply Filter.Eventually.frequently
+  filter_upwards [nhdsNE_le_codiscrete (2 : ℂ) (hW f), nhdsNE_le_codiscrete (2 : ℂ) (hW g),
+    hn.filter_mono nhdsWithin_le_nhds] with z h₁ h₂ hz
+  rw [hbase] at h₁ h₂
+  have he : Z(sAdeleSchwartzToGlobal F S g, χ, z) = continuedCompletedHeckeL χ z :=
+    (globalIdelicZFunction_eq_integral _ (globalTwist_mem_rightHalf χ hz)).trans
+      ((hg ▸ hf₀ ⟨z, hz⟩).trans ((continuedCompletedHeckeL_spec χ).2 ⟨z, hz⟩).symm)
+  rw [h₁, hb, ← he, h₂, hlocal z (zero_lt_one.trans hz)]
+  ring
+
 /-- Paper: Theorem 6.3.2.1(1), p. 304, equation (6.3.2.3).
 On a nontrivial norm-one component the global Mellin transform is a closed
 topological embedding with range the completed Hecke principal ideal in the
@@ -555,7 +1092,35 @@ theorem globalConverse_nontrivial (χ : U) (_hχ : χ₁(χ) ≠ 1) :
     ∃ ZB : Θ(χ₁(χ)) →L[ℂ] B, IsClosedEmbedding ZB ∧
       (∀ (f : ℬ) s, (ZB ((K(χ₁(χ))).mkQ f)).val s = Z(f, χ, s)) ∧
       Set.range ZB = bergmanIdeal(continuedCompletedHeckeL χ) := by
-  sorry
+  obtain ⟨A, hi, hA⟩ := globalConverse_nontrivial_evaluations χ _hχ
+  have hB (x : Θ(χ₁(χ))) : A x ∈ schwartzBergmanSubmodule univ := by
+    obtain ⟨f, rfl⟩ := (K(χ₁(χ))).mkQ_surjective x
+    rw [funext (hA f)]
+    exact globalConverse_nontrivial_bergman χ _hχ f
+  let T : Θ(χ₁(χ)) →ₗ[ℂ] B := A.toLinearMap.codRestrict _ hB
+  have hiT : Injective T := fun x y he ↦ hi (congrArg Subtype.val he)
+  have hc : Continuous (fun b : B ↦ b.val) := continuous_pi fun z ↦ by
+    simpa only [iteratedDeriv_zero] using globalConverse_nontrivial_jets z 0
+  have hg : IsClosed (T.graph : Set (Θ(χ₁(χ)) × B)) := by
+    rw [show (T.graph : Set (Θ(χ₁(χ)) × B)) = {p | p.2.val = A p.1} from
+      Set.ext fun p ↦ (T.mem_graph_iff p).trans (show p.2 = T p.1 ↔ p.2.val = (T p.1).val from Subtype.ext_iff)]
+    exact isClosed_eq (hc.comp continuous_snd) (A.continuous.comp continuous_fst)
+  have hr : Set.range T = bergmanIdeal(continuedCompletedHeckeL χ) := by
+    ext b
+    constructor
+    · rintro ⟨x, rfl⟩
+      obtain ⟨f, rfl⟩ := (K(χ₁(χ))).mkQ_surjective x
+      obtain ⟨u, hu, he⟩ := globalConverse_nontrivial_factor χ _hχ f
+      exact ⟨u, hu, fun z ↦ (hA f z).trans (he z)⟩
+    · rintro ⟨u, hu, hb⟩
+      obtain ⟨f, hf⟩ := globalConverse_nontrivial_realize χ _hχ b u hu hb
+      exact ⟨_, Subtype.ext ((funext (hA f)).trans hf)⟩
+  have hL := completedHeckeL_continuation_entire χ _ (continuedCompletedHeckeL_spec χ).1
+    (continuedCompletedHeckeL_spec χ).2 (fun h ↦ _hχ (PontryaginDual.ext fun x ↦ DFunLike.congr_fun h x))
+  have emb := globalConverse_nontrivial_embedding (globalHomogeneousThetaSpace_nuclearFrechet.{_, 0} χ₁(χ)).1
+    (schwartzBergman_frechet univ isOpen_univ ordConnected_univ univ_nonempty) T hiT hg
+    (hr ▸ globalConverse_nontrivial_closed hL)
+  exact ⟨⟨T, emb.continuous⟩, emb, hA, hr⟩
 
 /-- Paper: Theorem 6.3.2.1(1)–(2), p. 304.
 A unitary character trivial on the norm-one subgroup has a unique real

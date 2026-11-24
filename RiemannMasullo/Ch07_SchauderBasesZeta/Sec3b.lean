@@ -3895,6 +3895,172 @@ theorem sLocalPWOrbital_bases {S₀ : Finset V} (hST : S ⊆ T) (_hT : T = S ∪
     obtain ⟨x, hx⟩ := ((Rₚ₀(p, χ)).comap W.subtype).mkQ_surjective (A.symm (e n))
     exact ⟨x, hx, (hA x).symm.trans ((congrArg A hx).trans (A.apply_symm_apply _))⟩
 
+/-- Vanishing of the selected Fourier jets cancels the corresponding polar coefficients
+by the local functional equation, also on a stage which is unsaturated away from the prime. -/
+private theorem sLocalPWOrbital_biorthogonal_growth_primary_coeff_zero
+    (p : Vℚ) (ω : PontryaginDual J₁(T)) (f : B(T))
+    (h : ∀ i : Iₚ(p, ω), sLocalOrbitalFourierJet i (q(T, ω) f) = 0)
+    (c : QuasiCharacter J(T))
+    (hc : normOneRestriction (m(T)) c = (⟨Circle.coeHom, continuous_subtype_val⟩ : Circle →ₜ* ℂ).comp ω)
+    (hr : 0 < sLocalFinitePoleMultiplicity (sLocalPrimaryPlaces T p) c)
+    (k : ℕ) (hk : sLocalRhoPoleOrder c - sLocalFinitePoleMultiplicity (sLocalPrimaryPlaces T p) c < k) :
+    sLocalPrincipalPartCoeff c k f = 0 := by
+  let twist := quasiCharacterNormTwist (m(T)) (isProperMap_sIdeleQuotientNorm F T).continuous
+  let dual := dualQuasiCharacter (m(T)) (isProperMap_sIdeleQuotientNorm F T).continuous
+  let Z (z : ℂ) := sLocalIdelicZFunction f (twist c z)
+  let ρ (z : ℂ) := sLocalRhoFactor (twist c z)
+  let H (z : ℂ) := sLocalIdelicZFunction (sAdeleSchwartzFourier f) (dual (twist c z))
+  let r := sLocalFinitePoleMultiplicity (sLocalPrimaryPlaces T p) c
+  have hH : AnalyticAt ℂ H 0 := sLocalOrbitalFourierZeta_analyticAt (⟨(c, 0), hc, hr⟩ : Iₚ(p, ω)) f
+  have horder : (r : ℕ∞) ≤ analyticOrderAt H 0 := by
+    refine (natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero hH).mpr fun i hi ↦ ?_
+    let j : Iₚ(p, ω) := ⟨(c, i), hc, hi⟩
+    exact (sLocalOrbitalFourierJet_mk j f).symm.trans (h j)
+  have hHo : (r : WithTop ℤ) ≤ meromorphicOrderAt H 0 := by
+    rw [hH.meromorphicOrderAt_eq]
+    cases ho : analyticOrderAt H 0 using ENat.recTopCoe with
+    | top => exact le_top
+    | coe n =>
+      rw [ENat.map_natCast]
+      rw [ho] at horder
+      exact_mod_cast horder
+  obtain ⟨η, a, ha⟩ := exists_sLocalNormTwist (F := F) (S := T) c
+  have hρ : MeromorphicAt ρ 0 := by
+    dsimp only [ρ, twist]
+    rw [← ha]
+    simp only [normTwist_normTwist]
+    exact (sLocalRhoFactor_meromorphic η (0 + a)).comp_analyticAt
+      (g := fun z : ℂ ↦ z + a) (by fun_prop)
+  have hFE : Z =ᶠ[𝓝[≠] 0] ρ * H := by
+    have ht : Tendsto (fun z : ℂ ↦ z + a) (𝓝[≠] 0) (𝓝[≠] (0 + a)) :=
+      ((Homeomorph.addRight a).map_punctured_nhds_eq 0).le
+    filter_upwards [ht.eventually (nhdsNE_le_codiscrete _ (sLocalPrincipalPartCoeff_lower_formula_fe η f))]
+      with z hz
+    simpa only [Z, ρ, H, twist, dual, ← ha, normTwist_normTwist, Pi.mul_apply] using hz
+  have hρo : (-(sLocalRhoPoleOrder c : ℤ) : WithTop ℤ) ≤ meromorphicOrderAt ρ 0 :=
+    (sLocalIdelicOrderBound_eq_neg_poleOrder c).ge.trans (min_le_right _ _)
+  have hZo := add_le_add hρo hHo
+  rw [← meromorphicOrderAt_mul hρ hH.meromorphicAt, ← meromorphicOrderAt_congr hFE] at hZo
+  apply sLocalPrincipalPartCoeff_ne_zero_imp_pole_vanish (sLocalZ_centered f c).1 k (by omega)
+  change (-(meromorphicOrderAt Z 0).untop₀).toNat < k
+  change sLocalRhoPoleOrder c - r < k at hk
+  cases ho : meromorphicOrderAt Z 0 with
+  | top => simpa using Nat.zero_lt_of_lt hk
+  | coe n =>
+    rw [ho] at hZo
+    have hn : -(sLocalRhoPoleOrder c : ℤ) + r ≤ n := by exact_mod_cast hZo
+    simp only [WithTop.untop₀_coe]
+    omega
+
+/-- On a nonempty primary fibre the Fourier jets separate principal-value classes.
+Use the coefficient criterion of §7.2 at the larger ring of integers. -/
+private theorem sLocalPWOrbital_biorthogonal_growth_primary_kernel (hST : S ⊆ T) (hPic : PicTrivial)
+    (p : Vℚ) (hp : (sLocalPrimaryPlaces T p).Nonempty) (ω : PontryaginDual J₁(T)) (x : Θ(T, ω))
+    (hx : ∀ j : Iₚ(p, ω), sLocalOrbitalFourierJet j x = 0) : x ∈ Rₚ(p, ω) := by
+  obtain ⟨f, rfl⟩ := (LinearMap.ker (sLocalHomogeneousAdelicThetaLinearMap F T ω)).mkQ_surjective x
+  have hPicT : Subsingleton (CommRing.Pic ((T : Set V).integer F)) :=
+    (picard_localization_exact F S T hST).choose_spec.2.2.1.subsingleton
+  -- Extend the isotype as in the proof of sLocalThetaPoleBound_le_orbitalPrincipalValue.
+  obtain ⟨σ, hσ⟩ := sIdeleQuotientNorm_exists_section F T
+  obtain ⟨η, hη, _⟩ := exists_character_on_split (m(T))
+    (isProperMap_sIdeleQuotientNorm F T).continuous σ hσ ω 1
+  obtain ⟨χ, hχ, hrest, _⟩ := sLocal_character_extension η
+  let incl : Circle →ₜ* ℂ := ⟨Circle.coeHom, continuous_subtype_val⟩
+  let χ₀ := incl.comp χ
+  let ω₀ : PontryaginDual C₁ := χ.comp (⟨(ideleClassNorm F).ker.subtype, continuous_subtype_val⟩ : C₁ →ₜ* _)
+  have hzero : ideleClassNormTwist χ 0 = χ₀ := by
+    ext1 g
+    change (χ g : ℂ) * _ ^ (0 : ℂ) = (χ g : ℂ)
+    simp
+  have hu : χ₀ ∈ unramifiedOutside F T := hzero ▸ hχ
+  have hbase : sIdeleRestriction F T ⟨χ₀, hu⟩ = incl.comp η := by
+    rw [show (⟨χ₀, hu⟩ : unramifiedOutside F T) = ⟨ideleClassNormTwist χ 0, hχ⟩ from Subtype.ext hzero.symm, hrest]
+    ext1 g
+    change (η g : ℂ) * _ ^ (0 : ℂ) = (η g : ℂ)
+    simp
+  let hu₀ : NormOneCharacterUnramifiedOutside ω₀ T := ⟨⟨χ₀, hu⟩, fun _ ↦ rfl⟩
+  have heq : sLocalNormOneCharacter T ω₀ hu₀ = ω := by
+    apply ContinuousMonoidHom.ext
+    intro y
+    apply Subtype.ext
+    exact (sLocalNormOneCharacter_eq_sIdeleRestriction ω₀ ⟨χ₀, hu⟩ (fun _ ↦ rfl) y).trans
+      ((DFunLike.congr_fun hbase y.val).trans (congrArg Subtype.val (hη y)))
+  have hcoeff := sLocalPWOrbital_biorthogonal_growth_primary_coeff_zero p ω f hx
+  rw [← heq] at hcoeff ⊢
+  exact sLocalPrincipalValue_mem_range_of_coeff_eq_zero (sLocalPrimaryPlaces_subset T p) hp
+    hPicT χ hu f (fun c hc hr k hk _ ↦ hcoeff c hc hr k hk)
+
+/-- Point masses on the integer lattice have exactly polynomial weighted sequence seminorms. -/
+private theorem sLocalPWOrbital_biorthogonal_growth_primary_pointMass (n : ℤ) :
+    ∃ a : RapidDecaySequence 1, (∀ m : ℤ, a (fun _ ↦ m) = if m = n then 1 else 0) ∧
+      ∀ k, rapidDecaySequenceSeminorm k a = (1 + |(n : ℝ)|) ^ k := by
+  classical
+  let u : Fin 1 → ℤ := fun _ ↦ n
+  let f (b : Fin 1 → ℤ) : ℂ := if b = u then 1 else 0
+  have hb (k : ℕ) : rapidDecaySequenceBound k f = ENNReal.ofReal ((1 + |(n : ℝ)|) ^ k) := by
+    rw [rapidDecaySequenceBound, tsum_eq_single u]
+    · simp only [f, ite_eq_left rfl, nnNorm_one, ENNReal.coe_one, mul_one,
+        ENNReal.ofReal_pow (by positivity : 0 ≤ 1 + |(n : ℝ)|),
+        ENNReal.ofReal_add zero_le_one (abs_nonneg _), ENNReal.ofReal_one]
+      congr 2
+      change ‖(WithLp.toLp 2 (fun i : Fin 1 ↦ ((u i : ℤ) : ℝ)) : EuclideanSpace ℝ (Fin 1))‖ₑ = _
+      rw [← ofReal_norm, EuclideanSpace.norm_eq]
+      simp [u, Real.norm_eq_abs, Real.sqrt_sq_eq_abs]
+    · intro b hb
+      simp [f, hb]
+  let a : RapidDecaySequence 1 := ⟨f, fun k ↦ (hb k).trans_lt ENNReal.ofReal_lt_top⟩
+  refine ⟨a, fun m ↦ ?_, fun k ↦ ?_⟩
+  · change (if (fun _ : Fin 1 ↦ m) = u then _ else _) = _
+    congr 1
+    exact propext ⟨fun h ↦ congrFun h 0, fun h ↦ congrArg (fun z : ℤ ↦ fun _ : Fin 1 ↦ z) h⟩
+  · change (rapidDecaySequenceBound k f).toReal = _
+    rw [hb, ENNReal.toReal_ofReal (by positivity)]
+
+/-- The closed graph theorem makes a uniquely determined interpolation operator continuous.
+We apply the Fréchet closed graph theorem on the graph of the coefficient equations. -/
+private theorem sLocalPWOrbital_biorthogonal_growth_primary_synthesis {E Q I : Type*}
+    [AddCommGroup E] [Module ℂ E] [TopologicalSpace E] [IsTopologicalAddGroup E] [ContinuousSMul ℂ E]
+    [AddCommGroup Q] [Module ℂ Q] [TopologicalSpace Q] [IsTopologicalAddGroup Q] [ContinuousSMul ℂ Q]
+    (hE : IsFrechetTVS E) (hQ : IsFrechetTVS Q) (row : I → E →L[ℂ] ℂ) (D : I → Q →L[ℂ] ℂ)
+    (sep : ∀ x y : Q, (∀ i, D i x = D i y) → x = y)
+    (lift : ∀ a, ∃ x, ∀ i, D i x = row i a) :
+    ∃ A : E →L[ℂ] Q, ∀ a i, D i (A a) = row i a := by
+  choose f hf using lift
+  let A : E →ₗ[ℂ] Q :=
+    { toFun := f
+      map_add' a b := sep _ _ fun i ↦ by rw [hf, map_add, map_add, hf, hf]
+      map_smul' z a := sep _ _ fun i ↦ by simp only [hf, map_smul, RingHom.id_apply] }
+  have hg := sLocalThetaPoleBound_zero_equiv_decay_closedGraph A (fun i ↦ D i) sep
+    (fun i ↦ (D i).continuous) (fun i ↦ (row i).continuous.congr fun a ↦ (hf a i).symm)
+  let P := (⊤ : Submodule ℂ E)
+  let B := A.comp P.subtype
+  have hgraph : IsClosed (B.graph : Set (P × Q)) := hg.preimage
+    (continuous_subtype_val.prodMap continuous_id)
+  have : TopologicalSpace.MetrizableSpace E := hE.2.2.1
+  have hB := weilTest_continuous_of_isClosed_graph hE hQ P isClosed_univ B hgraph
+  exact ⟨⟨A, hB.comp (continuous_id.subtype_mk fun _ ↦ Submodule.mem_top)⟩, hf⟩
+
+/-- Paper: Theorem 7.3.1.6(4), pp. 345–346, as used on p. 361.
+On one pole lattice and at one derivative order, suppose each point mass has a theta
+representative. Then every rapidly decreasing sequence has a representative, with all
+other primary jets zero. Page 346 compares the quotient to a periodic difference
+quotient for a saturated stage. Page 361 only requires a full fibre at the chosen prime.
+A comparison with the periodic moment model at its unramified places would suffice. -/
+private theorem sLocalPWOrbital_biorthogonal_growth_primary_interpolation
+    (hST : S ⊆ T) (hPic : PicTrivial) (p : Vℚ) (hfull : ∀ w : V, w.under (𝓞 ℚ) = p → w ∈ T)
+    (ω : PontryaginDual J₁(T)) (v : T) (hv : v.val ∈ sLocalPrimaryPlaces T p)
+    (c₀ : QuasiCharacter J(T))
+    (hc₀ : ∃ j : Iₚ(p, ω), j.val.1 = c₀ ∧ v ∈ sLocalFinitePolePlaces c₀)
+    (k : Fin (Fintype.card T)) (a : RapidDecaySequence 1) :
+    let c (n : ℤ) := quasiCharacterNormTwist (m(T)) (isProperMap_sIdeleQuotientNorm F T).continuous c₀
+      (((n : ℝ) * (2 * Real.pi / Real.log (v.val.asIdeal.absNorm : ℝ)) : ℝ) * Complex.I)
+    (∀ (n : ℤ) (j : Iₚ(p, ω)), j.val = (c n, k.val) →
+      ∃ y : Θ(T, ω), ∀ i : Iₚ(p, ω), sLocalOrbitalFourierJet i y = if i = j then 1 else 0) →
+    ∃ x : Θ(T, ω), ∀ i : Iₚ(p, ω),
+      (∀ n : ℤ, i.val = (c n, k.val) → sLocalOrbitalFourierJet i x = a (fun _ ↦ n)) ∧
+      ((¬ ∃ n : ℤ, i.val = (c n, k.val)) → sLocalOrbitalFourierJet i x = 0) := by
+  sorry
+
 /-- Paper: Theorem 7.3.1.6(4), p. 345, as used on p. 361. The ambient orbital
 quotient needs the polynomial seminorm estimate when all places above the
 chosen prime are present. The base set may be unsaturated at other primes.
@@ -3913,7 +4079,85 @@ private theorem sLocalPWOrbital_biorthogonal_growth_primary (hST : S ⊆ T) (_hP
           (isProperMap_sIdeleQuotientNorm F T).continuous c₀
           (((n : ℝ) * (2 * Real.pi / Real.log (v.val.asIdeal.absNorm : ℝ)) : ℝ) * Complex.I) →
         q (ψ j) ≤ C * (1 + |(n : ℝ)|) ^ d := by
-  sorry
+  intro v hv c₀ hc₀ q hq
+  let c (n : ℤ) := quasiCharacterNormTwist (m(T)) (isProperMap_sIdeleQuotientNorm F T).continuous c₀
+    (((n : ℝ) * (2 * Real.pi / Real.log (v.val.asIdeal.absNorm : ℝ)) : ℝ) * Complex.I)
+  let D (i : Iₚ(p, χ)) : Qₚ(p, χ) →L[ℂ] ℂ :=
+    (Rₚ(p, χ)).liftQL (sLocalOrbitalFourierJet i) (sLocalOrbitalFourierJet_range_le_ker p χ i)
+  have sep (x y : Qₚ(p, χ)) (h : ∀ i, D i x = D i y) : x = y := by
+    obtain ⟨u, rfl⟩ := (Rₚ(p, χ)).mkQ_surjective x
+    obtain ⟨w, rfl⟩ := (Rₚ(p, χ)).mkQ_surjective y
+    apply (Submodule.Quotient.eq _).mpr
+    apply sLocalPWOrbital_biorthogonal_growth_primary_kernel hST _hPic p ⟨v.val, hv⟩ χ
+    exact fun i ↦ (map_sub _ _ _).trans (sub_eq_zero.mpr (h i))
+  have hD (i j : Iₚ(p, χ)) : D i (ψ j) = if i = j then 1 else 0 := by
+    obtain ⟨x, hx⟩ := (Rₚ(p, χ)).mkQ_surjective (ψ j)
+    exact (congrArg (D i) hx.symm).trans (_hψ i j x hx)
+  have hQ : IsFrechetTVS (Qₚ(p, χ)) := isFrechetTVS_quotient
+    (sLocalHomogeneousThetaSpace_frechet χ) (Rₚ(p, χ))
+    (sLocalHomogeneousThetaPrincipalValue_isClosedEmbedding (sLocalPrimaryPlaces_subset T p) χ).isClosed_range
+  let coord (n : ℤ) : RapidDecaySequence 1 →L[ℂ] ℂ :=
+    { toFun := fun a ↦ a (fun _ ↦ n)
+      map_add' _ _ := rfl
+      map_smul' _ _ := rfl
+      cont := by simpa only [latticeIndex, Equiv.trans_apply, Equiv.symm_apply_apply, Equiv.funUnique_symm_apply,
+        show (uniqueElim n : Fin 1 → ℤ) = fun _ ↦ n from funext (uniqueElim_const n)] using
+        rapidCoordinate_continuous (Equiv.intEquivNat n) }
+  have orderBound (k : Fin (Fintype.card T)) :
+      ∃ d : ℕ, ∃ C > (0 : ℝ), ∀ (n : ℤ) (j : Iₚ(p, χ)), j.val = (c n, k.val) →
+        q (ψ j) ≤ C * (1 + |(n : ℝ)|) ^ d := by
+    let row (i : Iₚ(p, χ)) : RapidDecaySequence 1 →L[ℂ] ℂ :=
+      if h : ∃ n, i.val = (c n, k.val) then coord h.choose else 0
+    have hl (a : RapidDecaySequence 1) :=
+      sLocalPWOrbital_biorthogonal_growth_primary_interpolation hST _hPic p _hfull χ v hv c₀ hc₀ k a
+        (fun _ j _ ↦ by
+          obtain ⟨y, hy⟩ := (Rₚ(p, χ)).mkQ_surjective (ψ j)
+          exact ⟨y, fun i ↦ _hψ i j y hy⟩)
+    choose x hx using hl
+    have hr (a : RapidDecaySequence 1) (i : Iₚ(p, χ)) :
+        D i ((Rₚ(p, χ)).mkQ (x a)) = row i a := by
+      dsimp only [row]
+      split
+      · exact (hx a i).1 _ ‹∃ _, _›.choose_spec
+      · exact (hx a i).2 ‹¬ ∃ _, _›
+    obtain ⟨A, hA⟩ := sLocalPWOrbital_biorthogonal_growth_primary_synthesis
+      rapidDecaySequence_isFrechet hQ row D sep (fun a ↦ ⟨_, hr a⟩)
+    have hAx (a : RapidDecaySequence 1) : A a = (Rₚ(p, χ)).mkQ (x a) :=
+      sep _ _ fun i ↦ (hA a i).trans (hr a i).symm
+    obtain ⟨s, K, hK, hb⟩ := Seminorm.bound_of_continuous rapidDecaySequence_withSeminorms
+      (q.comp A.toLinearMap) (hq.comp A.continuous)
+    refine ⟨s.sup id, K, (NNReal.coe_pos.mpr (pos_iff_ne_zero.mpr hK)), fun n j hj ↦ ?_⟩
+    obtain ⟨a, ha, hm⟩ := sLocalPWOrbital_biorthogonal_growth_primary_pointMass n
+    have he : ψ j = A a := by
+      apply sep
+      intro i
+      rw [hD, hAx]
+      change (if i = j then 1 else 0) = sLocalOrbitalFourierJet i (x a)
+      by_cases hij : i = j
+      · subst i
+        exact (ite_eq_left rfl).trans (((hx a j).1 n hj).trans ((ha n).trans (ite_eq_left rfl))).symm
+      · rw [ite_eq_right hij]
+        by_cases hit : ∃ m, i.val = (c m, k.val)
+        · obtain ⟨m, hm⟩ := hit
+          have hmn : m ≠ n := fun e ↦ hij (Subtype.ext (hm.trans (e ▸ hj.symm)))
+          exact (((hx a i).1 m hm).trans ((ha m).trans (ite_eq_right hmn))).symm
+        · exact ((hx a i).2 hit).symm
+    rw [he]
+    apply (hb a).trans
+    change (K : ℝ) * s.sup rapidDecaySequenceSeminorm a ≤ _
+    apply mul_le_mul_of_nonneg_left _ K.coe_nonneg
+    apply Seminorm.finset_sup_apply_le (by positivity)
+    intro l hl
+    exact (hm l).le.trans (pow_le_pow_right₀ (by linarith [abs_nonneg (n : ℝ)]) (Finset.le_sup (f := id) hl))
+  choose d C hC hb using orderBound
+  have hsum : 0 ≤ ∑ k, C k := Finset.sum_nonneg fun k _ ↦ (hC k).le
+  refine ⟨Finset.univ.sup d, 1 + ∑ k, C k, by linarith, fun n j hj ↦ ?_⟩
+  let k : Fin (Fintype.card T) := ⟨j.val.2, j.property.2.trans_le (Finset.card_le_univ _)⟩
+  apply (hb k n j (Prod.ext hj rfl)).trans
+  apply mul_le_mul _ (pow_le_pow_right₀ (by linarith [abs_nonneg (n : ℝ)]) (Finset.le_sup (Finset.mem_univ k)))
+    (by positivity) (by linarith)
+  have h := Finset.single_le_sum (f := C) (fun i _ ↦ (hC i).le) (Finset.mem_univ k)
+  linarith
 
 /-- Paper: Theorem 7.3.3.4(3), p. 361.
 Fourier-biorthogonal vectors of either sufficiently large level satisfy a polynomial

@@ -5157,6 +5157,375 @@ private theorem sLocalStandardThetaTensor_fibre_hasSum {ω : PontryaginDual C₁
   field_simp
   rfl
 
+/-- A test vanishing at zero and transforming under the integer units by the
+inverse character is a finite sum of dilates of the inverse character on the unit shell. -/
+private theorem sLocalStandardThetaTensor_exists_representative_shells
+    (v : V) (c : QuasiCharacter (L(v))ˣ) (f b : ℬ(L(v)))
+    (hf : f (Multiplicative.ofAdd 0) = 0) (hb : b (Multiplicative.ofAdd 0) = 0)
+    (hunit : ∀ g : (L(v))ˣ, b (Multiplicative.ofAdd g.val) =
+      Set.indicator (U(v)) (fun u ↦ (c u)⁻¹) g)
+    (heigen : ∀ u ∈ U(v), ∀ x : L(v),
+      f (Multiplicative.ofAdd (u.val * x)) = (c u)⁻¹ * f (Multiplicative.ofAdd x))
+    (M : Submodule ℂ ℬ(L(v))) (hM : ∀ g, schwartzBruhatUnitTranslate g b ∈ M) : f ∈ M := by
+  classical
+  let ev (x : L(v)) : ℬ(L(v)) →ₗ[ℂ] ℂ :=
+    (LinearMap.proj (Multiplicative.ofAdd x)).comp (schwartzBruhatSubmodule _).subtype
+  let Z := Function.support fun x : L(v) ↦ ev x f
+  obtain ⟨hl, hc⟩ := (mem_finitePlaceSchwartz_iff F v _).mp ⟨f, fun _ ↦ rfl⟩
+  have hcl : IsClosed Z := (hl.isClopen_fiber 0).isOpen.isClosed_compl
+  have hcompact : IsCompact Z := hcl.closure_eq ▸ hc
+  let : CompactSpace Z := isCompact_iff_compactSpace.mp hcompact
+  let value (x : Z) := Valued.v x.val
+  have hvfin : (Set.range value).Finite := by
+    apply IsLocallyConstant.range_finite
+    refine (IsLocallyConstant.iff_eventually_eq _).mpr fun x ↦ ?_
+    have hx : x.val ≠ 0 := fun hz ↦ x.property (hz ▸ hf)
+    exact continuous_subtype_val.continuousAt.eventually
+      (Valued.locally_const ((Valuation.ne_zero_iff Valued.v).mpr hx))
+  let A := hvfin.toFinset
+  have hrep (r : ↥A) : ∃ u : (L(v))ˣ, Valued.v u.val = r.val := by
+    obtain ⟨x, hx⟩ := hvfin.mem_toFinset.mp r.property
+    exact ⟨Units.mk0 x.val (fun hz ↦ x.property (hz ▸ hf)), hx⟩
+  choose p hp using hrep
+  have hterm (x : L(v)) (r : ↥A) :
+      ev (p r).val f * ev x (schwartzBruhatUnitTranslate (p r) b) =
+        if Valued.v x = r.val then ev x f else 0 := by
+    change ev (p r).val f * b (Multiplicative.ofAdd ((p r).inv * x)) = _
+    by_cases hx : x = 0
+    · subst x
+      rw [mul_zero, hb, mul_zero, show ev 0 f = 0 from hf, ite_self]
+    let u := (p r)⁻¹ * Units.mk0 x hx
+    have hum : u ∈ U(v) ↔ Valued.v x = r.val := by
+      change u ∈ (O(v)).units ↔ _
+      rw [HeightOneSpectrum.adicCompletionIntegers.mem_units_iff_valued_eq_one]
+      change Valued.v (((p r)⁻¹).val * x) = 1 ↔ _
+      rw [Units.val_inv_eq_inv_val, map_mul, map_inv₀, inv_mul_eq_one₀
+        ((Valuation.ne_zero_iff _).mpr (p r).ne_zero), hp, eq_comm]
+    rw [show (p r).inv * x = u.val from rfl, hunit]
+    split_ifs with hr
+    · rw [Set.indicator_of_mem (hum.mpr hr), mul_comm]
+      have hu : u.val * (p r).val = x := by
+        change ((p r).inv * x) * (p r).val = x
+        rw [mul_right_comm, (p r).inv_val, one_mul]
+      exact ((heigen u (hum.mpr hr) (p r).val).symm.trans (congrArg (fun y ↦ ev y f) hu))
+    · rw [Set.indicator_of_notMem (mt hum.mp hr), mul_zero]
+  have he : f = ∑ r : ↥A, ev (p r).val f • schwartzBruhatUnitTranslate (p r) b := by
+    apply SchwartzBruhat.ext
+    intro y
+    let x := y.toAdd
+    change ev x f = ev x _
+    rw [map_sum]
+    simp only [map_smul, smul_eq_mul, hterm]
+    by_cases hm : Valued.v x ∈ A
+    · let r : ↥A := ⟨_, hm⟩
+      rw [Finset.sum_eq_single r, ite_eq_left (show Valued.v x = r.val from rfl)]
+      · intro j _ hj
+        exact ite_eq_right (fun e ↦ hj (Subtype.ext e.symm))
+      · simp
+    · rw [Finset.sum_eq_zero (fun (r : ↥A) _ ↦ ite_eq_right
+          (fun e : Valued.v x = r.val ↦ hm (e.symm ▸ r.property)))]
+      by_contra hn
+      exact hm (hvfin.mem_toFinset.mpr ⟨⟨x, hn⟩, rfl⟩)
+  exact he ▸ M.sum_mem fun r _ ↦ M.smul_mem _ (hM _)
+
+/-- Summing a finite orbit gives an invariant vector with the same quotient
+class as the orbit's cardinality times its starting vector. -/
+private theorem sLocalStandardThetaTensor_exists_representative_orbit
+    {G E : Type*} [Group G] [AddCommGroup E] [Module ℂ E] (r : G →* Module.End ℂ E)
+    (M : Submodule ℂ E) (hd : ∀ g x, r g x - x ∈ M)
+    (hinv : ∀ x, (∀ g, r g x = x) → x ∈ M)
+    (f : E) (hf : (Set.range fun g ↦ r g f).Finite) : f ∈ M := by
+  classical
+  let A := hf.toFinset
+  let s := ∑ x ∈ A, x
+  have act (a b : G) (x : E) : r (a * b) x = r a (r b x) :=
+    DFunLike.congr_fun (r.map_mul a b) x
+  have hmem (a : G) (x : E) (hx : x ∈ A) : r a x ∈ A := by
+    obtain ⟨b, rfl⟩ := hf.mem_toFinset.mp hx
+    exact hf.mem_toFinset.mpr ⟨a * b, act _ _ _⟩
+  have cancel (a : G) (x : E) : r a⁻¹ (r a x) = x := by rw [← act, inv_mul_cancel, map_one]; rfl
+  have hs : s ∈ M := hinv s fun g ↦ by
+    unfold s
+    rw [map_sum]
+    exact Finset.sum_bij' (fun a _ ↦ r g a) (fun a _ ↦ r g⁻¹ a)
+      (hmem g) (hmem g⁻¹) (fun a _ ↦ cancel g a)
+      (fun a _ ↦ by simp [← act]) (fun _ _ ↦ rfl)
+  have he : M.mkQ s = (A.card : ℂ) • M.mkQ f := by
+    unfold s
+    rw [map_sum, Finset.sum_congr rfl (g := fun _ ↦ M.mkQ f) (fun x hx ↦ ?_),
+      Finset.sum_const, Nat.cast_smul_eq_nsmul]
+    obtain ⟨g, rfl⟩ := hf.mem_toFinset.mp hx
+    exact (Submodule.Quotient.eq M).mpr (hd g f)
+  have hA : A.Nonempty := ⟨_, hf.mem_toFinset.mpr ⟨1, rfl⟩⟩
+  exact (Submodule.Quotient.mk_eq_zero M).mp ((smul_eq_zero.mp
+    (he.symm.trans ((Submodule.Quotient.mk_eq_zero M).mpr hs))).resolve_left
+      (Nat.cast_ne_zero.mpr hA.card_pos.ne'))
+
+/-- All local tests are generated, modulo twisted unit differences, by dilates
+of the standard test. The unramified ball contributes the value at zero and
+its uniformizer difference gives the unit shell. -/
+private theorem sLocalStandardThetaTensor_exists_representative_local
+    (v : V) (c : QuasiCharacter (L(v))ˣ) (M : Submodule ℂ ℬ(L(v)))
+    (hstd : ∀ g, schwartzBruhatUnitTranslate g (finiteStandardGaussian v c) ∈ M)
+    (hd : ∀ u ∈ U(v), ∀ f, schwartzBruhatUnitTranslate u f - c u • f ∈ M)
+    (f : ℬ(L(v))) : f ∈ M := by
+  classical
+  let H := (O(v)).units
+  let T := unitTranslateEnd (R := L(v))
+  let b := finiteStandardGaussian v c
+  let r : H →* Module.End ℂ ℬ(L(v)) :=
+    { toFun := fun u ↦ (c u.val)⁻¹ • T u.val
+      map_one' := by
+        change (c 1)⁻¹ • T 1 = 1
+        rw [map_one c, inv_one, T.map_one, one_smul]
+      map_mul' := fun u w ↦ by
+        ext1 x
+        simp only [Subgroup.coe_mul, map_mul, mul_inv, LinearMap.smul_apply,
+          mul_apply_eq_comp, map_smul, smul_smul, mul_comm] }
+  have hc (u : (L(v))ˣ) : c u ≠ 0 := ((Group.isUnit u).map c).ne_zero
+  apply sLocalStandardThetaTensor_exists_representative_orbit r M
+  · intro u x
+    have h := M.smul_mem (c u.val)⁻¹ (hd u.val u.property x)
+    rwa [smul_sub, smul_smul, inv_mul_cancel₀ (hc _), one_smul] at h
+  · intro x hx
+    let ev (z : L(v)) : ℬ(L(v)) →ₗ[ℂ] ℂ :=
+      (LinearMap.proj (Multiplicative.ofAdd z)).comp (schwartzBruhatSubmodule _).subtype
+    have he (u : (L(v))ˣ) (hu : u ∈ U(v)) (z : L(v)) :
+        ev (u.val * z) x = (c u)⁻¹ * ev z x := by
+      have h := congrArg (ev (u.val * z)) (hx ⟨u, hu⟩).symm
+      change _ = (c u)⁻¹ * x (Multiplicative.ofAdd (u.inv * (u.val * z))) at h
+      rwa [← mul_assoc, u.inv_val, one_mul] at h
+    have htrans (a d : (L(v))ˣ) (z : ℬ(L(v))) : T a (T d z) = T (a * d) z :=
+      (DFunLike.congr_fun (T.map_mul a d) z).symm
+    have hzero : (0 : L(v)) ∉ Units.val '' U(v) := fun ⟨g, _, hg⟩ ↦ g.ne_zero hg
+    have hmem (g : (L(v))ˣ) : g.val ∈ Units.val '' U(v) ↔ g ∈ U(v) :=
+      ⟨fun ⟨u, hu, e⟩ ↦ (Units.ext e : u = g) ▸ hu, fun hu ↦ ⟨g, hu, rfl⟩⟩
+    by_cases hur : ∀ u ∈ U(v), c u = 1
+    · have hb (z : L(v)) : ev z b = (O(v) : Set (L(v))).indicator (fun _ ↦ 1) z :=
+        ite_eq_left hur
+      have hb1 : b = finiteStandardGaussian v 1 := SchwartzBruhat.ext fun y ↦
+        (hb y.toAdd).trans (ite_eq_left (fun _ _ ↦ rfl)).symm
+      let d := x - ev 0 x • b
+      have hdval (z : L(v)) : ev z d = ev z x - ev 0 x * ev z b := by
+        dsimp only [d]; rw [map_sub, map_smul, smul_eq_mul]
+      have hd0 : ev 0 d = 0 := by
+        rw [hdval, hb, Set.indicator_of_mem (zero_mem _), mul_one, sub_self]
+      have hdr (u : (L(v))ˣ) (hu : u ∈ U(v)) (z : L(v)) :
+          ev (u.val * z) d = (c u)⁻¹ * ev z d := by
+        rw [hdval, hdval, he u hu, hur u hu, inv_one, one_mul, one_mul, hb, hb]
+        congr 2
+        exact if_congr (show u.val * z ∈ O(v) ↔ z ∈ O(v) from
+          ⟨fun h ↦ Units.inv_mul_cancel_left u z ▸ (O(v)).toSubring.mul_mem hu.2 h,
+           (O(v)).toSubring.mul_mem hu.1⟩) rfl rfl
+      obtain ⟨π, hπ⟩ :=
+        (Valued.v : Valuation (L(v)) (WithZero (Multiplicative ℤ))).exists_isUniformizer_of_isCyclic_of_nontrivial
+      let p := Units.mk0 (π : L(v)) hπ.ne_zero
+      let k := finitePlaceDifference v p (finiteStandardGaussian v 1)
+      have hk := finitePlaceDifference_integerIndicator v p hπ
+      have hdM : d ∈ M := sLocalStandardThetaTensor_exists_representative_shells v c d k hd0
+        ((hk 0).trans (Set.indicator_of_notMem hzero _)) (fun g ↦ by
+          rw [show k _ = _ from hk g.val]
+          by_cases hg : g ∈ U(v)
+          · rw [Set.indicator_of_mem ((hmem g).mpr hg), Set.indicator_of_mem hg, hur g hg, inv_one]
+          · rw [Set.indicator_of_notMem (mt (hmem g).mp hg), Set.indicator_of_notMem hg])
+        hdr M (fun g ↦ by
+          change T g (finiteStandardGaussian v 1 - T p (finiteStandardGaussian v 1)) ∈ M
+          rw [← hb1, map_sub, htrans]
+          exact M.sub_mem (hstd _) (hstd _))
+      have hbM : b ∈ M := by
+        have h : T 1 b ∈ M := hstd 1
+        rwa [T.map_one] at h
+      exact sub_add_cancel x (ev 0 x • b) ▸ M.add_mem hdM (M.smul_mem _ hbM)
+    · have hx0 : ev 0 x = 0 := by
+        push Not at hur
+        obtain ⟨u, hu, hne⟩ := hur
+        have h := he u hu 0
+        rw [mul_zero, eq_comm, ← sub_eq_zero, ← sub_one_mul] at h
+        exact (mul_eq_zero.mp h).resolve_left (sub_ne_zero.mpr (fun e ↦ hne (inv_eq_one.mp e)))
+      apply sLocalStandardThetaTensor_exists_representative_shells v c x b hx0
+        ((ite_eq_right hur).trans (Set.indicator_of_notMem hzero _)) _ he M hstd
+      intro g
+      by_cases hg : g ∈ U(v)
+      · rw [Set.indicator_of_mem hg]; exact finiteStandardGaussian_integerUnit v c g hg
+      · exact ((ite_eq_right hur).trans (Set.indicator_of_notMem (mt (hmem g).mp hg) _)).trans
+          (Set.indicator_of_notMem hg _).symm
+  · let : CompactSpace H := isCompact_iff_compactSpace.mp
+      (Submonoid.units_isCompact (isCompact_iff_compactSpace.mpr (compactSpace_adicCompletionIntegers v)))
+    have hb := (mem_finitePlaceSchwartz_iff F v _).mp ⟨b, fun _ ↦ rfl⟩
+    have hchar : IsLocallyConstant fun u : H ↦ (c u.val)⁻¹ := by
+      have e : (fun u : H ↦ (c u.val)⁻¹) = fun u ↦ b (Multiplicative.ofAdd u.val.val) :=
+        funext fun u ↦ (finiteStandardGaussian_integerUnit v c u.val u.property).symm
+      rw [e]
+      exact hb.1.comp_continuous (Units.continuous_val.comp continuous_subtype_val)
+    exact (hchar.comp₂ ((finiteTest_translate_locallyConstant v f).comp_continuous
+      continuous_subtype_val) (· • ·)).range_finite
+
+/-- A norm-one translation acts on a homogeneous quotient class by its character. -/
+private theorem sLocalStandardThetaTensor_exists_representative_normOne
+    (χ : PontryaginDual J₁(S)) (g : Iₛ(S)) (a : J₁(S)) (ha : a.val = QuotientGroup.mk g)
+    (f : ℬₛ(S)) : (Kₛω(S, χ)).mkQ (schwartzBruhatUnitTranslate g f) =
+      (χ a : ℂ) • (Kₛω(S, χ)).mkQ f := by
+  let : MeasurableSpace J₁(S) := borel _
+  let μ := sLocalNormOneQuotientMeasure F S
+  let : μ.IsHaarMeasure := (sLocalNormOneQuotientMeasure_normProduct (F := F) (S := S)).1
+  let π : Iₛ(S) →* Jₛ(S) := QuotientGroup.mk' _
+  let d := (Units.map ((adeleProjection F S).comp (integralAdelesOutside F S).subtype).toMonoidHom).comp
+    (Units.map (integralAdeleDiagonal F S).toMonoidHom)
+  have hshift (q : Jₛ(S)) : sLocalAdelicThetaOnClasses F S (schwartzBruhatUnitTranslate g f) q =
+      sLocalAdelicThetaOnClasses F S f ((π g)⁻¹ * q) := by
+    induction q using QuotientGroup.induction_on with
+    | H t =>
+      have he : (π g)⁻¹ * π t = π (g⁻¹ * t) := by rw [map_mul, map_inv]
+      change _ = sLocalAdelicThetaOnClasses F S f ((π g)⁻¹ * π t)
+      rw [he]
+      refine (sLocalAdelicThetaOnClasses_mk F S _ t).trans
+        (Eq.trans ?_ (sLocalAdelicThetaOnClasses_mk F S f (g⁻¹ * t)).symm)
+      rw [sLocalAdelicTheta_apply, sLocalAdelicTheta_apply]
+      exact tsum_congr fun n ↦ congrArg (fun z ↦ f (Multiplicative.ofAdd z))
+        (mul_left_comm g.inv (d n).val t.val)
+  rw [← map_smul]
+  apply (Submodule.Quotient.eq _).mpr
+  apply LinearMap.sub_mem_ker_iff.mpr
+  rw [map_smul]
+  apply ContinuousMap.ext
+  intro q
+  change _ = (χ a : ℂ) * sLocalHomogeneousAdelicThetaLinearMap F S χ f q
+  refine Eq.trans ?_ (sLocalHomogeneousAdelicTheta_homogeneous F S μ χ f a q)
+  change (∫ h : J₁(S), _ ∂μ) = ∫ h : J₁(S), _ ∂μ
+  refine integral_congr_ae (.of_forall fun h ↦ congrArg (· * (χ h : ℂ)) ?_)
+  exact (hshift (q * h.val)).trans (congrArg (sLocalAdelicThetaOnClasses F S f)
+    (by rw [ha]; exact (mul_assoc _ _ _).symm))
+
+/-- A translate of a standard tensor has a standard representative. The canonical
+archimedean section accounts for its norm, leaving a norm-one translate. -/
+private theorem sLocalStandardThetaTensor_exists_representative_stable
+    (χ : PontryaginDual J₁(S)) (c : QuasiCharacter Jₛ(S)) (g : Iₛ(S)) (f : ℬₛ(S))
+    (hf : (Kₛω(S, χ)).mkQ f ∈ ((Kₛω(S, χ)).mkQ.comp (sLocalStandardThetaTensor c)).range) :
+    (Kₛω(S, χ)).mkQ (schwartzBruhatUnitTranslate g f) ∈
+      ((Kₛω(S, χ)).mkQ.comp (sLocalStandardThetaTensor c)).range := by
+  let Q := (Kₛω(S, χ)).mkQ
+  let T := unitTranslateEnd (R := SAdeleRing F S)
+  let P := sLocalStandardThetaTensor c
+  obtain ⟨b, hb⟩ := hf
+  change Q (P b) = Q f at hb
+  obtain ⟨ρ, hρ⟩ := (existsUnique_sLocalHomogeneousThetaAction χ).exists
+  have hrep (l : ℬₛ(S)) : ρ (QuotientGroup.mk g) (Q l) = Q (T g l) := hρ.2 g l
+  let t := sIdeleNorm F S g
+  let a := Units.map (adeleProjection F S).toMonoidHom (canonicalIdeleNormSection F t)
+  have hn : sIdeleNorm F S a = t := sIdeleNorm_project_canonicalSection F S t
+  let y : J₁(S) := ⟨QuotientGroup.mk (g / a), by
+    change sIdeleNorm F S (g / a) = 1
+    rw [map_div, hn, div_self']⟩
+  let b' := schwartzBruhatUnitTranslate (archPart(S) a) b
+  have ha : P b' = T a (P b) := by
+    apply SchwartzBruhat.ext
+    intro z
+    change P b' (Multiplicative.ofAdd z.toAdd) = P b (Multiplicative.ofAdd (a.inv * z.toAdd))
+    rw [sLocalStandardThetaTensor_apply, sLocalStandardThetaTensor_apply]
+    apply congrArg (_ * ·)
+    refine Finset.prod_congr rfl fun j _ ↦ ?_
+    have hfin : a.inv.2 j = 1 := by
+      change ((canonicalIdeleNormSection F t)⁻¹).val.2 j.val = 1
+      rw [← map_inv, canonicalIdeleNormSection_finite]
+      rfl
+    change _ = finiteStandardGaussian _ _ (Multiplicative.ofAdd (a.inv.2 j * z.toAdd.2 j))
+    rw [hfin, one_mul]
+  refine ⟨(χ y : ℂ) • b', ?_⟩
+  change Q (P ((χ y : ℂ) • b')) = Q (T g f)
+  rw [map_smul, map_smul, ← hrep, ← hb, hrep, ← div_mul_cancel g a]
+  change (χ y : ℂ) • Q (P b') = Q (T ((g / a) * a) (P b))
+  rw [T.map_mul, mul_apply_eq_comp, ← ha]
+  exact (sLocalStandardThetaTensor_exists_representative_normOne χ (g / a) y rfl (P b')).symm
+
+/-- Inserting a single finite idele translates just that factor in a pure tensor.
+Integer units insert into the norm-one group, with the indicated character restriction. -/
+private theorem sLocalStandardThetaTensor_exists_representative_insert
+    (v : S) (c : QuasiCharacter Jₛ(S)) :
+    open Classical in
+    ∃ i : (L(v.val))ˣ → Iₛ(S),
+      (∀ u, c (QuotientGroup.mk (i u)) = sLocalFiniteRestriction v c u) ∧
+      (∀ u ∈ U(v.val), sIdeleNorm F S (i u) = 1) ∧
+      ∀ u (a : ℬ∞) (b : ∀ j : S, ℬ(L(j.val))),
+        let e := (sAdeleSchwartz_inductiveTensor_equiv F S).choose
+        e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] j, Function.update b v (schwartzBruhatUnitTranslate u (b v)) j)) =
+          schwartzBruhatUnitTranslate (i u) (e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] j, b j))) := by
+  classical
+  let single (u : (L(v.val))ˣ) := @Pi.mulSingle S (fun j ↦ (L(j.val))ˣ) _ (Classical.decEq _) v u
+  let i (u : (L(v.val))ˣ) := (ContinuousMulEquiv.prodUnits (InfiniteAdeleRing F)
+    ((j : S) → L(j.val))).symm
+      (1, (ContinuousMulEquiv.piUnits (M := fun j : S ↦ L(j.val))).symm (single u))
+  have hs (u : (L(v.val))ˣ) : single u v = u :=
+    @Pi.mulSingle_eq_same S (fun j ↦ (L(j.val))ˣ) _ (Classical.decEq _) v u
+  have hn (u : (L(v.val))ˣ) (j : S) (hj : j ≠ v) : single u j = 1 := by
+    let : DecidableEq S := Classical.decEq _
+    exact Pi.mulSingle_eq_of_ne (M := fun j : S ↦ (L(j.val))ˣ) hj u
+  refine ⟨i, fun _ ↦ rfl, fun u hu ↦ ?_, fun u a b ↦ ?_⟩
+  · apply Units.ext
+    apply NNReal.eq
+    have hnorm : ‖u.val‖ = 1 := Valued.toNormedField.norm_eq_one_iff.mpr
+      (HeightOneSpectrum.adicCompletionIntegers.mem_units_iff_valued_eq_one.mp hu)
+    let ev : (Iₛ(S) →* ℝ≥0ˣ) →* ℝ :=
+      NNReal.toRealHom.toMonoidHom.comp ((Units.coeHom ℝ≥0).comp (MonoidHom.eval (i u)))
+    change ev (sIdeleNorm F S) = 1
+    simp only [sIdeleNorm, map_mul, map_prod, map_pow]
+    change (∏ w : InfinitePlace F, ‖(1 : w.Completion)‖ ^ w.mult) *
+      (∏ j : S, ‖((single u j).val : L(j.val))‖) = 1
+    rw [Finset.prod_eq_single v (f := fun j : S ↦ ‖((single u j).val : L(j.val))‖)
+      (fun j _ hj ↦ by rw [hn u j hj, Units.val_one, norm_one])
+      (fun h ↦ absurd (Finset.mem_univ v) h), hs, hnorm]
+    simp
+  · let e := (sAdeleSchwartz_inductiveTensor_equiv F S).choose
+    have he := (sAdeleSchwartz_inductiveTensor_equiv F S).choose_spec
+    apply SchwartzBruhat.ext
+    intro y
+    change e _ (Multiplicative.ofAdd y.toAdd) = e _ (Multiplicative.ofAdd ((i u).inv * y.toAdd))
+    refine (he a _ y.toAdd).trans (Eq.trans ?_ (he a b ((i u).inv * y.toAdd)).symm)
+    change _ = a (Multiplicative.ofAdd (1 * y.toAdd.1)) * _
+    rw [one_mul]
+    apply congrArg (_ * ·)
+    refine Finset.prod_congr rfl fun j _ ↦ ?_
+    change _ = b j (Multiplicative.ofAdd ((single u j).inv * y.toAdd.2 j))
+    by_cases hj : j = v
+    · subst j
+      rw [Function.update_self, hs]
+      rfl
+    · rw [Function.update_of_ne hj, hn u j hj]
+      change _ = b j (Multiplicative.ofAdd (1 * y.toAdd.2 j))
+      rw [one_mul]
+
+/-- To test membership on the whole tensor product it suffices to start with the
+standard pure tensors and replace one standard finite factor at a time. -/
+private theorem sLocalStandardThetaTensor_exists_representative_tensor
+    {ι A : Type*} [Fintype ι] [DecidableEq ι] [AddCommGroup A] [Module ℂ A]
+    {B : ι → Type*} [∀ j, AddCommGroup (B j)] [∀ j, Module ℂ (B j)]
+    (std : ∀ j, B j) (D : Submodule ℂ (A ⊗[ℂ] (⨂[ℂ] j, B j)))
+    (base : ∀ a : A, a ⊗ₜ[ℂ] (⨂ₜ[ℂ] j, std j) ∈ D)
+    (step : ∀ (v : ι) (a : A) (b : ∀ j, B j),
+      a ⊗ₜ[ℂ] (⨂ₜ[ℂ] j, Function.update b v (std v) j) ∈ D → a ⊗ₜ[ℂ] (⨂ₜ[ℂ] j, b j) ∈ D)
+    (z : A ⊗[ℂ] (⨂[ℂ] j, B j)) : z ∈ D := by
+  classical
+  have pure_mem (t : Finset ι) (a : A) (b : ∀ j, B j)
+      (hb : ∀ j ∉ t, b j = std j) : a ⊗ₜ[ℂ] (⨂ₜ[ℂ] j, b j) ∈ D := by
+    induction t using Finset.induction_on generalizing b with
+    | empty =>
+      have he : b = std := funext fun j ↦ hb j (Finset.notMem_empty j)
+      exact he ▸ base a
+    | insert v t hv ih =>
+      apply step v a b
+      refine ih _ fun j hj ↦ ?_
+      by_cases hjv : j = v
+      · subst j; rw [Function.update_self]
+      · rw [Function.update_of_ne hjv]
+        exact hb j (Finset.mem_insert.not.mpr (not_or.mpr ⟨hjv, hj⟩))
+  refine TensorProduct.inductionOn z (fun a b ↦ ?_) (fun _ _ ↦ D.add_mem)
+  refine PiTensorProduct.induction_on (motive := fun b ↦ a ⊗ₜ[ℂ] b ∈ D) b ?_ ?_
+  · intro r b
+    rw [TensorProduct.tmul_smul]
+    exact D.smul_mem _ (pure_mem Finset.univ a b (fun j hj ↦ (hj (Finset.mem_univ j)).elim))
+  · intro b d hb hd
+    rw [TensorProduct.tmul_add]
+    exact D.add_mem hb hd
+
 /-- Paper: Theorem 6.2.2.1(1), p. 299.
 For trivial S-integer Picard group, every class of the S-local homogeneous theta quotient
 has a representative of the form `f` tensored with the standard finite tests. -/
@@ -5165,7 +5534,61 @@ private theorem sLocalStandardThetaTensor_exists_representative
     (hω : NormOneCharacterUnramifiedOutside ω S) :
     ∀ y : Θₛω(S, sLocalNormOneCharacter S ω hω), ∃ f : ℬ∞,
       (Kₛω(S, sLocalNormOneCharacter S ω hω)).mkQ
-        (sLocalStandardThetaTensor (sIdeleRestriction F S hω.choose) f) = y := by sorry
+        (sLocalStandardThetaTensor (sIdeleRestriction F S hω.choose) f) = y := by
+  classical
+  -- The archimedean norm section absorbs finite dilations for any S-ideal class group.
+  clear hPic
+  let χ := sLocalNormOneCharacter S ω hω
+  let c := sIdeleRestriction F S hω.choose
+  let Q := (Kₛω(S, χ)).mkQ
+  let P := sLocalStandardThetaTensor c
+  let R := (Q.comp P).range
+  let D := R.comap Q
+  let W := FinestLocallyConvex (⨂[ℂ] j : S, ℬ(L(j.val)))
+  let e := (sAdeleSchwartz_inductiveTensor_equiv F S).choose
+  let std (j : S) := finiteStandardGaussian j.val (sLocalFiniteRestriction j c)
+  intro y
+  let x := ((Kₛω(S, χ)).mkQ_surjective y).choose
+  have hx : Q x = y := ((Kₛω(S, χ)).mkQ_surjective y).choose_spec
+  let z := e.symm x
+  suffices h : z ∈ D.comap e.toLinearMap by
+    change Q (e (e.symm x)) ∈ R at h
+    rwa [e.apply_symm_apply, hx] at h
+  refine sLocalStandardThetaTensor_exists_representative_tensor (A := ℬ∞)
+    (B := fun j : S ↦ ℬ(L(j.val))) std (D.comap e.toLinearMap)
+    (fun a ↦ ⟨a, rfl⟩) (fun v a b hstd ↦ ?_) z
+  change e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] j, _)) ∈ D at hstd ⊢
+  let k : ℬ(L(v.val)) →ₗ[ℂ] ℬₛ(S) := e.toLinearMap.comp ((TensorProduct.mk ℂ ℬ∞ W a).comp
+    ((PiTensorProduct.tprod ℂ).toLinearMap b v))
+  have hk (z : ℬ(L(v.val))) :
+      k z = e (a ⊗ₜ[ℂ] (⨂ₜ[ℂ] j, Function.update b v z j)) := rfl
+  have ins := sLocalStandardThetaTensor_exists_representative_insert v c
+  let i := ins.choose
+  have hi := ins.choose_spec.2.2
+  have ht (u : (L(v.val))ˣ) (z : ℬ(L(v.val))) :
+      k (schwartzBruhatUnitTranslate u z) = schwartzBruhatUnitTranslate (i u) (k z) := by
+    simpa only [hk, Function.update_self, Function.update_idem] using hi u a (Function.update b v z)
+  have hlocal : b v ∈ D.comap k := by
+    apply sLocalStandardThetaTensor_exists_representative_local v.val (sLocalFiniteRestriction v c)
+    · intro u
+      change Q (k (schwartzBruhatUnitTranslate u (std v))) ∈ R
+      rw [ht]
+      apply sLocalStandardThetaTensor_exists_representative_stable χ c (i u)
+      change k (std v) ∈ D
+      rw [hk]
+      exact hstd
+    · intro u hu z
+      let y : J₁(S) := ⟨QuotientGroup.mk (i u), ins.choose_spec.2.1 u hu⟩
+      have hy : (χ y : ℂ) = sLocalFiniteRestriction v c u :=
+        (sLocalNormOneCharacter_eq_sIdeleRestriction ω hω.choose hω.choose_spec y).trans
+            (ins.choose_spec.1 u)
+      change Q (k _) ∈ R
+      rw [map_sub, map_smul, map_sub, map_smul, ht,
+        show Q (schwartzBruhatUnitTranslate (i u) (k z)) = (χ y : ℂ) • Q (k z) from
+          sLocalStandardThetaTensor_exists_representative_normOne χ (i u) y rfl _, hy, sub_self]
+      exact R.zero_mem
+  change k (b v) ∈ D at hlocal
+  simpa only [hk, Function.update_eq_self] using hlocal
 
 /-- Paper: Theorem 6.2.2.1(1), p. 299.
 The archimedean Schwartz–Bruhat space is a Fréchet space. -/

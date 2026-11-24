@@ -46,7 +46,22 @@ theorem adeleOrbitBasepoint_coordinates :
         (adeleOrbitBasepoint F (some (.inr v))).2 v = 0 ∧
         ∀ w : HeightOneSpectrum (𝓞 F), w ≠ v →
           (adeleOrbitBasepoint F (some (.inr v))).2 w = 1) := by
-  sorry
+  classical
+  refine ⟨rfl, ?_, ?_⟩
+  · intro v
+    refine ⟨?_, ?_, rfl⟩
+    · show Pi.mulSingle v (0 : v.Completion) v = 0
+      exact Pi.mulSingle_eq_same v 0
+    · intro w hw
+      show Pi.mulSingle v (0 : v.Completion) w = 1
+      exact Pi.mulSingle_eq_of_ne hw 0
+  · intro v
+    refine ⟨rfl, ?_, ?_⟩
+    · show Pi.mulSingle v (0 : v.adicCompletion F) v = 0
+      exact Pi.mulSingle_eq_same v 0
+    · intro w hw
+      show Pi.mulSingle v (0 : v.adicCompletion F) w = 1
+      exact Pi.mulSingle_eq_of_ne hw 0
 
 /-- Paper: Definition 8.2.0.1(1), p. 384. The S-local base points keep all infinite
 places and the finite places in S. -/
@@ -57,7 +72,7 @@ def sAdeleOrbitBasepoint (i : Option (InfinitePlace F ⊕ S)) : Aₛ :=
 has zero at that place, including after projection to the S-adeles. -/
 theorem sAdeleOrbitBasepoint_finite (v : S) :
     (sAdeleOrbitBasepoint F S (some (.inr v))).2 v = 0 := by
-  sorry
+  exact ((adeleOrbitBasepoint_coordinates F).2.2 v.val).2.1
 
 /-- Paper: Definition 8.2.0.1(1), p. 384. The set $Z_{F,S}$ in (8.2.0.1)
 consists of 1 and the single-zero base points, with the adelic subspace topology. -/

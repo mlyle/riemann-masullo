@@ -2428,6 +2428,90 @@ theorem modulatedQuotientLogMoment_bases (σ : ℕ ≃ J) :
   exact ⟨ψ, hb, ha, modulatedQuotientLogMoment_bases_dual (m := m) (hm := hm)
     (hms := hms) (ω := ω) (γs := γs) (hγs := hγs) (μ := μ) (hcomm := hcomm) σ ψ hb ha⟩
 
+/-- A continuous seminorm on the Mellin transform space is bounded on translates of a fixed
+function by a polynomial in the translation. Its degree is the largest weight among the
+finitely many line seminorms controlling the given seminorm. -/
+private theorem modulatedQuotientLogMoment_biorthogonal_growth_translate
+    (F : SchwartzBergman univ) (q : Seminorm ℂ (SchwartzBergman univ)) (hq : Continuous q) :
+    ∃ d : ℕ, ∃ B > (0 : ℝ), ∀ t : ℝ, q (moment_translate F t) ≤ B * (1 + |t|)^d := by
+  classical
+  let lines := LinearMap.pi (bergmanLine isOpen_univ ordConnected_univ)
+  let family := (SeminormFamily.sigma fun a : (univ : Set ℝ) ↦
+    (schwartzSeminormFamily ℂ ℝ ℂ).comp (LinearMap.proj a)).comp lines
+  have h := lines.withSeminorms_induced (withSeminorms_pi fun _ : (univ : Set ℝ) ↦
+    schwartz_withSeminorms ℂ ℝ ℂ)
+  have htop : (inferInstance : TopologicalSpace (SchwartzBergman univ)) = induced lines inferInstance :=
+    (bergman_embedding isOpen_univ ordConnected_univ).eq_induced
+  have hs : WithSeminorms family := (congrArg (fun t ↦ WithSeminorms (topology := t) family) htop).mpr h
+  obtain ⟨s, c, hc, hq'⟩ := Seminorm.bound_of_continuous hs q hq
+  choose C hC hbound using fun i : (Σ _ : (univ : Set ℝ), ℕ × ℕ) ↦
+    moment_translate_bound F i.1 i.2.1 i.2.2
+  let d := s.sup fun i ↦ i.2.1
+  let B := 1 + ∑ i ∈ s, C i
+  have hB : 0 < B := add_pos_of_pos_of_nonneg zero_lt_one (Finset.sum_nonneg fun i _ ↦ hC i)
+  refine ⟨d, c * B, mul_pos (NNReal.coe_pos.mpr (pos_iff_ne_zero.mpr hc)) hB, fun t ↦ ?_⟩
+  calc
+    _ ≤ (c : ℝ) * s.sup family (moment_translate F t) := hq' _
+    _ ≤ (c : ℝ) * (B * (1 + |t|)^d) := by
+      apply mul_le_mul_of_nonneg_left _ c.coe_nonneg
+      apply Seminorm.finset_sup_apply_le (by positivity)
+      intro i hi
+      have hiC : C i ≤ B := (Finset.single_le_sum (fun j _ ↦ hC j) hi).trans
+        (le_add_of_nonneg_left zero_le_one)
+      have hid : i.2.1 ≤ d := Finset.le_sup (f := fun j ↦ j.2.1) hi
+      calc
+        _ ≤ (1 + |t|)^i.2.1 * C i := hbound i t
+        _ = C i * (1 + |t|)^i.2.1 := mul_comm _ _
+        _ ≤ B * (1 + |t|)^d := mul_le_mul hiC
+          (pow_le_pow_right₀ (le_add_of_nonneg_right (abs_nonneg t)) hid) (by positivity) hB.le
+    _ = _ := (mul_assoc _ _ _).symm
+
+include hχ in
+/-- Translating one test transform gives a quotient vector with moment one at the translated
+frequency, simultaneously for every admissible order. The section frequency on each cyclic
+lattice is affine in its integer index. -/
+private theorem modulatedQuotientLogMoment_biorthogonal_growth_test :
+    ∃ (Q : SchwartzBergman univ →L[ℂ] U) (F : SchwartzBergman univ) (b : ℝ),
+      ∀ (k : Fin N) (n : ℤ) (j : J), j.val.1 = freq[k, n] →
+        D j (Q (moment_translate F (b - t₀ k ω + (2 * Real.pi / period (γs k)) * n))) = 1 := by
+  classical
+  obtain ⟨τ, hτ⟩ := exists_surjectiveModulation_section m hm hms
+  obtain ⟨χ₀, hK, h₀, hsplit⟩ := exists_baseCharacter_of_section m ω τ hτ
+  obtain ⟨b, hb⟩ := exists_circleExp_freq ((χ ω).comp τ)
+  obtain ⟨p, hp⟩ := moment_profile_equiv m hm hms ω τ hτ χ₀ hK h₀ (isotype_frechet m hm hms ω)
+  let e := p.trans (positiveRealFourierMellin univ isOpen_univ ordConnected_univ univ_nonempty)
+  let Q := (R).mkQL.comp e.symm.toContinuousLinearMap
+  obtain ⟨c, hc, hμ⟩ := moment_haar_scale m hm hms μ
+  have hc' : ((c : ℝ) : ℂ) ≠ 0 := by exact_mod_cast hc.ne'
+  -- The auxiliary product (1 - exp(-z))^N has a zero of order N at the origin.
+  obtain ⟨hd, hbound, ho⟩ := moment_exponential_product (fun _ : Fin N ↦ (-1 : ℝ))
+    (fun _ ↦ by norm_num) (fun _ ↦ (1 : Circle))
+  obtain ⟨F, hF, -⟩ := moment_interpolate_transform hd hbound 0 N
+    (by simpa using ho 0) (fun _ ↦ ((c : ℝ) : ℂ)⁻¹)
+  refine ⟨Q, F, b, fun k n j hj ↦ ?_⟩
+  let t := b - t₀ k ω + (2 * Real.pi / period (γs k)) * n
+  have hξ (x : G) : j.val.1 x = χ₀ x * Circle.exp (t * period x) := by
+    rw [hj]
+    change (modulatedCyclicCharacter m (γs k) (hγs k) χ (t₀ k) (ht₀ k) (ω, n)
+      (QuotientGroup.mk x))⁻¹ = _
+    rw [modulatedCyclicCharacter_mk, mul_inv, inv_inv, ← Circle.exp_neg,
+      hsplit (χ ω) (hχ ω) x, show χ ω (τ (m x)) = _ from hb (m x), mul_assoc, ← Circle.exp_add]
+    congr 2
+    dsimp [t]
+    ring
+  let H := moment_translate F t
+  change D j ((R).mkQ (e.symm H)) = 1
+  rw [modulatedQuotientLogMoment_mkQ, moment_profile_pairing m ω μ χ₀ _ t hξ _ _ (hp (e.symm H)) c hμ]
+  have hM : (mellin fun u : ℝ ↦ (p (e.symm H)).val (Real.log u)) = H.val := by
+    funext z
+    exact (positiveRealFourierMellin_apply univ isOpen_univ ordConnected_univ univ_nonempty _ z
+      (mem_univ _)).symm.trans (congrArg (fun H : SchwartzBergman univ ↦ H.val z) (e.apply_symm_apply H))
+  rw [hM]
+  change ((c : ℝ) : ℂ) * iteratedDeriv j.val.2 (fun z : ℂ ↦ F.val (z - t * Complex.I)) _ = 1
+  have hr : j.val.2 < N := j.property.trans_le ((Finset.card_filter_le _ _).trans (Finset.card_fin N).le)
+  simp only [iteratedDeriv_comp_sub_const, sub_self]
+  rw [hF ⟨_, hr⟩, mul_inv_cancel₀ hc']
+
 include hχ hcomm in
 /-- Paper: Theorem 4.6.1.5 and Equations (4.6.1.16)–(4.6.1.17), p. 212. The biorthogonal set
 (4.6.1.16) of the moment family exists in the difference quotient and satisfies condition (1) of
@@ -2445,7 +2529,42 @@ theorem modulatedQuotientLogMoment_exists_biorthogonal_growth :
       ∀ q : Seminorm ℂ U, Continuous q → ∃ d : ℕ, ∀ k : Fin N, ∃ C : ℝ, 0 < C ∧
         ∀ (n : ℤ) (j : J), j.val.1 = freq[k, n] →
           q (ψ j) ≤ C * (1 + |(n : ℝ)|) ^ d := by
-  sorry
+  classical
+  obtain ⟨ψ, hdiag, hoff⟩ := modulatedQuotientLogMoment_bases_biorthogonal m hm hms ω γs hγs μ hcomm
+  refine ⟨ψ, hdiag, hoff, fun q hq ↦ ?_⟩
+  by_cases hN : 0 < N
+  · obtain ⟨σ⟩ := modulatedPeriodicMomentIndex_enumerable m hm hms ω γs hγs hN
+    have hb := modulatedQuotientLogMoment_bases_quotient m hm hms ω γs hγs μ hcomm σ ψ ⟨hdiag, hoff⟩
+    have ha := modulatedQuotientLogMoment_bases_absolute m hm hms ω γs hγs μ σ ψ hb
+    obtain ⟨p, hp, hsum⟩ := ha q hq
+    have hterm (u : U) (j : J) : q (D j u • ψ j) ≤ p u := by
+      obtain ⟨i, rfl⟩ := σ.surjective j
+      exact ((hsum u).1.le_tsum i (fun _ _ ↦ apply_nonneg _ _)).trans (hsum u).2
+    obtain ⟨Q, F, b, htest⟩ := modulatedQuotientLogMoment_biorthogonal_growth_test
+      (m := m) (hm := hm) (hms := hms) (ω := ω) (γs := γs) (hγs := hγs)
+      (χ := χ) (hχ := hχ) (t₀ := t₀) (ht₀ := ht₀) (μ := μ)
+    obtain ⟨d, B, hB, hbound⟩ := modulatedQuotientLogMoment_biorthogonal_growth_translate F
+      (p.comp Q.toLinearMap) (hp.comp Q.continuous)
+    refine ⟨d, fun k ↦ ?_⟩
+    let a := b - t₀ k ω
+    let v := 2 * Real.pi / period (γs k)
+    let C := 1 + |a| + |v|
+    have hC : 0 < C := by dsimp [C]; positivity
+    refine ⟨B * C^d, by positivity, fun n j hj ↦ ?_⟩
+    let t := a + v * n
+    have h := hterm (Q (moment_translate F t)) j
+    rw [htest k n j hj, one_smul] at h
+    have ht : 1 + |t| ≤ C * (1 + |(n : ℝ)|) := by
+      have ht' := abs_add_le a (v * n)
+      rw [abs_mul] at ht'
+      dsimp only [t, C]
+      nlinarith [abs_nonneg v, abs_nonneg (n : ℝ), mul_nonneg (abs_nonneg a) (abs_nonneg (n : ℝ))]
+    calc
+      _ ≤ B * (1 + |t|)^d := h.trans (hbound t)
+      _ ≤ B * (C * (1 + |(n : ℝ)|))^d := mul_le_mul_of_nonneg_left
+        (pow_le_pow_left₀ (by positivity) ht d) hB.le
+      _ = _ := by rw [mul_pow, mul_assoc]
+  · exact ⟨0, fun k ↦ (hN (Fin.pos k)).elim⟩
 
 include hcomm in
 /-- Two biorthogonal families of the descended log-moments coincide. Their difference at any
