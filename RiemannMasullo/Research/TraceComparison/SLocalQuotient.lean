@@ -367,5 +367,79 @@ theorem sLocalTraceQuotient_normPowerMellin (π : C𝔽 →ₜ* Jₛ) (hπ : Sur
     _ = ∫ x, b.val (π x) * p (π x) ∂μF := by simp_rw [hb, ht]
     _ = _ := sLocalTraceQuotient_integral π hπ hn (fun j ↦ b.val j * p j) (hc.mul hp).measurable
 
-end RiemannMasullo
+section Lift
 
+attribute [local instance] instSAdeleMeasurableSpaceSec1 instSIdeleLocallyCompactSec1
+  instSIdeleSecondCountableSec1
+
+local instance : T2Space Iₛ := (sIdeleGroup_description F S).2.1
+
+/-- Paper: (12.4.1.4), p. 515. A compact test on the S-ideles whose S-unit
+periodization is the class test gives exactly the same integral against every continuous
+weight on the quotient. In particular the two square-root norm weights can be integrated
+on either side with the Tamagawa measures of §3.3. -/
+theorem sLocalTraceLift_weighted_integral (f : BruhatCompactSupport Iₛ) (b : Jₛ → ℂ)
+    (hLift : ∀ g : Iₛ, HasSum (fun ξ : sProjectedDiagonal F S ↦ f.val (ξ.val * g)) (b (qS g)))
+    (w : Jₛ → ℂ) (hw : Continuous w) :
+    (∫ g : Iₛ, f.val g * w (qS g) ∂sMultiplicativeTamagawaMeasure F S) =
+      ∫ j, b j * w j ∂μS := by
+  let H := sProjectedDiagonal F S
+  let : BorelSpace Iₛ := sIdeleGroup_borelSpace
+  let : DiscreteTopology H := discreteTopology_sProjectedDiagonal
+  let : Countable H := (TopologicalSpace.separableSpace_iff_countable.mp inferInstance)
+  let c : C(Iₛ, ℂ) := ⟨fun g ↦ f.val g * w (qS g),
+    (continuous_of_bruhatSmooth ((mem_bruhatSmoothSubmodule_iff _).mp f.property.1)).mul
+      (hw.comp continuous_quot_mk)⟩
+  have hc : HasCompactSupport c := f.property.2.mul_right
+  refine ((sLocalQuotientTamagawaMeasure_isWeil (F := F) (S := S)).2.2 c hc).trans ?_
+  apply integral_congr_ae
+  filter_upwards with j
+  let g : Iₛ := j.out
+  have hg : qS g = j := QuotientGroup.out_eq' j
+  have hclass (y : H) : qS (g * (y : Iₛ)) = j :=
+    (QuotientGroup.mk_mul_of_mem g y.property).trans hg
+  have hsum : HasSum (fun y : H ↦ f.val (g * (y : Iₛ))) (b j) := by
+    simpa only [mul_comm g, hg] using hLift g
+  change (∫ y : H, f.val (g * (y : Iₛ)) * w (qS (g * (y : Iₛ))) ∂Measure.count) = _
+  simp_rw [hclass]
+  rw [integral_mul_const]
+  congr 1
+  have hInt := integrable_count_iff.mpr hsum.summable.norm
+  calc
+    _ = ∑' y : H, f.val (g * (y : Iₛ)) := by
+      simpa only [count_real_singleton, one_smul] using integral_countable hInt
+    _ = _ := hsum.tsum_eq
+
+/-- Paper: (12.4.1.4) and (12.5.1.3), pp. 515, 519–520. The norm-power Mellin
+integral of every compact global Bruhat test satisfying the outside-unit invariance
+is the integral of any of its compact S-idelic periodization lifts, multiplied by the
+ratio of the global and S-local norm-one volumes. The exponents ±1/2 give both polar
+Mellin values. -/
+theorem sLocalTraceLift_global_normPowerMellin
+    (hPic : Subsingleton (CommRing.Pic ((S : Set V).integer F)))
+    (φ : BruhatCompactSupport C𝔽)
+    (hout : ∀ (u : outsideIntegralIdeleUnits F S) (x : C𝔽), φ.val (qF u.val * x) = φ.val x)
+    (f : BruhatCompactSupport Iₛ) (hLift : ∀ g : Iₛ,
+      HasSum (fun ξ : sProjectedDiagonal F S ↦ f.val (ξ.val * g))
+        (φ.val (qF (sIdeleInsertion F S g)))) (s : ℂ) :
+    modulatedFourierMellin mF univ ⟨isProperMap_ideleClassNorm F, ideleClassNorm_ne_one (F := F)⟩
+        μF φ.val (ideleClassNormTwist 1 s) =
+      (vF / vS).toReal • ∫ g, f.val g * (((sIdeleNorm F S g).val : ℝ) : ℂ) ^ s
+        ∂sMultiplicativeTamagawaMeasure F S := by
+  obtain ⟨π, hπ, hker, hn, hs⟩ := exists_sLocalTraceQuotient hPic
+  obtain ⟨b, hb, -⟩ := sLocalTraceQuotient_bruhat_descent π hπ hker hn φ hout
+  rw [sLocalTraceQuotient_normPowerMellin π hπ.surjective hn φ b hb s]
+  congr 1
+  let p (j : Jₛ) : ℂ := (((sIdeleQuotientNorm F S j).val : ℝ) : ℂ) ^ s
+  have hp : Continuous p := (Complex.continuous_ofReal.comp (NNReal.continuous_coe.comp
+    (Units.continuous_val.comp (isProperMap_sIdeleQuotientNorm F S).continuous))).cpow
+      continuous_const (fun j ↦ Complex.ofReal_mem_slitPlane.mpr (NNReal.coe_pos.mpr (Units.zero_lt _)))
+  have hLift' (g : Iₛ) : HasSum (fun ξ : sProjectedDiagonal F S ↦ f.val (ξ.val * g)) (b.val (qS g)) := by
+    rw [← hs, hb]
+    exact hLift g
+  have hq (g : Iₛ) : sIdeleQuotientNorm F S (qS g) = sIdeleNorm F S g := sIdeleQuotientNorm_mk F S g
+  simpa only [p, hq] using (sLocalTraceLift_weighted_integral f b.val hLift' p hp).symm
+
+end Lift
+
+end RiemannMasullo
