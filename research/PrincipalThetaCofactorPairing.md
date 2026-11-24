@@ -63,3 +63,34 @@ $$
  \ll_h X^{-.017}\log X=o(1).
 $$
 This controls the change caused by deleting every selected column simultaneously, independently of the unselected columns. The proportion counts integer indices. It gives no percentage of the whole squared error. The remaining vector still needs an estimate.
+
+## Reducing the full vector to a sparse remainder
+
+A short-interval Möbius estimate allows more columns to be removed. For the same middle window and principal rational character, one can choose original columns $J_X$ such that
+$$
+\left\|F_X-\sum_{n\in J_X} e(n)h(n/y)\right\|_2=O_h(X^{-.03}),\qquad
+\sum_{n\in J_X}\|e(n)h(n/y)\|_2^2\ll_{A,h}(\log X)^{-A}
+$$
+for every fixed $A>0$. The harmonic mass of the nonzero, active indices in $J_X$ obeys the same logarithmic estimate.
+
+Put $Y=e^S$ and write $n=Mj$ uniquely, assigning all prime powers with prime exceeding $Y$ to $M$. The remaining $j$ is $Y$-smooth. The exact coefficient formula above applies for squarefree $M>1$, and a repeated prime in $M$ makes the physical column zero. For $M=1$ use $e_1=e$. In particular, $|e(n)|\le2\tau(j)$ on the active indices.
+
+For fixed $b>0$ and fixed nonnegative integer $k$ we have
+$$ \sum_{j>X^b,\,P^+(j)\le Y}\frac{\tau(j)^k}{j}\ll_{b,k,A}L^{-A}. $$
+For the Rankin bound take $q=\log L$ and $\sigma=(\log q)/(2\log Y)$. The factor $X^{-b\sigma}$ is $\exp(-bq\log q)$. On prime powers, $\tau(n)^k\le d_{2^k}(n)$ by counting a tuple of valuations as its nested subsets at each possible level. The logarithm of the corresponding Euler product is $O_k(q)$. Indeed $\sum_{p\le Y}1/p=O(q)$ and $\sum_{p\le Y}(p^\sigma-1)/p\ll\sigma\sqrt q\sum_{p\le Y}(\log p)/p\ll\sqrt q\log q$.
+
+Define $\mu_Y(M)$ to equal $\mu(M)$ when all prime factors exceed $Y$, and zero otherwise. Its exact Dirichlet convolution is $\mu_Y=\mathbf1_{P^+\le Y}*\mu$, as seen on prime powers. For a dyad $T\asymp X^u$ with $.9\le u\le1$, set $H=T^{.41}$. Then
+$$ \int_T^{2T}\left|\sum_{x<M\le x+H}\mu_Y(M)\right|dx\ll_A THL^{-A}. $$
+In the convolution truncate the smooth factor at $d\le T^{.06}$. For each such $d$, the integration variable changes to $x/d$ and the interval length $H/d$ exceeds $(T/d)^{1/3+\epsilon}$ for a fixed $\epsilon>0$. Apply Theorem 1.1(i) of Matomäki–Radziwiłł–Shao–Tao–Teräväinen to the constant nilsequence. On the exceptional locations use the trivial interval count. Sum the resulting integrals in $d$, losing at most a logarithm. The larger smooth factors have integrated total at most $3TH\sum_{d>T^{.06},\,P^+(d)\le Y}1/d$, covered by the Rankin estimate. [Short-interval Möbius theorem, p. 3](https://arxiv.org/pdf/2411.05770#page=3)
+
+Choose a shift of a grid of length $H$ minimizing its total absolute sign imbalance. Averaging over shifts bounds the number of unmatched rough squarefree multipliers by $O_A(TL^{-A})$ on each dyad, including the cost of its two boundary cells. Match the opposite signs within each cell. For each match $B,C$ take all smooth $j$ at once. The previous detector bound and divisor sum estimate show that one match costs $O_h((H/T)\sqrt X(1+L)/T)$ in norm. There are at most $2T$ matches, and summing geometrically from $T=X^{.9}$ gives $O_h((1+L)X^{-.031})$. This estimate bounds the sum of the norms of the matched differences.
+
+The unpaired large multipliers have total reciprocal mass $O_A(L^{-A})$, with a further logarithm for summing dyads absorbed by increasing $A$. Sum $\tau(j)^2/j\ll(1+L)^4$ in the sense of its cumulative sum over $j\le X$, to get the same bound for the diagonal. For $M<X^{.9}$ on the active window, $Mj\ge r_0Xe^{-S}> X^{.99}$ for sufficiently large $X$. Thus $j>X^{.09}$ and the smooth-tail estimate applies before summing $1/M$. This proves the reduction. A graph of residual pairings with maximum degree $O(L^C)$ consequently has total absolute contribution $o(1)$ for any fixed $C$, by $2|\langle v,w\rangle|\le\|v\|^2+\|w\|^2$. Higher-degree correlations in the remainder are still uncontrolled.
+
+## A sparse family of genuine columns can have divergent energy
+
+The two sparsity estimates just obtained cannot by themselves control all the remaining off-diagonal pairs, even when every coefficient is taken from the original Möbius error. For the actual detector take $1/2<u<r_0$ and put $Y_*=Xe^{-R/2}$, the top of the middle window. Select $K=\lfloor Y_*^{3/4}\rfloor$ distinct primes in $[uY_*,uY_*+Y_*/\log Y_*]$. Such a selection exists for every sufficiently large $X$ by the classical prime number theorem with remainder. For these primes $p>Xe^{-R}$ and $e(p)=w(0)-w(\log p)=1$. The entire support of $h(p/y)$ lies inside the middle window. With $H(z)=\int_0^\infty h(r)h(zr)dr$,
+$$ \langle h(p/y),h(p'/y)\rangle = p^{-1}H(p'/p)=(1+o(1))\|h\|_2^2/(uY_*) $$
+uniformly for the selected pairs, by continuity at one. Their total harmonic mass and positive diagonal are $O(Y_*^{-1/4})$. Yet the squared norm of their sum is asymptotic to $Y_*^{1/2}\|h\|_2^2/u$. Every distinct pair has reduced height comparable to $Y_*$.
+
+This family can be retained in a remainder that still satisfies both compression estimates. Keep any previously matched partners of these primes alongside them, undoing only their matches. A partner is within $O(Y_*^{.41})$ and has modulus asymptotic to $uY_*$. Its only potentially active smooth cofactor is $j=1$, since $u>1/2$. Its coefficient there has absolute value one. Retaining both sides adds $O(K/Y_*)$ harmonic and diagonal mass. The bound on the sum of the norms of *all* matched differences still bounds the removed part. The prime-only subtotal shows why a hereditary absolute estimate on these pairs fails. The signed norm of the complete remainder, including the opposite signs of the partners, remains open.
