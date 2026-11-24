@@ -26,7 +26,9 @@ their projections. If their number is uniformly bounded on the selected
 component, the universal compact-insertion assertion is equivalent to polynomial
 growth of the whole block projections. Rank-one insertions already imply the
 bound, and it suffices for all bounded insertions and trace-norm Cauchy tails.
-Neither criterion proves that the required bounds hold for actual Hecke zeros.
+The last theorem expresses this condition intrinsically. It compares every linear
+combination of the jets at a site against the span of all jets from other sites.
+Whether the actual Hecke zeros satisfy the uniform bound remains open.
 -/
 @[expose] public noncomputable section
 open Function Set Filter MeasureTheory Topology IsDedekindDomain NumberField
@@ -1104,5 +1106,154 @@ theorem spectralStrip_bounded_multiplicity_iff_polynomial_complete_projections
   · intro h φ hφ U
     exact (spectralStrip_complete_block_bounded_insertions χ hχ a hα hs x L hj η k hk h φ hφ U.val).of_norm
 #print axioms spectralStrip_bounded_multiplicity_iff_polynomial_complete_projections
+
+
+/-- The norm of a *whole* finite spectral coordinate projection is at most C precisely
+when adding functionals from the other coordinates cannot shrink a functional of
+the block by a factor greater than C. Both subspaces use actual realized jet forms. -/
+private theorem spectralMarkushevich_block_projection_iff {I E : Type*} [NormedAddCommGroup E] [NormedSpace ℂ E]
+    (x : I → E) (L : I → StrongDual ℂ E) (hb : IsSpectralMarkushevichBasis x L)
+    (s : Finset I) {C : ℝ} (hC : 0 ≤ C) :
+    ‖∑ i ∈ s, (L i).smulRight (x i)‖ ≤ C ↔
+      ∀ f ∈ Submodule.span ℂ (L '' (s : Set I)), ∀ g ∈ Submodule.span ℂ (L '' (s : Set I)ᶜ),
+        ‖f‖ ≤ C*‖f+g‖ := by
+  classical
+  let B := Submodule.span ℂ (L '' (s : Set I))
+  let N := Submodule.span ℂ (L '' (s : Set I)ᶜ)
+  let P := ∑ i ∈ s, (L i).smulRight (x i)
+  let T := ∑ i ∈ s, (ContinuousLinearMap.apply ℂ ℂ (x i)).smulRight (L i)
+  have hTf (f : StrongDual ℂ E) : T f = f.comp P := by
+    ext u
+    simp [T,P,sum_apply,smul_eq_mul,mul_comm]
+  have hTL (i : I) : T (L i) = if i∈s then L i else 0 := by
+    have hδ (j : I) : L i (x j) • L j = if j = i then L i else 0 := by
+      split_ifs with h
+      · subst j; rw [hb.1,one_smul]
+      · rw [hb.2.1 _ _ h,zero_smul]
+    simp only [T,sum_apply,ContinuousLinearMap.smulRight_apply,ContinuousLinearMap.apply_apply,hδ,Finset.sum_ite_eq']
+  have hB : B ≤ (T - ContinuousLinearMap.id ℂ _).ker := by
+    apply Submodule.span_le.mpr
+    rintro _ ⟨i,hi,rfl⟩
+    change T (L i) - L i = 0
+    rw [hTL,ite_eq_left (show i∈s from hi),sub_self]
+  have hN : N ≤ T.ker := by
+    apply Submodule.span_le.mpr
+    rintro _ ⟨i,hi,rfl⟩
+    change T (L i) = 0
+    rw [hTL,ite_eq_right (show i∉s from hi)]
+  have hmem (f : StrongDual ℂ E) : T f ∈ B := by
+    dsimp only [T]
+    rw [sum_apply]
+    exact Submodule.sum_mem B fun i hi ↦ B.smul_mem _ (Submodule.subset_span ⟨i,hi,rfl⟩)
+  have hfar (f : StrongDual ℂ E) : f - T f ∈ N.topologicalClosure := by
+    let U := ContinuousLinearMap.id ℂ (StrongDual ℂ E) - T
+    have h : Submodule.span ℂ (range L) ≤ N.topologicalClosure.comap U.toLinearMap := by
+      apply Submodule.span_le.mpr
+      rintro _ ⟨i,rfl⟩
+      change L i - T (L i) ∈ N.topologicalClosure
+      rw [hTL]
+      split_ifs with hi
+      · rw [sub_self]; exact N.topologicalClosure.zero_mem
+      · rw [sub_zero]; exact N.le_topologicalClosure (Submodule.subset_span ⟨i,hi,rfl⟩)
+    exact (Submodule.topologicalClosure_minimal _ h
+      (N.isClosed_topologicalClosure.preimage U.continuous)) (hb.2.2.2 f)
+  change ‖P‖ ≤ C ↔ ∀ f ∈ B, ∀ g ∈ N, ‖f‖ ≤ C*‖f+g‖
+  constructor
+  · intro hp f hf g hg
+    have hgf : T (f+g) = f := by
+      have hf' : T f - f = 0 := hB hf
+      rw [map_add,sub_eq_zero.mp hf',show T g=0 from hN hg,add_zero]
+    calc
+      ‖f‖ = ‖(f+g).comp P‖ := congrArg norm (hgf.symm.trans (hTf _))
+      _ ≤ ‖f+g‖*‖P‖ := ContinuousLinearMap.opNorm_comp_le ..
+      _ ≤ C*‖f+g‖ := (mul_le_mul_of_nonneg_left hp (norm_nonneg _)).trans_eq (mul_comm _ _)
+  · intro h
+    have hnorm (f : StrongDual ℂ E) : ‖T f‖ ≤ C*‖f‖ := by
+      let S := {g : StrongDual ℂ E | ‖T f‖ ≤ C*‖T f + g‖}
+      have hc : IsClosed S := isClosed_le continuous_const (continuous_const.mul (continuous_const.add continuous_id).norm)
+      have hin : (N : Set _) ⊆ S := fun g hg ↦ h (T f) (hmem _) g hg
+      have hx := closure_minimal hin hc (hfar f)
+      change ‖T f‖ ≤ C*‖T f+(f-T f)‖ at hx
+      simpa only [add_sub_cancel] using hx
+    apply P.opNorm_le_bound hC
+    intro v
+    obtain ⟨f,hf,hv⟩ := exists_dual_vector'' ℂ (P v)
+    have he : ‖T f v‖ = ‖P v‖ := by
+      rw [hTf]; change ‖f (P v)‖ = _; rw [hv]
+      change ‖(‖P v‖ : ℂ)‖ = _
+      simp
+    rw [← he]
+    exact ((T f).le_opNorm _).trans (mul_le_mul_of_nonneg_right
+      ((hnorm f).trans (mul_le_of_le_one_right hC hf)) (norm_nonneg _))
+
+/-- The norm bound on a whole zero projection is equivalent to separation of the
+entire span of its realized jet forms from the span of all jets at other zeros. -/
+theorem spectralStrip_complete_projection_iff_interpolation
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (a : ℝ) {α s : ℝ} (hα : 0≤α) (hs : 1<s)
+    (x : J(χ,a,α,s) → H(a,hα,hs)) (L : J(χ,a,α,s) → StrongDual ℂ H(a,hα,hs))
+    (hb : IsSpectralMarkushevichBasis x L) (z : Z(χ,a,α)) {C : ℝ} (hC : 0≤C) :
+    ‖∑ m : Fin (N(χ,a,α,s,z)), (L (jet(z,m))).smulRight (x (jet(z,m)))‖ ≤ C ↔
+      ∀ f ∈ Submodule.span ℂ (range fun m : Fin (N(χ,a,α,s,z)) ↦ L (jet(z,m))),
+      ∀ g ∈ Submodule.span ℂ {g | ∃ (w : Z(χ,a,α)) (_ : w≠z) (m : Fin (N(χ,a,α,s,w))), g=L (jet(w,m))},
+      ‖f‖ ≤ C*‖f+g‖ := by
+  classical
+  let j (w : Z(χ,a,α)) (m : Fin (N(χ,a,α,s,w))) : J(χ,a,α,s) := jet(w,m)
+  let e : Fin (N(χ,a,α,s,z)) ↪ J(χ,a,α,s) :=
+    ⟨j z,fun i l he ↦ Fin.ext (congrArg (fun u : J(χ,a,α,s) ↦ u.val.2.2.2) he)⟩
+  let S := Finset.univ.map e
+  have near : L '' (S : Set _) = range (fun m ↦ L (j z m)) := by
+    ext f
+    constructor
+    · rintro ⟨i,hi,rfl⟩
+      obtain ⟨m,_,rfl⟩ := Finset.mem_map.mp hi
+      exact ⟨m,rfl⟩
+    · rintro ⟨m,rfl⟩
+      exact ⟨e m, Finset.mem_map.mpr ⟨m,Finset.mem_univ _,rfl⟩,rfl⟩
+  have cover (u : J(χ,a,α,s)) : ∃ (w : Z(χ,a,α)) (m : Fin (N(χ,a,α,s,w))), j w m = u :=
+    ⟨⟨(u.val.1,u.val.2.1,u.val.2.2.1),u.mem_strip_order_pos hα⟩,⟨u.val.2.2.2,u.property⟩,rfl⟩
+  have far : L '' (S : Set _)ᶜ = {g | ∃ (w : Z(χ,a,α)) (_ : w≠z) (m : Fin (N(χ,a,α,s,w))), g=L (j w m)} := by
+    ext g
+    constructor
+    · rintro ⟨u,hu,rfl⟩
+      obtain ⟨w,m,rfl⟩ := cover u
+      refine ⟨w,?_,m,rfl⟩
+      rintro rfl
+      exact hu (Finset.mem_map.mpr ⟨m,Finset.mem_univ _,rfl⟩)
+    · rintro ⟨w,hw,m,rfl⟩
+      refine ⟨j w m,?_,rfl⟩
+      intro h
+      obtain ⟨l,_,hl⟩ := Finset.mem_map.mp h
+      exact hw (Subtype.ext (congrArg (fun u : J(χ,a,α,s) ↦ (u.val.1,u.val.2.1,u.val.2.2.1)) hl).symm)
+  have H := spectralMarkushevich_block_projection_iff x L hb S hC
+  rw [near,far] at H
+  have he (m) : e m = j z m := rfl
+  have hsum : (∑ i ∈ S, (L i).smulRight (x i)) = ∑ m, (L (j z m)).smulRight (x (j z m)) := by
+    rw [show S = Finset.univ.map e from rfl,Finset.sum_map]
+    exact Finset.sum_congr rfl fun m _ ↦ congrArg (fun i ↦ (L i).smulRight (x i)) (he m)
+  rw [hsum] at H
+  exact H
+#print axioms spectralStrip_complete_projection_iff_interpolation
+
+/-- For uniformly bounded multiplicity on one actual component, the universal compact-insertion
+assertion is equivalent to an intrinsic interpolation estimate for every linear
+combination of surviving jets at a site against all the jets at other sites. -/
+theorem spectralStrip_bounded_multiplicity_iff_jet_subspace_separation
+    (χ : PontryaginDual C₁ → PontryaginDual C𝔽) (hχ : IsSpectralBasepointChoice χ) (a : ℝ) {α s : ℝ}
+    (hα : 0≤α) (hs : 1<s)
+    (x : J(χ,a,α,s) → H(a,hα,hs)) (L : J(χ,a,α,s) → StrongDual ℂ H(a,hα,hs))
+    (hb : IsSpectralMarkushevichBasis x L) (hj : ∀ i, D(a,hα,hs) (L i) = raw(χ,hα,hs,i)) (η : PontryaginDual C₁)
+    (k : ℕ) (hk : ∀ z : Z(χ,a,α), z.val.1=η → N(χ,a,α,s,z) ≤ k) :
+    (∀ φ : BruhatCompactSupport C𝔽, (hom(φ,η)) →
+      ∀ U : compactOperator (RingHom.id ℂ) H(a,hα,hs) H(a,hα,hs), Summable (fun z : Z(χ,a,α) ↦
+        ∑ m : Fin (N(χ,a,α,s,z)), L (jet(z,m)) (A(a,hα,hs,φ) (U.val (x (jet(z,m))))))) ↔
+    ∃ C≥(0:ℝ), ∃ d : ℕ, ∀ z : Z(χ,a,α), z.val.1=η →
+      ∀ f ∈ Submodule.span ℂ (range fun m : Fin (N(χ,a,α,s,z)) ↦ L (jet(z,m))),
+      ∀ g ∈ Submodule.span ℂ {g | ∃ (w : Z(χ,a,α)) (_ : w≠z) (m : Fin (N(χ,a,α,s,w))), g=L (jet(w,m))},
+        ‖f‖ ≤ (C*(1+|z.val.2.2|)^d)*‖f+g‖ := by
+  rw [spectralStrip_bounded_multiplicity_iff_polynomial_complete_projections χ hχ a hα hs x L hj η k hk]
+  constructor <;> rintro ⟨C,hC,d,hh⟩ <;> refine ⟨C,hC,d,fun z hz ↦ ?_⟩
+  · exact (spectralStrip_complete_projection_iff_interpolation χ a hα hs x L hb z (by positivity)).mp (hh z hz)
+  · exact (spectralStrip_complete_projection_iff_interpolation χ a hα hs x L hb z (by positivity)).mpr (hh z hz)
+#print axioms spectralStrip_bounded_multiplicity_iff_jet_subspace_separation
 
 end RiemannMasullo
