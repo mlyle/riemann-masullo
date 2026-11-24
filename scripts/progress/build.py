@@ -582,6 +582,22 @@ def section_meta(issue):
                 labels=labels)
 
 
+def later_section_ids(sections, waves):
+    """The section issues of the README Roadmap's "Later" row (whole chapters, or single
+    sections such as A.4). The page leaves them out: off the map and out of every total."""
+    later = next((w for w in waves if w["name"] == "Later"), None)
+    if not later:
+        return set()
+    whole = {c["key"] for c in later["chapters"] if c["whole"]}
+    parts = {n for c in later["chapters"] if not c["whole"] for n in c["nums"]}
+    ids = set()
+    for s in sections:
+        m = re.match(r"§\s*([A-E]|\d+)\.(\d+)", s["num"])
+        if s["chapter"] in whole or (m and f"{m.group(1)}.{m.group(2)}" in parts):
+            ids.add(s["id"])
+    return ids
+
+
 def assign_modules(sections, files, lib, notes):
     """Give every source module to the section whose target file name is the longest prefix of
     its own (`Sec2a_part2.lean` belongs with `Sec2a.lean`). ForMathlib is its own group."""
@@ -732,6 +748,16 @@ def build_model(repo, section_issues, proof_issues, rows, files, warnings, head)
     sections = sorted((section_meta(i) for i in section_issues), key=lambda s: s["id"])
     by_id = {s["id"]: s for s in sections}
     owner = assign_modules(sections, files, lib, notes)
+    # The Later wave is left out of the page: its files go to a group that is neither drawn nor
+    # counted, its sections leave the map, and its issues and errata leave every figure.
+    later = later_section_ids(sections, waves)
+    later_pages = [pp for s in sections if s["id"] in later for pp in s["pages"]]
+    for m, o in list(owner.items()):
+        if o in later:
+            owner[m] = "later"
+    sections = [s for s in sections if s["id"] not in later]
+    by_id = {s["id"]: s for s in sections}
+    later_paths = {files[m] for m, o in owner.items() if o == "later"}
 
     # Proof issues, keyed the way scripts/issues.py keys them: path::name-as-written.
     issues = collections.defaultdict(list)
@@ -744,7 +770,17 @@ def build_model(repo, section_issues, proof_issues, rows, files, warnings, head)
         issues[m.group(1)].append(dict(
             number=i["number"], open=i["state"] == "OPEN",
             claimed="claimed" in labels or bool(i["assignees"]),
-            who=[a["login"] for a in i["assignees"]]))
+            who=[a["login"] for a in i["assignees"]],
+            supp="supplementary" in labels, classical="classical-input" in labels,
+            gap="gap" in labels))
+
+    def counted_issue(i):
+        """Issues the page counts: not labelled supplementary, and not in the Later wave."""
+        if any(l["name"] == "supplementary" for l in i["labels"]):
+            return False
+        m = SORRY_MARK.search(i["body"] or "")
+        return not (m and m.group(1).split("::")[0] in later_paths)
+    counted = [i for i in proof_issues if counted_issue(i)]
     keys = collections.Counter(f"{d['path']}::{d['token']}" for d in lib.user.values())
     matched = set()
 
@@ -754,6 +790,7 @@ def build_model(repo, section_issues, proof_issues, rows, files, warnings, head)
         groups[s["id"]] = dict(s, key=f"section-{s['id']}", decls=[])
     extra_titles = {"formathlib": ("ForMathlib", "General lemmas missing from Mathlib"),
                     "external": ("External", "Vendored third-party Lean"),
+                    "later": ("Later wave", "Chapters and sections the project leaves for later"),
                     "other": ("Other files", "Files that belong to no section issue")}
     index = {}
     decls = []
@@ -787,7 +824,10 @@ def build_model(repo, section_issues, proof_issues, rows, files, warnings, head)
             state = "unfiled"
         paper = paper_item(d["doc"])
         d.update(group=g, state=state, issue=issue["number"] if issue else None,
-                 who=issue["who"] if issue and state == "claimed" else [], paper=paper)
+                 who=issue["who"] if issue and state == "claimed" else [], paper=paper,
+                 supp=any(i["supp"] for i in mine),
+                 classical=bool(open_issue and open_issue["classical"] and d["sorry"]),
+                 gap=bool(open_issue and open_issue["gap"] and d["sorry"]))
         index[n] = len(decls)
         decls.append(d)
         groups[g]["decls"].append(n)
@@ -852,7 +892,7 @@ def build_model(repo, section_issues, proof_issues, rows, files, warnings, head)
                  for a, b in transitive_reduction(range(len(item_keys)), dag)]
 
         g_decls = [index[n] for n in names]
-        thms = [lib.user[n] for n in names if lib.user[n]["kind"] == "theorem"]
+        thms = [lib.user[n] for n in names if lib.user[n]["kind"] == "theorem" and not lib.user[n]["supp"]]
         counts = collections.Counter(d["state"] for d in thms)
         out_items = []
         for k in item_keys:
@@ -872,7 +912,7 @@ def build_model(repo, section_issues, proof_issues, rows, files, warnings, head)
             key=grp["key"], id=grp["id"], num=grp["num"], title=grp["title"], pages=grp["pages"],
             chapter=grp["chapter"], state=grp["state"], needs=[n for n in grp["needs"] if n in by_id],
             lane=grp.get("lane"), row=grp.get("row"),
-            defs=len(names) - len(thms), thms=len(thms),
+            defs=sum(1 for n in names if lib.user[n]["kind"] != "theorem"), thms=len(thms),
             proved=counts["proved"], claimed=counts["claimed"], open=counts["open"],
             unfiled=counts["unfiled"],
             solid=sum(1 for d in thms if d["state"] == "proved" and not d["open_below"]
@@ -950,7 +990,10 @@ def build_model(repo, section_issues, proof_issues, rows, files, warnings, head)
             seeded.add(f"{a}.{b}")
     out_waves = []
     for w in waves:
-        todo = [p for p in (wave_part(c, seeded, toc_chapters, toc_sections) for c in w["chapters"]) if p]
+        # The Later wave is off the map and out of the totals, but the manuscript has it: list
+        # all of it here, whether or not its sections have issues.
+        done = set() if w["name"] == "Later" else seeded
+        todo = [p for p in (wave_part(c, done, toc_chapters, toc_sections) for c in w["chapters"]) if p]
         if w["chapters"] and not todo:
             continue
         whole = sum(len(c["nums"]) for c in w["chapters"])
@@ -959,12 +1002,15 @@ def build_model(repo, section_issues, proof_issues, rows, files, warnings, head)
 
     # Vendored third-party Lean (External/) is shown on the map but is not the project's work, so
     # the totals leave it out.
-    own = [d for d in decls if d["group"] != "external"]
-    thms = [d for d in own if d["kind"] == "theorem"]
+    # Left out of every total: vendored Lean (External/), the Later wave, and the declarations
+    # tracked by issues labelled supplementary.
+    own = [d for d in decls if d["group"] not in ("external", "later")]
+    thms = [d for d in own if d["kind"] == "theorem" and not d["supp"]]
     st = collections.Counter(d["state"] for d in thms)
     sec_states = collections.Counter(s["state"] for s in sections)
     totals = dict(
-        defs=len(own) - len(thms), thms=len(thms), proved=st["proved"],
+        defs=sum(1 for d in own if d["kind"] != "theorem"), thms=len(thms), proved=st["proved"],
+        classical=sum(1 for d in thms if d["classical"]), gaps=sum(1 for d in thms if d["gap"]),
         solid=sum(1 for d in thms if d["state"] == "proved" and not d["open_below"]
                   and not d["hidden_sorry"]),
         open=st["open"] + st["claimed"] + st["unfiled"], claimed=st["claimed"], unfiled=st["unfiled"],
@@ -972,13 +1018,16 @@ def build_model(repo, section_issues, proof_issues, rows, files, warnings, head)
         paperProved=sum(1 for d in thms if d["paper"] and d["state"] == "proved"),
         sections=len(sections), stated=sec_states["stated"], digesting=sec_states["digesting"],
         ready=sec_states["ready"], blocked=sec_states["blocked"],
-        issuesOpen=sum(1 for i in proof_issues if i["state"] == "OPEN"),
-        issuesClosed=sum(1 for i in proof_issues if i["state"] != "OPEN"))
+        issuesOpen=sum(1 for i in counted if i["state"] == "OPEN"),
+        issuesClosed=sum(1 for i in counted if i["state"] != "OPEN"),
+        # open issues that are ordinary proofs: neither gaps nor classical input
+        issuesProofs=sum(1 for i in counted if i["state"] == "OPEN" and not any(
+            l["name"] in ("gap", "classical-input") for l in i["labels"])))
 
     stamp = lambda s: int(datetime.datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp())
     timeline = dict(
-        filed=sorted(stamp(i["createdAt"]) for i in proof_issues if i.get("createdAt")),
-        closed=sorted(stamp(i["closedAt"]) for i in proof_issues
+        filed=sorted(stamp(i["createdAt"]) for i in counted if i.get("createdAt")),
+        closed=sorted(stamp(i["closedAt"]) for i in counted
                       if i.get("closedAt") and i["state"] != "OPEN"))
 
     subject = run(["git", "log", "-1", "--format=%s", head], check=False).stdout.strip()
@@ -994,7 +1043,7 @@ def build_model(repo, section_issues, proof_issues, rows, files, warnings, head)
         pagesTotal=max((c["end"] for c in toc_chapters.values()), default=0))
     chapters = [dict(key=k, label=chapter_label(k) if k != "other" else "Other",
                      title=toc_chapters.get(k, {}).get("title", "")) for k in lanes]
-    errata = errata_model(out_groups, out_decls, notes)
+    errata = errata_model(out_groups, out_decls, notes, later_pages)
     return dict(meta=meta, totals=totals, timeline=timeline, chapters=chapters, groups=out_groups,
                 waves=out_waves, files=file_list, decls=out_decls, notes=notes, errata=errata)
 
@@ -1002,7 +1051,7 @@ def build_model(repo, section_issues, proof_issues, rows, files, warnings, head)
 ERRATA_ROW = re.compile(r"^\|\s*([FIMR]\d+)\s*\|")
 
 
-def errata_model(groups, decls, notes):
+def errata_model(groups, decls, notes, skip_pages=()):
     """The problems listed in ERRATA.md, each placed in the section its page falls in.
 
     Entries: [id, kind, checked, page, where, summary, group index or -1, [declaration indices
@@ -1017,6 +1066,8 @@ def errata_model(groups, decls, notes):
     # The numbers a section covers: those in its title (§5.2, §C.2.1–C.2.3) and its subsections.
     prefixes = {i: [n for n in re.findall(NUMBER.pattern, g["num"])] + [b[0] for b in g.get("bands", [])]
                 for i, g in enumerate(groups)}
+
+    skipped = lambda page: page is not None and any(a <= page <= b for a, b in skip_pages)
 
     def group_of(page, where=""):
         if page is None:
@@ -1048,10 +1099,14 @@ def errata_model(groups, decls, notes):
                 if not line.startswith("| ") or len(c) < 4 or c[0] in ("Item", "") or set(c[0]) <= set("-: "):
                     continue
                 ids = re.findall(r"\b[FIMR]\d+\b", c[1])
-                no_repair.update(ids)
                 page = first_page(c[0])
+                if skipped(page):
+                    continue
+                proved = "Since proved in Lean" in line      # the row stays, marked as closed
+                if not proved:
+                    no_repair.update(ids)
                 gaps.append(dict(item=clean(c[0]), ids=ids, missing=clean(c[2]), later=c[-1],
-                                 page=page, group=group_of(page, c[0])))
+                                 page=page, group=group_of(page, c[0]), proved=proved))
             continue
         for line in body.splitlines():
             if not ERRATA_ROW.match(line):
@@ -1065,6 +1120,8 @@ def errata_model(groups, decls, notes):
             names = re.findall(r"`(Printed\.[\w.'₀-₉]+)`", lean)
             refs = [by_name[n] for n in names if n in by_name]
             page = first_page(where)
+            if skipped(page):
+                continue
             entries.append([eid, kind, checked, page, clean(where), clean(c[2]), group_of(page, where),
                             refs, False])
     for e in entries:
@@ -1078,7 +1135,7 @@ def validate(model):
     """Refuse to publish a page whose numbers do not add up."""
     decls, groups, t = model["decls"], model["groups"], model["totals"]
     seen = [i for g in groups for it in g["items"] for i in it["decls"]]
-    counted = [g for g in groups if g["key"] != "external"]       # the totals leave External out
+    counted = [g for g in groups if g["key"] not in ("external", "later")]   # left out of the totals
     checks = [
         (sorted(seen) == list(range(len(decls))), "every declaration sits in exactly one item"),
         (t["proved"] + t["open"] == t["thms"], "proved + open = theorems"),

@@ -5619,7 +5619,9 @@ section
 variable {G H : Type*} [CommGroup G] [CommGroup H] [TopologicalSpace G] [TopologicalSpace H]
   [IsTopologicalGroup G] [IsTopologicalGroup H] [T2Space G] [T2Space H] [LocallyCompactSpace G] [LocallyCompactSpace H]
 
-private theorem exists_good_subgroup_image_in_kernel (f : G →ₜ* H) (b : BruhatStructuralPair H) :
+/-- A continuous homomorphism sends some good subgroup into the subgroup defining
+a given target's elementary quotient. -/
+theorem exists_good_subgroup_image_in_kernel (f : G →ₜ* H) (b : BruhatStructuralPair H) :
     ∃ k : Subgroup G, IsBruhatGoodSubgroup k ∧ k.map f.toMonoidHom ≤ OrderDual.ofDual b.val.2 := by
   let : LocallyCompactSpace b.val.1 := b.property.1.isOpenEmbedding_subtypeVal.locallyCompactSpace
   let : T1Space b.quotient := QuotientGroup.t1Space_iff.mpr (b.property.2.2.1.1.preimage continuous_subtype_val)

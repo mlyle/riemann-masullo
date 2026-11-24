@@ -2008,7 +2008,8 @@ theorem OrbitalJetIndex.isZero {χ : PontryaginDual C𝔽} {S : Finset V} {s : �
   OrbitalJetIndex.isZero_of_order_pos (OrbitalJetIndex.isZero_analyticAt χ S _)
     (Nat.zero_lt_of_lt (lt_of_lt_of_le j.property (min_le_left _ _)))
 
-private theorem orbitalJet_logNorm_continuous :
+/-- The log-norm function on the idele class group is continuous. -/
+theorem orbitalJet_logNorm_continuous :
     Continuous (fun g : C𝔽 ↦ logNorm g) :=
   Real.continuousOn_log.comp_continuous
     (NNReal.continuous_coe.comp (Units.continuous_val.comp (m𝔽).continuous))
@@ -2034,7 +2035,8 @@ private theorem orbitalJet_log_positiveRealHaar :
     rw [Real.coe_toNNReal _ (Real.exp_pos x).le, Real.log_exp]
   rw [hid, Measure.map_id]
 
-private theorem orbitalJet_logNorm_measurePreserving :
+/-- The log-norm pushes canonical modulated Haar measure forward to Lebesgue measure on `ℝ`. -/
+theorem orbitalJet_logNorm_measurePreserving :
     MeasurePreserving (fun g : C𝔽 ↦ logNorm g)
       (canonicalModulatedHaar m𝔽
         (⟨isProperMap_ideleClassNorm F, ideleClassNorm_ne_one (F := F)⟩ : IsModulation m𝔽))
@@ -2128,7 +2130,8 @@ private theorem orbitalJet_density_pos (s : ℝ) (g : C𝔽) :
   rw [orbitalJet_density_eq]
   exact inv_pos.mpr (Real.rpow_pos_of_pos (by positivity) _)
 
-private theorem orbitalJet_density_continuous (s : ℝ) :
+/-- The reciprocal Sobolev weight `(intervalSobolevDensity 0 0 s (logNorm g))⁻¹` is continuous. -/
+theorem orbitalJet_density_continuous (s : ℝ) :
     Continuous (fun g : C𝔽 ↦ (intervalSobolevDensity 0 0 s (logNorm g))⁻¹) := by
   have hρ : Continuous (fun g : C𝔽 ↦ (1 + (logNorm g) ^ 2) ^ (s / 2)) :=
     ((continuous_const : Continuous (fun _ : C𝔽 ↦ (1 : ℝ))).add
@@ -2290,6 +2293,1187 @@ theorem orbitalSobolevSubmodule_empty {s : ℝ} (hs : 0 ≤ s) (ω : PontryaginD
 -- completed PV quotient. Strong approximation on the ambient space in §9.3
 -- alone does not identify the annihilator of that completed image.
 
+/-- Positive finite orders of the reciprocal Euler product form a discrete divisor. -/
+private theorem orbitalMarkushevichBasis_countable (χ : PontryaginDual C𝔽) (S : Finset V)
+    (s : ℝ) : Countable (OrbitalJetIndex χ S s) := by
+  let Z := {z : ℂ | 0 < orbitalEulerMultiplicity χ S z}
+  have hm : Meromorphic (reciprocalPartialHeckeEulerProduct χ S) :=
+    fun z ↦ (OrbitalJetIndex.isZero_analyticAt χ S z).meromorphicAt
+  have hc : Zᶜ ∈ Filter.codiscrete ℂ := by
+    filter_upwards [hm.meromorphicOn.codiscreteWithin_setOfPred_meromorphicOrderAt_eq_zero_or_top]
+      with z hz
+    rcases hz.2 with h | h <;> simp [Z, orbitalEulerMultiplicity, h]
+  let : DiscreteTopology Z := isDiscrete_iff_discreteTopology.mp
+    (compl_mem_codiscrete_iff.mp hc).2
+  let : Countable Z := countable_of_Lindelof_of_discrete
+  let e (j : OrbitalJetIndex χ S s) : Z × ℕ :=
+    (⟨frequency(j.val.1), (lt_spectralBoundaryMultiplicity _ _ _ |>.mp j.property).1.pos⟩, j.val.2)
+  apply Function.Injective.countable (f := e)
+  intro i j h
+  exact Subtype.ext (Prod.ext (by simpa [e] using congrArg (fun p : Z × ℕ ↦ p.1.val.im) h)
+    (congrArg (fun p : Z × ℕ ↦ p.2) h))
+
+/-- A jet is nonzero on its positive isotype. Its continuous representative is nonzero
+at norm two, and Sobolev duality separates the two conjugate isotypes. -/
+private theorem orbitalMarkushevichBasis_nonzero (χ : PontryaginDual C𝔽) (S : Finset V)
+    {s : ℝ} (hs : 0 ≤ s) (j : OrbitalJetIndex χ S s) :
+    ∃ f : Wω(hs, χ.comp restriction), spectralSobolevPairing f.val (jetLp(χ, S, hs, j)) ≠ 0 := by
+  apply (spectralSobolevPairing_isotype hI hs (χ.comp restriction)).2 _
+    (orbitalJet_isotype χ S hs j)
+  intro h
+  have hz : (jet(χ, j.val.1, j.val.2)) =ᵐ[μ𝔽] (0 : C𝔽 → ℂ) := by
+    have he : (jetLp(χ, S, hs, j) : C𝔽 → ℂ) =ᵐ[μ𝔽] jet(χ, j.val.1, j.val.2) :=
+      orbitalJet_ae_of_ae_withDensity (MemLp.coeFn_toLp _)
+    rw [h] at he
+    exact he.symm.trans (orbitalJet_ae_of_ae_withDensity (Lp.coeFn_zero _ _ _))
+  have he := Measure.eq_of_ae_eq hz (orbitalJet_continuous χ _ _) continuous_const
+  let r : ℝ≥0ˣ := Units.mk0 2 (by norm_num)
+  let x : C𝔽 := QuotientGroup.mk (canonicalIdeleNormSection F r)
+  have hx : ideleClassNorm F x = r := canonicalIdeleNormSection_rightInverse F r
+  have hn := orbitalJet_norm_sq χ j.val.1 j.val.2 x
+  rw [he] at hn
+  change ‖(0 : ℂ)‖ ^ 2 = (Real.log ((ideleClassNorm F x).val : ℝ)) ^ _ at hn
+  rw [hx] at hn
+  change ‖(0 : ℂ)‖ ^ 2 = (Real.log 2) ^ _ at hn
+  have hp := pow_pos (Real.log_pos (by norm_num : (1 : ℝ) < 2)) (2 * j.val.2)
+  simp [← hn] at hp
+
+-- The local domination estimate and first derivative follow Sec2a_PVKernel_Printed.
+private theorem orbitalMarkushevichBasis_exp_bound (x s t : ℝ) (ht : s - 1 < t ∧ t < s + 1) :
+    Real.exp (x * t) * |x| ≤ Real.exp (x * (s - 2)) + Real.exp (x * (s + 2)) := by
+  have hx : |x| ≤ Real.exp |x| := by linarith [Real.add_one_le_exp |x|]
+  apply (mul_le_mul_of_nonneg_left hx (Real.exp_pos _).le).trans
+  rw [← Real.exp_add]
+  by_cases h : 0 ≤ x
+  · apply le_add_of_nonneg_of_le (Real.exp_pos _).le
+    rw [Real.exp_le_exp, abs_of_nonneg h]
+    nlinarith [mul_nonneg h (sub_nonneg.mpr ht.2.le)]
+  · apply le_add_of_le_of_nonneg _ (Real.exp_pos _).le
+    rw [Real.exp_le_exp, abs_of_nonpos (le_of_not_ge h)]
+    nlinarith [mul_nonpos_of_nonpos_of_nonneg (le_of_not_ge h) (sub_nonneg.mpr ht.1.le)]
+
+open scoped Topology in
+private theorem orbitalMarkushevichBasis_mellin_deriv (χ : PontryaginDual C𝔽) (f : C𝔽 → ℂ)
+    (hint : ∀ w : ℂ, Integrable (fun g ↦ f g * ideleClassNormTwist χ w g) μ𝔽)
+    (z : ℂ) :
+    Integrable (fun g ↦ f g * ideleClassNormTwist χ z g * (logNorm g : ℂ)) μ𝔽 ∧
+    HasDerivAt (fun w ↦ ∫ g, f g * ideleClassNormTwist χ w g ∂μ𝔽)
+      (∫ g, f g * ideleClassNormTwist χ z g * (logNorm g : ℂ) ∂μ𝔽) z := by
+  let N (g : C𝔽) : ℝ := (ideleClassNorm F g).val
+  let l (g : C𝔽) := Real.log (N g)
+  let A (w : ℂ) (g : C𝔽) := f g * ideleClassNormTwist χ w g
+  let B (w : ℂ) (g : C𝔽) := A w g * (l g : ℂ)
+  have hN (g : C𝔽) : 0 < N g := NNReal.coe_pos.mpr (Units.zero_lt _)
+  have hA (w : ℂ) (g : C𝔽) : ‖A w g‖ = ‖f g‖ * Real.exp (l g * w.re) := by
+    change ‖f g * ((χ g : ℂ) * (N g : ℂ) ^ w)‖ = _
+    rw [norm_mul, norm_mul, Circle.norm_coe, one_mul, Complex.norm_cpow_eq_rpow_re_of_pos (hN g),
+      Real.rpow_def_of_pos (hN g)]
+  let U := Complex.re ⁻¹' Ioo (z.re - 1) (z.re + 1)
+  have hU : U ∈ 𝓝 z := (isOpen_Ioo.preimage Complex.continuous_re).mem_nhds ⟨by linarith, by linarith⟩
+  let D (g : C𝔽) := ‖A (z - 2) g‖ + ‖A (z + 2) g‖
+  have hD : Integrable D μ𝔽 := (hint (z - 2)).norm.add (hint (z + 2)).norm
+  have hb (g : C𝔽) (w : ℂ) (hw : w ∈ U) : ‖B w g‖ ≤ D g := by
+    change ‖A w g * (l g : ℂ)‖ ≤ ‖A (z - 2) g‖ + ‖A (z + 2) g‖
+    rw [norm_mul, Complex.norm_real, Real.norm_eq_abs, hA, hA, hA, ← mul_add, mul_assoc]
+    apply mul_le_mul_of_nonneg_left _ (norm_nonneg _)
+    simpa using orbitalMarkushevichBasis_exp_bound (l g) z.re w.re hw
+  have hl : Continuous l := (NNReal.continuous_coe.comp
+    (Units.continuous_val.comp (isProperMap_ideleClassNorm F).continuous)).log (fun g ↦ (hN g).ne')
+  have hd (g : C𝔽) (w : ℂ) : HasDerivAt (fun v ↦ A v g) (B w g) w := by
+    have hp := (Complex.hasStrictDerivAt_const_cpow (y := w) (Or.inl (Complex.ofReal_ne_zero.mpr (hN g).ne'))).hasDerivAt
+    change HasDerivAt (fun v : ℂ ↦ f g * ((χ g : ℂ) * (N g : ℂ) ^ v))
+      ((f g * ((χ g : ℂ) * (N g : ℂ) ^ w)) * (Real.log (N g) : ℂ)) w
+    simpa only [← Complex.ofReal_log (hN g).le, mul_assoc] using (hp.const_mul (χ g : ℂ)).const_mul (f g)
+  exact hasDerivAt_integral_of_dominated_loc_of_deriv_le hU
+    (.of_forall fun w ↦ (hint w).aestronglyMeasurable) (hint z)
+    ((hint z).aestronglyMeasurable.mul (Complex.continuous_ofReal.comp hl).aestronglyMeasurable)
+    (.of_forall hb) hD (.of_forall fun g w _ ↦ hd g w)
+
+/-- Every derivative of a polar theta Mellin transform is the corresponding log moment. -/
+private theorem orbitalMarkushevichBasis_mellin_moment (χ : PontryaginDual C𝔽) (f : ℬ₀)
+    (k : ℕ) (z : ℂ) :
+    iteratedDeriv k (fun w ↦ globalIdelicZFunction f.val (ideleClassNormTwist χ w)) z =
+      ∫ g, (adelicTheta f.val g * (logNorm g : ℂ) ^ k) * ideleClassNormTwist χ z g ∂μ𝔽 := by
+  let a (n : ℕ) (g : C𝔽) := adelicTheta f.val g * (logNorm g : ℂ) ^ n
+  let m (n : ℕ) (w : ℂ) (g : C𝔽) := a n g * ideleClassNormTwist χ w g
+  have e (n : ℕ) (w : ℂ) (g : C𝔽) : m n w g * (logNorm g : ℂ) = m (n + 1) w g := by
+    simp only [m, a, pow_succ]
+    ring
+  obtain ⟨hf, hF⟩ := (mem_adelePolarSubspace f.val).mp f.property
+  have h (n : ℕ) : (∀ w, Integrable (m n w) μ𝔽) ∧
+      iteratedDeriv n (fun w ↦ globalIdelicZFunction f.val (ideleClassNormTwist χ w)) =
+        fun w ↦ ∫ g, m n w g ∂μ𝔽 := by
+    induction n with
+    | zero =>
+      simp only [iteratedDeriv_zero, m, a, pow_zero, mul_one]
+      exact ⟨fun w ↦ globalThetaMellinIntegral_integrable_of_vanishing _ hf hF _,
+        funext fun w ↦ congrFun (globalThetaMellinIntegral_eq_continuation_of_vanishing
+          _ hf hF).symm (ideleClassNormTwist χ w)⟩
+    | succ n ih =>
+      have hd (w : ℂ) := orbitalMarkushevichBasis_mellin_deriv χ (a n) ih.1 w
+      change ∀ w, Integrable (fun g ↦ m n w g * (logNorm g : ℂ)) μ𝔽 ∧
+        HasDerivAt (fun v ↦ ∫ g, m n v g ∂μ𝔽) (∫ g, m n w g * (logNorm g : ℂ) ∂μ𝔽) w at hd
+      simp only [e] at hd
+      rw [iteratedDeriv_succ, ih.2]
+      exact ⟨fun w ↦ (hd w).1, funext fun w ↦ (hd w).2.deriv⟩
+  exact congrFun (h k).2 z
+
+/-- The Euler multiplier on polar tests kills the prescribed lower derivatives
+at each of its zeros, including when several places contribute to the same order. -/
+private theorem orbitalMarkushevichBasis_test (χ : PontryaginDual C𝔽) (S : Finset V)
+    {s : ℝ} (j : OrbitalJetIndex χ S s) (f : ℬ₀) :
+    (∫ g, adelicTheta (pvTest(S, f)).val g * jet(χ, j.val.1, j.val.2) g ∂μ𝔽) = 0 := by
+  let E := reciprocalPartialHeckeEulerProduct χ S
+  let Z (u : ℬ₀) (w : ℂ) := globalIdelicZFunction u.val (ideleClassNormTwist χ w)
+  let z := frequency(j.val.1)
+  have hE : AnalyticAt ℂ E z := OrbitalJetIndex.isZero_analyticAt χ S z
+  have hZ := (globalIdelicZFunction_entire_of_vanishing _ f.property χ).analyticAt z
+  -- Extend the multiplier identity across its exceptional points as in Ch11/Sec1b.
+  have hmul : Z (pvTest(S, f)) = E * Z f := by
+    funext w
+    have h₁ := (globalIdelicZFunction_entire_of_vanishing _ (pvTest(S, f)).property χ).continuous.continuousAt
+      (x := w)
+    have h₂ := ((OrbitalJetIndex.isZero_analyticAt χ S w).continuousAt).mul
+      ((globalIdelicZFunction_entire_of_vanishing _ f.property χ).continuous.continuousAt (x := w))
+    exact ((h₁.eventuallyEq_nhds_iff_eventuallyEq_nhdsNE h₂).mp
+      ((globalPrincipalValueConverse_mellin S χ f.val).filter_mono (nhdsNE_le_codiscrete w))).eq_of_nhds
+  have hk := (lt_spectralBoundaryMultiplicity _ _ _ |>.mp j.property).1
+  change j.val.2 < (meromorphicOrderAt E z).untop₀.toNat at hk
+  rw [hE.meromorphicOrderAt_eq] at hk
+  have hle : (j.val.2 + 1 : ℕ) ≤ analyticOrderAt E z := by
+    cases hn : analyticOrderAt E z with
+    | top => simp
+    | coe n =>
+      simp only [hn, ENat.map_natCast, WithTop.untop₀_coe, Int.toNat_natCast] at hk
+      exact_mod_cast hk
+  have hle' : ((j.val.2 + 1 : ℕ) : ℕ∞) ≤ analyticOrderAt (E * Z f) z := by
+    rw [analyticOrderAt_mul hE hZ]
+    exact hle.trans le_self_add
+  have hv := (natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero (hE.mul hZ)).mp hle'
+    j.val.2 (Nat.lt_succ_self _)
+  rw [← hmul, orbitalMarkushevichBasis_mellin_moment] at hv
+  refine (integral_congr_ae (.of_forall fun g ↦ ?_)).trans hv
+  change _ * (ideleClassNormTwist χ ((0 : ℂ) + frequency(j.val.1)) g * _) = _
+  rw [zero_add]
+  dsimp only [z]
+  ring
+
+/-- Continuous jet functionals vanish on the closure of the principal values
+because they vanish on the dense family of principal values of polar tests. -/
+private theorem orbitalMarkushevichBasis_annihilates (χ : PontryaginDual C𝔽) (S : Finset V)
+    {s : ℝ} (hs : 0 ≤ s) (j : OrbitalJetIndex χ S s) (L : StrongDual ℂ W(s))
+    (hL : ∀ y, L y = spectralSobolevPairing y (jetLp(χ, S, hs, j)))
+    (f : Wω(hs, χ.comp restriction)) (hf : f ∈ N(S, hs, χ.comp restriction)) :
+    L f.val = 0 := by
+  let H := H(0, hs)
+  let A := L.comp H.subtypeL
+  have htest (b : ℬ₀) : A (j(0, hs) (theta(pvTest(S, b)))) = 0 := by
+    rw [show A (j(0, hs) (theta(pvTest(S, b)))) =
+      spectralSobolevPairing (j(0, hs) (theta(pvTest(S, b))) : W(s)) (jetLp(χ, S, hs, j)) from hL _]
+    have he := (existsUnique_globalThetaSobolevEmbedding (F := F) 0 0 0 s hI hs).exists.choose_spec.2
+      (pvTest(S, b))
+    rw [modulationWeight_zero] at he
+    exact (integral_congr_ae (he.mul (orbitalJet_ae_of_ae_withDensity (MemLp.coeFn_toLp _)))).trans
+      (orbitalMarkushevichBasis_test χ S j b)
+  have hker : closure (range (P(S, 0, hs))) ⊆ A.ker := by
+    rw [globalThetaSobolevPrincipalValue_range_closure]
+    exact closure_minimal (range_subset_iff.mpr htest) A.isClosed_ker
+  have hr : ((H.subtype.comp (P(S, 0, hs)).toLinearMap).range) ≤ L.ker := by
+    rintro _ ⟨y, rfl⟩
+    exact hker (subset_closure (mem_range_self y))
+  exact (Submodule.topologicalClosure_minimal _ hr L.isClosed_ker) hf
+
+/-- A nonzero entire multiplier has finite vanishing order at every frequency. -/
+private theorem orbitalMarkushevichBasis_synthesis_order (E : ℂ → ℂ)
+    (hE : Differentiable ℂ E) (hne : ∃ w, E w ≠ 0) (z : ℂ) : analyticOrderAt E z ≠ ⊤ := by
+  obtain ⟨w, hw⟩ := hne
+  have ha : AnalyticOnNhd ℂ E univ := fun x _ ↦ hE.analyticAt x
+  exact ha.analyticOrderAt_ne_top_of_isPreconnected isPreconnected_univ (mem_univ w) (mem_univ z)
+    (by simp [analyticOrderAt_eq_zero.mpr (.inr hw)])
+
+/-- In a fixed compact frequency band the Euler divisor has only finitely many jets.
+At the degree in the theorem every derivative below the local multiplicity is admitted. -/
+private theorem orbitalMarkushevichBasis_synthesis_band (χ : PontryaginDual C𝔽) (S : Finset V)
+    {s : ℝ} (hc : 2 * (S.card : ℝ) ≤ s)
+    (hχ : ∀ v ∈ S, (ideleClassNormTwist χ 0).IsUnramifiedAt v) (R : ℝ) :
+    ∃ J : Finset (OrbitalJetIndex χ S s), ∀ t ∈ Icc (-R) R, ∀ k : ℕ,
+      (k : ℕ∞) < analyticOrderAt (reciprocalPartialHeckeEulerProduct χ S) (frequency(t)) →
+      ∃ j ∈ J, j.val = (t, k) := by
+  classical
+  let E := reciprocalPartialHeckeEulerProduct χ S
+  have hE (z) : AnalyticAt ℂ E z := OrbitalJetIndex.isZero_analyticAt χ S z
+  have hd : Differentiable ℂ E := fun z ↦ (hE z).differentiableAt
+  have hn : ∃ z, E z ≠ 0 :=
+    ⟨1, fun h ↦ one_ne_zero (orbitalEulerZero_re_eq_zero χ S hχ h)⟩
+  have hord (z) : analyticOrderAt E z = (orbitalEulerMultiplicity χ S z : ℕ∞) := by
+    obtain ⟨n, he⟩ := ENat.ne_top_iff_exists.mp (orbitalMarkushevichBasis_synthesis_order E hd hn z)
+    simp [orbitalEulerMultiplicity, ← show E = reciprocalPartialHeckeEulerProduct χ S from rfl,
+      (hE z).meromorphicOrderAt_eq, ← he]
+  have hzero : (Metric.closedBall (0 : ℂ) R \ {z | E z ≠ 0}).Finite := by
+    apply (isCompact_closedBall (0 : ℂ) R).finite_sdiff_of_mem_codiscreteWithin
+    have ha : AnalyticOnNhd ℂ E univ := fun x _ ↦ hE x
+    obtain h | h := ha.eqOn_zero_or_eventually_ne_zero_of_preconnected isPreconnected_univ
+    · exact False.elim (hn.choose_spec (h (mem_univ hn.choose)))
+    · exact Filter.codiscreteWithin_mono (subset_univ _) h
+  let p (j : OrbitalJetIndex χ S s) : ℂ × ℕ := (frequency(j.val.1), j.val.2)
+  have hi : Injective p := fun j l h ↦ Subtype.ext (Prod.ext
+    (by simpa [p] using congrArg (fun q : ℂ × ℕ ↦ q.1.im) h) (congrArg (fun q : ℂ × ℕ ↦ q.2) h))
+  let B := {q : ℂ × ℕ | (q.2 : ℕ∞) < analyticOrderAt E q.1 ∧ ‖q.1‖ ≤ R}
+  have hB : B.Finite := by
+    apply (hzero.prod (Set.finite_Iio S.card)).subset
+    rintro ⟨z, k⟩ ⟨hk, hz⟩
+    have hk' : k < orbitalEulerMultiplicity χ S z := by
+      exact_mod_cast (hord z ▸ hk : (k : ℕ∞) < (orbitalEulerMultiplicity χ S z : ℕ∞))
+    have hz₀ : E z = 0 := by
+      by_contra h
+      rw [analyticOrderAt_eq_zero.mpr (.inr h)] at hk
+      exact (not_lt_zero hk).elim
+    rw [orbitalEulerMultiplicity_eq_card] at hk'
+    exact ⟨⟨mem_closedBall_zero_iff.mpr hz, by simpa using hz₀⟩,
+      hk'.trans_le (Finset.card_filter_le _ _)⟩
+  refine ⟨(hB.preimage hi.injOn).toFinset, fun t ht k hk ↦ ?_⟩
+  have hk' : k < orbitalEulerMultiplicity χ S (frequency(t)) := by
+    exact_mod_cast (hord _ ▸ hk : (k : ℕ∞) < (orbitalEulerMultiplicity χ S (frequency(t)) : ℕ∞))
+  have hcard : k + 1 ≤ S.card := (Nat.succ_le_of_lt hk').trans (by
+    rw [orbitalEulerMultiplicity_eq_card]
+    exact Finset.card_filter_le _ _)
+  have hks : (k : ℝ) + 1 ≤ S.card := by exact_mod_cast hcard
+  let j : OrbitalJetIndex χ S s := ⟨(t, k),
+    (lt_spectralBoundaryMultiplicity _ _ _).mpr ⟨hk', by linarith⟩⟩
+  refine ⟨j, (Set.Finite.mem_toFinset _).mpr ⟨hk, ?_⟩, rfl⟩
+  simpa [p, j, norm_mul, Real.norm_eq_abs] using (abs_le.mpr ht : |t| ≤ R)
+
+open scoped Topology in
+/-- For a polar theta test, vanishing of the jets in a band gives a holomorphic
+quotient by the Euler product near each point of the band, including its endpoints. -/
+private theorem orbitalMarkushevichBasis_synthesis_germ (χ : PontryaginDual C𝔽) (S : Finset V)
+    {s : ℝ} (hs : 0 ≤ s) (hχ : ∀ v ∈ S, (ideleClassNormTwist χ 0).IsUnramifiedAt v)
+    (b : ℬ₀) (t : ℝ)
+    (h : ∀ k : ℕ, (k : ℕ∞) < analyticOrderAt (reciprocalPartialHeckeEulerProduct χ S) (frequency(t)) →
+      ∃ j : OrbitalJetIndex χ S s, j.val = (t, k) ∧
+        spectralSobolevPairing (j(0, hs) (theta(b)) : W(s)) (jetLp(χ, S, hs, j)) = 0) :
+    ∃ q : ℂ → ℂ, AnalyticAt ℂ q (frequency(t)) ∧ ∀ᶠ z in 𝓝 (frequency(t)),
+      globalIdelicZFunction b.val (ideleClassNormTwist χ z) = reciprocalPartialHeckeEulerProduct χ S z * q z := by
+  let E := reciprocalPartialHeckeEulerProduct χ S
+  let Z (z : ℂ) := globalIdelicZFunction b.val (ideleClassNormTwist χ z)
+  let w := frequency(t)
+  have hE (z) : AnalyticAt ℂ E z := OrbitalJetIndex.isZero_analyticAt χ S z
+  have hZ : AnalyticAt ℂ Z w := (globalIdelicZFunction_entire_of_vanishing _ b.property χ).analyticAt _
+  obtain ⟨n, hn⟩ := ENat.ne_top_iff_exists.mp (orbitalMarkushevichBasis_synthesis_order E
+    (fun z ↦ (hE z).differentiableAt) ⟨1, fun h ↦ one_ne_zero (orbitalEulerZero_re_eq_zero χ S hχ h)⟩ w)
+  have hz : (n : ℕ∞) ≤ analyticOrderAt Z w := by
+    apply (natCast_le_analyticOrderAt_iff_iteratedDeriv_eq_zero hZ).mpr
+    intro k hk
+    obtain ⟨j, hj, hzero⟩ := h k (hn ▸ (by exact_mod_cast hk : (k : ℕ∞) < n))
+    have he := (existsUnique_globalThetaSobolevEmbedding (F := F) 0 0 0 s hI hs).exists.choose_spec.2 b
+    rw [modulationWeight_zero] at he
+    have hjet := orbitalJet_ae_of_ae_withDensity (s := s) (MemLp.coeFn_toLp (orbitalJet_memLp χ S hs j))
+    change (∫ g, _ * _ ∂μ𝔽) = 0 at hzero
+    have hraw := (integral_congr_ae (he.mul hjet)).symm.trans hzero
+    rw [show iteratedDeriv k Z w = _ from orbitalMarkushevichBasis_mellin_moment χ b k w]
+    refine (integral_congr_ae (.of_forall fun g ↦ ?_)).trans hraw
+    change _ = _ * (ideleClassNormTwist χ ((0 : ℂ) + frequency(j.val.1)) g * (logNorm g : ℂ) ^ j.val.2)
+    rw [hj, zero_add]
+    dsimp only [w, Prod.fst, Prod.snd]
+    ring
+  obtain ⟨a, ha, ha₀, hea⟩ := (hE w).analyticOrderAt_eq_natCast.mp hn.symm
+  obtain ⟨c, hca, hzc⟩ := (natCast_le_analyticOrderAt hZ).mp hz
+  refine ⟨fun z ↦ c z / a z, hca.div ha ha₀, ?_⟩
+  filter_upwards [hea, hzc, ha.continuousAt.eventually_ne ha₀] with z h₁ h₂ h₃
+  change Z z = E z * _
+  rw [h₁, h₂, smul_eq_mul, smul_eq_mul]
+  field_simp
+
+open Filter Topology in
+/-- A dense linear test family still approximates a vector after finitely many
+continuous moment constraints are imposed. Lift the finite-dimensional range of the
+test moment map back to tests and subtract a correction tending to zero. -/
+private theorem orbitalMarkushevichBasis_synthesis_correct {B X Y : Type*}
+    [AddCommGroup B] [Module ℂ B] [NormedAddCommGroup X] [NormedSpace ℂ X]
+    [NormedAddCommGroup Y] [NormedSpace ℂ Y] [FiniteDimensional ℂ Y]
+    (D : B →ₗ[ℂ] X) (hd : DenseRange D) (M : X →L[ℂ] Y) (x : X) (hx : M x = 0) :
+    ∃ b : ℕ → B, (∀ n, M (D (b n)) = 0) ∧ Tendsto (fun n ↦ D (b n)) atTop (𝓝 x) := by
+  let J := M.toLinearMap.comp D
+  obtain ⟨L, hL⟩ := J.rangeRestrict.exists_rightInverse_of_surjective J.range_rangeRestrict
+  obtain ⟨v, hv, hvlim⟩ := mem_closure_iff_seq_limit.mp (hd x)
+  choose a ha using hv
+  have halim : Tendsto (fun n ↦ D (a n)) atTop (𝓝 x) := by simpa only [ha] using hvlim
+  have hlim : Tendsto (fun n ↦ J.rangeRestrict (a n)) atTop (𝓝 0) := by
+    apply tendsto_subtype_rng.mpr
+    change Tendsto (fun n ↦ M (D (a n))) atTop (𝓝 0)
+    rw [← hx]
+    exact M.continuous.continuousAt.tendsto.comp halim
+  have hsmall := ((D.comp L).continuous_of_finiteDimensional.continuousAt.tendsto.comp hlim)
+  refine ⟨fun n ↦ a n - L (J.rangeRestrict (a n)), fun n ↦ ?_, ?_⟩
+  · change J (_ - _) = 0
+    rw [map_sub, sub_eq_zero]
+    exact (congrArg Subtype.val (LinearMap.congr_fun hL (J.rangeRestrict (a n)))).symm
+  · simpa only [map_sub, map_zero, sub_zero, LinearMap.comp_apply, comp_def] using halim.sub hsmall
+
+/-- At degree greater than one, integration against every unitary character is a
+continuous Fourier evaluation on the positive Sobolev space. -/
+private theorem orbitalMarkushevichBasis_synthesis_eval {s : ℝ} (hs : 0 ≤ s) (hs' : 1 < s)
+    (ψ : PontryaginDual C𝔽) :
+    ∃ L : StrongDual ℂ W(s), ∀ x : W(s), L x = lcaFourier μ𝔽 x ψ ∧
+      Integrable (fun g ↦ x g * star (ψ g : ℂ)) μ𝔽 := by
+  let hm : IsModulation m𝔽 := ⟨isProperMap_ideleClassNorm F, ideleClassNorm_ne_one (F := F)⟩
+  let ν := canonicalModulatedHaar m𝔽 hm
+  let : ν.IsHaarMeasure := (existsUnique_canonicalModulatedHaar m𝔽 hm).exists.choose_spec.1
+  have hν : Integrable (fun g : C𝔽 ↦ ((1 + (logNorm g) ^ 2) ^ (s / 2))⁻¹) ν := by
+    apply (orbitalJet_logNorm_measurePreserving (F := F)).integrable_comp_of_integrable
+      (g := fun x : ℝ ↦ ((1 + x ^ 2) ^ (s / 2))⁻¹)
+    simpa using orbitalJet_integrable_pow_mul_rpow_inv (k := 0) (s := s) (by simpa using hs')
+  have hμ : Integrable (fun g : C𝔽 ↦ (intervalSobolevDensity 0 0 s (logNorm g))⁻¹) μ𝔽 := by
+    simp_rw [orbitalJet_density_eq]
+    rw [Measure.isMulLeftInvariant_eq_smul μ𝔽 ν]
+    exact hν.smul_measure_nnreal
+  let : IsFiniteMeasure (μ'(s)) := isFiniteMeasure_withDensity_ofReal hμ.hasFiniteIntegral
+  let η (g : C𝔽) := star (ψ g : ℂ)
+  have hη : MemLp η 2 (μ'(s)) := MemLp.of_bound
+    ((continuous_star.comp (continuous_subtype_val.comp ψ.continuous)).aestronglyMeasurable) 1
+      (.of_forall fun g ↦ by simp [η])
+  let T := (modulatedIntervalSobolev_dual m𝔽 hm μ𝔽 0 0 s hI hs).exists.choose
+  let L := T.symm (hη.toLp η)
+  have he := orbitalJet_ae_of_ae_withDensity (s := s) hη.coeFn_toLp
+  refine ⟨L, fun x ↦ ?_⟩
+  obtain ⟨hi, hv⟩ := spectralSobolevPairing_dual hI hs L x
+  change Integrable (fun g ↦ x g * T L g) μ𝔽 at hi
+  change L x = spectralSobolevPairing x (T L) at hv
+  rw [show T L = hη.toLp η from T.apply_symm_apply _] at hi hv
+  exact ⟨hv.trans (integral_congr_ae (Filter.EventuallyEq.rfl.mul he)), hi.congr (Filter.EventuallyEq.rfl.mul he)⟩
+
+/-- Fourier evaluation of a cutoff is multiplication by the Fourier transform of its
+Schwartz kernel. This follows by evaluating its defining Pettis integral. -/
+private theorem orbitalMarkushevichBasis_synthesis_convolution {s : ℝ} (hs : 0 ≤ s)
+    (ψ : PontryaginDual C𝔽) (L : StrongDual ℂ W(s)) (hL : ∀ x, L x = lcaFourier μ𝔽 x ψ)
+    (φ : SchwartzBruhat C𝔽) (x : W(s)) :
+    L ((existsUnique_schwartzBruhat_zeroLineAction μ𝔽 m𝔽 s hs).exists.choose φ x) =
+      lcaFourier μ𝔽 φ ψ * L x := by
+  let A := (existsUnique_schwartzBruhat_zeroLineAction μ𝔽 m𝔽 s hs).exists.choose
+  have hA := (existsUnique_schwartzBruhat_zeroLineAction μ𝔽 m𝔽 s hs).exists.choose_spec φ x
+  have hev : L (A φ x) = ∫ g, L ((φ g) • ρ(hs) g x) ∂μ𝔽 :=
+    congrArg (fun z : PettisWeakCompletion W(s) ↦
+      (show Module.Dual ℂ (StrongDual ℂ W(s)) from z) L) hA.2
+  have htr (g : C𝔽) : L (ρ(hs) g x) = star (ψ g : ℂ) * L x := by
+    rw [hL, hL, lcaFourier, lcaFourier]
+    change (∫ y, _ * _ ∂μ𝔽) = _
+    rw [← integral_mul_left_eq_self (μ := μ𝔽) (fun y ↦ (ρ(hs) g x) y * star (ψ y : ℂ)) g,
+      ← integral_const_mul]
+    have h := (measurePreserving_mul_left μ𝔽 g).quasiMeasurePreserving.ae_eq_comp
+      (hardySobolevTranslation_apply μ𝔽 m𝔽 0 0 s hI hs g x)
+    apply integral_congr_ae
+    filter_upwards [h] with y hy
+    change (ρ(hs) g x) (g * y) = x (g⁻¹ * (g * y)) at hy
+    simp only [hy, inv_mul_cancel_left, map_mul, Circle.coe_mul, star_mul]
+    ring
+  rw [hev, lcaFourier, ← integral_mul_const]
+  apply integral_congr_ae
+  refine .of_forall fun g ↦ (L.map_smul (φ g) (ρ(hs) g x)).trans ?_
+  change φ g * L (ρ(hs) g x) = (φ g * star (ψ g : ℂ)) * L x
+  rw [htr, mul_assoc]
+
+/-- The completed PV operator acts on every continuous zero-line Mellin evaluation
+by the reciprocal Euler product, by continuity from polar tests. -/
+private theorem orbitalMarkushevichBasis_synthesis_mul (χ : PontryaginDual C𝔽) (S : Finset V)
+    {s : ℝ} (hs : 0 ≤ s) (z : ℂ) (L : StrongDual ℂ W(s))
+    (hL : ∀ x : W(s), L x = ∫ g, x g * ideleClassNormTwist χ z g ∂μ𝔽) :
+    ∀ u : H(0, hs), L (P(S, 0, hs) u : W(s)) = reciprocalPartialHeckeEulerProduct χ S z * L u.val := by
+  let E := reciprocalPartialHeckeEulerProduct χ S
+  let D := globalThetaSobolevTestClass (F := F) 0 hs
+  let Z (b : ℬ₀) (w : ℂ) := globalIdelicZFunction b.val (ideleClassNormTwist χ w)
+  have hd : DenseRange D := (globalThetaSobolev_dense (F := F) 0 hI hs).comp
+    (Submodule.mkQ_surjective _).denseRange (j(0, hs)).continuous
+  have hb (b : ℬ₀) : L (D b).val = Z b z := by
+    have he := (existsUnique_globalThetaSobolevEmbedding (F := F) 0 0 0 s hI hs).exists.choose_spec.2 b
+    rw [modulationWeight_zero] at he
+    obtain ⟨h₀, h₁⟩ := (mem_adelePolarSubspace b.val).mp b.property
+    exact (hL _).trans ((integral_congr_ae (he.mul Filter.EventuallyEq.rfl)).trans
+      (congrFun (globalThetaMellinIntegral_eq_continuation_of_vanishing _ h₀ h₁) _))
+  let B := L.comp (H(0, hs)).subtypeL
+  apply congrFun (hd.equalizer (B.comp (P(S, 0, hs))).continuous ((E z) • B).continuous ?_)
+  funext b
+  change L (P(S, 0, hs) (j(0, hs) (theta(b))) : W(s)) = E z * L (D b).val
+  rw [globalThetaSobolevPrincipalValue_apply, hb]
+  change L (D (pvTest(S, b))).val = _
+  rw [hb]
+  have h₁ := (globalIdelicZFunction_entire_of_vanishing _ (pvTest(S, b)).property χ).continuous.continuousAt (x := z)
+  have h₂ := ((OrbitalJetIndex.isZero_analyticAt χ S z).continuousAt).mul
+    ((globalIdelicZFunction_entire_of_vanishing _ b.property χ).continuous.continuousAt (x := z))
+  exact ((h₁.eventuallyEq_nhds_iff_eventuallyEq_nhdsNE h₂).mp
+    ((globalPrincipalValueConverse_mellin S χ b.val).filter_mono (nhdsNE_le_codiscrete z))).eq_of_nhds
+
+open scoped Topology ContDiff in
+/-- Cut off the removable quotient on a slightly wider band. The normal form supplies
+one smooth representative even where the pointwise quotient takes the value zero. -/
+private theorem orbitalMarkushevichBasis_synthesis_profile (E Z : ℂ → ℂ)
+    (hE : Differentiable ℂ E) (hZ : Differentiable ℂ Z) (hne : ∃ w, E w ≠ 0) (n : ℕ)
+    (h : ∀ t ∈ Icc (-(n + 2 : ℝ)) (n + 2), ∃ q : ℂ → ℂ, AnalyticAt ℂ q (frequency(t)) ∧
+      Z =ᶠ[𝓝 (frequency(t))] E * q) :
+    ∃ H : SchwartzMap ℝ ℂ, ∀ t ∈ Icc (-(n : ℝ)) n, Z (frequency(t)) = E (frequency(t)) * H t := by
+  let Q := toMeromorphicNFOn (Z / E) univ
+  have hm : MeromorphicOn (Z / E) univ := fun z _ ↦ (hZ.analyticAt z).meromorphicAt.div (hE.analyticAt z).meromorphicAt
+  have hQ (t : ℝ) (ht : t ∈ Icc (-(n + 2 : ℝ)) (n + 2)) :
+      AnalyticAt ℂ Q (frequency(t)) ∧ Z (frequency(t)) = E (frequency(t)) * Q (frequency(t)) := by
+    let w := frequency(t)
+    obtain ⟨q, hq, heq⟩ := h t ht
+    have hpunct : ∀ᶠ z in 𝓝[≠] w, E z ≠ 0 :=
+      (hE.analyticAt w).eventually_eq_zero_or_eventually_ne_zero.resolve_left
+        (fun hz ↦ orbitalMarkushevichBasis_synthesis_order E hE hne w (analyticOrderAt_eq_top.mpr hz))
+    have hloc : Q =ᶠ[𝓝 w] q := by
+      apply ((meromorphicNFOn_toMeromorphicNFOn (Z / E) univ (mem_univ w)).eventuallyEq_nhdsNE_iff_eventuallyEq_nhds
+        hq.meromorphicNFAt).mp
+      apply (hm.toMeromorphicNFOn_eq_self_on_nhdsNE (mem_univ w)).trans
+      filter_upwards [hpunct, heq.filter_mono nhdsWithin_le_nhds] with z hn hz
+      change Z z / E z = q z
+      rw [hz, Pi.mul_apply]
+      field_simp
+    exact ⟨(analyticAt_congr hloc).mpr hq, by rw [hloc.eq_of_nhds]; exact heq.eq_of_nhds⟩
+  let B : ContDiffBump (0 : ℝ) := ⟨n + 1, n + 2, by positivity, by linarith⟩
+  let p (t : ℝ) := B t • Q (frequency(t))
+  have hp : ContDiff ℝ (∞) p := by
+    apply contDiff_iff_contDiffAt.mpr
+    intro t
+    by_cases ht : t ∈ tsupport B
+    · have hb := B.tsupport_eq ▸ ht
+      have hbound : |t| ≤ n + 2 := by simpa [B, Real.norm_eq_abs] using (mem_closedBall_zero_iff.mp hb)
+      exact B.contDiff.contDiffAt.smul (((hQ t (abs_le.mp hbound)).1.restrictScalars (𝕜 := ℝ)).contDiffAt.comp t
+        (Complex.ofRealCLM.contDiff.contDiffAt.mul contDiffAt_const : ContDiffAt ℝ (∞) (fun y : ℝ ↦ frequency(y)) t))
+    · apply (contDiffAt_const (c := (0 : ℂ))).congr_of_eventuallyEq
+      filter_upwards [notMem_tsupport_iff_eventuallyEq.mp ht] with y hy
+      simp [p, hy]
+  have hpc : HasCompactSupport p := B.hasCompactSupport.smul_right
+  refine ⟨hpc.toSchwartzMap hp, fun t ht ↦ ?_⟩
+  have ht' := abs_le.mpr ht
+  change Z (frequency(t)) = E (frequency(t)) * (B t • _)
+  rw [B.one_of_mem_closedBall (by rw [mem_closedBall_zero_iff, Real.norm_eq_abs]; exact ht'.trans (by dsimp [B]; linarith)), one_smul]
+  exact (hQ t ⟨by linarith [ht.1], by linarith [ht.2]⟩).2
+
+open scoped FourierTransform in
+/-- With angular frequency t, the inverse transform represents a Schwartz profile
+by integration against exp(itx) with respect to Lebesgue measure. -/
+private theorem orbitalMarkushevichBasis_synthesis_inverse (H : SchwartzMap ℝ ℂ) :
+    ∃ g : SchwartzMap ℝ ℂ, ∀ t : ℝ,
+      (∫ x : ℝ, g x * Complex.exp ((x : ℂ) * frequency(t))) = H t := by
+  let e := (LinearEquiv.smulOfNeZero ℝ ℝ (-2 * Real.pi) (mul_ne_zero (by norm_num) Real.pi_ne_zero)).toContinuousLinearEquiv
+  let K := SchwartzMap.compCLMOfContinuousLinearEquiv ℂ e H
+  let g := (FourierTransform.fourierCLE ℂ (SchwartzMap ℝ ℂ)).symm K
+  have hft : 𝓕 g = K := (FourierTransform.fourierCLE ℂ (SchwartzMap ℝ ℂ)).apply_symm_apply _
+  refine ⟨g, fun t ↦ ?_⟩
+  let w := t / (-2 * Real.pi)
+  have hval := congrArg (fun f : SchwartzMap ℝ ℂ ↦ f w) hft
+  change 𝓕 (g : ℝ → ℂ) w = H ((-2 * Real.pi) * w) at hval
+  have hw : (-2 * Real.pi) * w = t := by dsimp [w]; field_simp
+  rw [hw, Real.fourier_real_eq_integral_exp_smul] at hval
+  refine (integral_congr_ae (.of_forall fun x ↦ ?_)).trans hval
+  have hexp : -2 * Real.pi * x * w = x * t := by rw [← hw]; ring
+  rw [hexp, Complex.ofReal_mul, smul_eq_mul, mul_comm (g x), mul_assoc]
+
+/-- Integrating an inverse-character Schwartz profile along log norm realizes its
+ordinary Fourier transform on the corresponding Mellin line. The Haar scalar
+accounts for the normalization of Lebesgue measure. -/
+private theorem orbitalMarkushevichBasis_synthesis_lift (χ : PontryaginDual C𝔽)
+    (s : ℝ) (H : SchwartzMap ℝ ℂ) :
+    ∃ v : W(s), ∀ t : ℝ, (∫ x, v x * ideleClassNormTwist χ (frequency(t)) x ∂μ𝔽) = H t := by
+  let hm : IsModulation m𝔽 := ⟨isProperMap_ideleClassNorm F, ideleClassNorm_ne_one (F := F)⟩
+  let ν := canonicalModulatedHaar m𝔽 hm
+  let : ν.IsHaarMeasure := (existsUnique_canonicalModulatedHaar m𝔽 hm).exists.choose_spec.1
+  let c : ℂ := (Measure.haarScalarFactor μ𝔽 ν : ℝ)
+  have hc : c ≠ 0 := Complex.ofReal_ne_zero.mpr
+    (by exact_mod_cast (Measure.haarScalarFactor_pos_of_isHaarMeasure μ𝔽 ν).ne')
+  obtain ⟨g, hg⟩ := orbitalMarkushevichBasis_synthesis_inverse (c⁻¹ • H)
+  let a (x : C𝔽) := (χ x : ℂ)⁻¹ * g (logNorm x)
+  have ha : Continuous a := ((continuous_subtype_val.comp χ.continuous).inv₀ fun x ↦
+    Circle.coe_ne_zero _).mul (g.continuous.comp orbitalJet_logNorm_continuous)
+  let d (y : ℝ) := (1 + y ^ 2) ^ (s / 2)
+  have hd (x : C𝔽) : intervalSobolevDensity 0 0 s (logNorm x) = d (logNorm x) :=
+    inv_injective (orbitalJet_density_eq s x)
+  have hdpos (x : ℝ) : 0 < d x := Real.rpow_pos_of_pos (by positivity) _
+  have hdc : Continuous d := (continuous_const.add (continuous_id.pow 2)).rpow_const
+    fun x ↦ .inl (by dsimp; positivity)
+  have hmeas : MemLp a 2 (intervalSobolevMeasure μ𝔽 logNorm 0 0 s) := by
+    change MemLp a 2 ((μ𝔽).withDensity fun x ↦ ENNReal.ofReal (intervalSobolevDensity 0 0 s (logNorm x)))
+    simp_rw [hd]
+    apply (memLp_two_iff_integrable_sq_norm ha.aestronglyMeasurable).mpr
+    apply (integrable_withDensity_iff ((hdc.comp orbitalJet_logNorm_continuous).measurable.ennreal_ofReal)
+      (.of_forall fun _ ↦ ENNReal.ofReal_lt_top)).mpr
+    let w (x : ℝ) := (1 + ‖x‖ ^ 2) ^ (s / 4)
+    have hw := Function.hasTemperateGrowth_one_add_norm_sq_rpow ℝ (s / 4)
+    let G := SchwartzMap.smulLeftCLM ℂ w g
+    have hwg := (memLp_two_iff_integrable_sq_norm G.continuous.aestronglyMeasurable).mp (G.memLp 2 volume)
+    have hreal : Integrable (fun x : ℝ ↦ d x * ‖g x‖ ^ 2) volume := hwg.congr (.of_forall fun x ↦ by
+      change ‖SchwartzMap.smulLeftCLM ℂ w g x‖ ^ 2 = _
+      rw [SchwartzMap.smulLeftCLM_apply_apply hw, norm_smul, mul_pow, Real.norm_of_nonneg
+        (show 0 ≤ w x from Real.rpow_nonneg (by positivity) _)]
+      dsimp only [w, d]
+      rw [Real.norm_eq_abs, sq_abs, ← Real.rpow_mul_natCast (by positivity : 0 ≤ 1 + x ^ 2)]
+      congr 2
+      ring)
+    have hi : Integrable (fun x : C𝔽 ↦ d (logNorm x) * ‖g (logNorm x)‖ ^ 2) ν :=
+      (orbitalJet_logNorm_measurePreserving (F := F)).integrable_comp_of_integrable hreal
+    rw [Measure.isMulLeftInvariant_eq_smul μ𝔽 ν]
+    apply Integrable.smul_measure_nnreal
+    apply hi.congr
+    exact .of_forall fun x ↦ by simp [a, ENNReal.toReal_ofReal (hdpos _).le, mul_comm]
+  refine ⟨hmeas.toLp a, fun t ↦ ?_⟩
+  have habs : μ𝔽 ≪ intervalSobolevMeasure μ𝔽 logNorm 0 0 s := by
+    change μ𝔽 ≪ (μ𝔽).withDensity fun x ↦ ENNReal.ofReal (intervalSobolevDensity 0 0 s (logNorm x))
+    simp_rw [hd]
+    exact withDensity_absolutelyContinuous' ((hdc.comp orbitalJet_logNorm_continuous).measurable.ennreal_ofReal.aemeasurable)
+      (.of_forall fun x ↦ (ENNReal.ofReal_pos.mpr (hdpos _)).ne')
+  let h (r : ℝ) := g r * Complex.exp ((r : ℂ) * frequency(t))
+  have hraw (x : C𝔽) : a x * ideleClassNormTwist χ (frequency(t)) x = h (logNorm x) := by
+    have hp := NNReal.coe_pos.mpr (Units.zero_lt (ideleClassNorm F x))
+    change ((χ x : ℂ)⁻¹ * g (logNorm x)) * ((χ x : ℂ) * (((ideleClassNorm F x).val : ℝ) : ℂ) ^ (frequency(t))) = h (logNorm x)
+    rw [Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr hp.ne'), ← Complex.ofReal_log hp.le]
+    dsimp only [h, logIdeleClassNorm]
+    field_simp
+  refine (integral_congr_ae ((habs.ae_eq hmeas.coeFn_toLp).mul (Filter.EventuallyEq.rfl (f := fun x ↦ ideleClassNormTwist χ (frequency(t)) x)))).trans ?_
+  change (∫ x, a x * ideleClassNormTwist χ (frequency(t)) x ∂μ𝔽) = _
+  simp_rw [hraw]
+  rw [Measure.isMulLeftInvariant_eq_smul μ𝔽 ν, integral_smul_nnreal_measure]
+  have hl := orbitalJet_logNorm_measurePreserving (F := F)
+  have hr : (∫ x, h (logNorm x) ∂ν) = ∫ y, h y := by
+    conv_rhs => rw [← hl.map_eq, integral_map hl.measurable.aemeasurable
+      (show Continuous h from g.continuous.mul (Complex.continuous_exp.comp
+        (Complex.continuous_ofReal.mul continuous_const))).aestronglyMeasurable]
+  rw [hr, show ∫ y, h y = (c⁻¹ • H) t from hg t]
+  change c * (c⁻¹ * H t) = H t
+  rw [← mul_assoc, mul_inv_cancel₀ hc, one_mul]
+
+/-- The Fourier character in the band based at the inverse lift corresponds to
+Mellin height minus its band parameter. -/
+private theorem orbitalMarkushevichBasis_synthesis_twist (χ ψ : PontryaginDual C𝔽) (t : ℝ)
+    (h : ∀ x, ψ x = χ⁻¹ x * Circle.exp (t * logNorm x)) (x : C𝔽) :
+    star (ψ x : ℂ) = ideleClassNormTwist χ (frequency(-t)) x := by
+  have hp := NNReal.coe_pos.mpr (Units.zero_lt (ideleClassNorm F x))
+  change _ = (χ x : ℂ) * (((ideleClassNorm F x).val : ℝ) : ℂ) ^ (frequency(-t))
+  rw [h, Circle.coe_mul, star_mul]
+  rw [show (χ⁻¹ x : ℂ) = star (χ x : ℂ) from Circle.coe_inv_eq_conj _, star_star,
+    Complex.star_def, ← Circle.coe_inv_eq_conj, ← Circle.exp_neg, Circle.coe_exp,
+    Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr hp.ne'), ← Complex.ofReal_log hp.le]
+  rw [mul_comm _ (χ x : ℂ)]
+  congr 2
+  push_cast
+  dsimp only [logIdeleClassNorm]
+  ring
+
+/-- Fourier samples distinguish zero-line Sobolev vectors of degree greater than
+one, since the underlying functions are integrable for Haar measure. -/
+private theorem orbitalMarkushevichBasis_synthesis_ext {s : ℝ} (hs : 0 ≤ s) (hs' : 1 < s)
+    (x y : W(s)) (h : ∀ ψ, lcaFourier μ𝔽 x ψ = lcaFourier μ𝔽 y ψ) : x = y := by
+  obtain ⟨L, hL⟩ := orbitalMarkushevichBasis_synthesis_eval (F := F) hs hs' 1
+  have hi (v : W(s)) : Integrable (v : C𝔽 → ℂ) μ𝔽 := by simpa using (hL v).2
+  obtain ⟨U, hU, hinj, -⟩ := lcaFourier_L1 (G := C𝔽) μ𝔽
+  have he (v : W(s)) (ψ : PontryaginDual C𝔽) : U ((hi v).toL1 _) ψ = lcaFourier μ𝔽 v ψ :=
+    (hU _ _).trans (integral_congr_ae ((hi v).coeFn_toL1.mul Filter.EventuallyEq.rfl))
+  have eq := hinj (show U ((hi x).toL1 _) = U ((hi y).toL1 _) from
+    ZeroAtInftyContinuousMap.ext fun ψ ↦ (he x ψ).trans ((h ψ).trans (he y ψ).symm))
+  apply Lp.ext
+  apply (withDensity_absolutelyContinuous μ𝔽 _).ae_eq
+  exact (hi x).coeFn_toL1.symm.trans (eq ▸ (hi y).coeFn_toL1)
+
+/-- A band-limited convolution of a polar test with locally divisible Mellin transform
+has an exact principal-value preimage. Cut off the holomorphic quotient, lift its inverse
+Fourier transform and apply the same convolution to that lift. -/
+private theorem orbitalMarkushevichBasis_synthesis_cutoff (χ : PontryaginDual C𝔽)
+    (S : Finset V) {s : ℝ} (hs : 0 ≤ s) (hs' : 1 < s)
+    (hχ : ∀ v ∈ S, (ideleClassNormTwist χ 0).IsUnramifiedAt v)
+    (n : ℕ) (φ : SchwartzBruhat C𝔽)
+    (hφ : tsupport (lcaFourier μ𝔽 φ) ⊆ modulatedFrequencyBand m𝔽 χ⁻¹ (-(n : ℝ)) n)
+    (b : ℬ₀) (hq : ∀ t ∈ Icc (-(n + 2 : ℝ)) (n + 2), ∃ q : ℂ → ℂ, AnalyticAt ℂ q (frequency(t)) ∧
+      (fun z ↦ globalIdelicZFunction b.val (ideleClassNormTwist χ z)) =ᶠ[nhds (frequency(t))]
+        reciprocalPartialHeckeEulerProduct χ S * q) :
+    ∃ u : H(0, hs), (P(S, 0, hs) u : W(s)) =
+      (existsUnique_schwartzBruhat_zeroLineAction μ𝔽 m𝔽 s hs).exists.choose φ
+        (j(0, hs) (theta(b)) : W(s)) := by
+  let E := reciprocalPartialHeckeEulerProduct χ S
+  let Z (z : ℂ) := globalIdelicZFunction b.val (ideleClassNormTwist χ z)
+  have hd : Differentiable ℂ E := fun z ↦ (OrbitalJetIndex.isZero_analyticAt χ S z).differentiableAt
+  let profile := orbitalMarkushevichBasis_synthesis_profile E Z hd
+    (globalIdelicZFunction_entire_of_vanishing _ b.property χ)
+    ⟨1, fun h ↦ one_ne_zero (orbitalEulerZero_re_eq_zero χ S hχ h)⟩ n hq
+  let H := profile.choose
+  have hH := profile.choose_spec
+  let lift := orbitalMarkushevichBasis_synthesis_lift χ s H
+  let v := lift.choose
+  have hv := lift.choose_spec
+  let A := (existsUnique_schwartzBruhat_zeroLineAction μ𝔽 m𝔽 s hs).exists.choose φ
+  let u : H(0, hs) := ⟨A v, denseRange_globalTheta_zeroLine hs (A v)⟩
+  let D : W(s) := j(0, hs) (theta(b))
+  refine ⟨u, orbitalMarkushevichBasis_synthesis_ext hs hs' _ _ fun ψ ↦ ?_⟩
+  let e := orbitalMarkushevichBasis_synthesis_eval hs hs' ψ
+  let L := e.choose
+  have hL := e.choose_spec
+  have hc (x) : L (A x) = lcaFourier μ𝔽 φ ψ * L x :=
+    orbitalMarkushevichBasis_synthesis_convolution hs ψ L (fun y ↦ (hL y).1) φ x
+  refine (hL (P(S, 0, hs) u : W(s))).1.symm.trans ((Eq.trans ?_ (hc D).symm).trans (hL (A D)).1)
+  have hsample (ξ : PontryaginDual C𝔽) (t : ℝ)
+      (he : ∀ g, star (ψ g : ℂ) = ideleClassNormTwist ξ (frequency(t)) g) (x : W(s)) :
+      L x = ∫ g, x g * ideleClassNormTwist ξ (frequency(t)) g ∂μ𝔽 :=
+    (hL x).1.trans (integral_congr_ae (.of_forall fun g ↦ congrArg (x g * ·) (he g)))
+  by_cases hmem : ψ ∈ modulatedFrequencyBand m𝔽 χ⁻¹ (-(n : ℝ)) n
+  · obtain ⟨t, ht, htψ⟩ := hmem
+    have h := hsample χ (-t) (orbitalMarkushevichBasis_synthesis_twist χ ψ t htψ)
+    rw [orbitalMarkushevichBasis_synthesis_mul χ S hs (frequency(-t)) L h u, hc v, h v, hv]
+    have hθ := (existsUnique_globalThetaSobolevEmbedding (F := F) 0 0 0 s hI hs).exists.choose_spec.2 b
+    rw [modulationWeight_zero] at hθ
+    obtain ⟨h₀, h₁⟩ := (mem_adelePolarSubspace b.val).mp b.property
+    have hb : L D = Z (frequency(-t)) := (h D).trans
+      ((integral_congr_ae (hθ.mul Filter.EventuallyEq.rfl)).trans
+        (congrFun (globalThetaMellinIntegral_eq_continuation_of_vanishing _ h₀ h₁) _))
+    rw [hb, hH (-t) ⟨by linarith [ht.2], by linarith [ht.1]⟩]
+    ring
+  · have hzero := image_eq_zero_of_notMem_tsupport (fun h ↦ hmem (hφ h))
+    have h := hsample ψ⁻¹ 0 (fun g ↦ by
+      change star (ψ g : ℂ) = (ψ⁻¹ g : ℂ) * (((ideleClassNorm F g).val : ℝ) : ℂ) ^ (frequency(0))
+      simp only [Complex.ofReal_zero, zero_mul, Complex.cpow_zero, mul_one]
+      exact (Circle.coe_inv_eq_conj _).symm)
+    rw [orbitalMarkushevichBasis_synthesis_mul ψ⁻¹ S hs (frequency(0)) L h u, hc v, hzero, zero_mul, mul_zero, zero_mul]
+
+/-- For one cutoff, correct theta tests in the finitely many moments on its band.
+Their principal-value preimages put the cutoff of the limiting vector in the closed image. -/
+private theorem orbitalMarkushevichBasis_synthesis_onBand (χ : PontryaginDual C𝔽) (S : Finset V)
+    {s : ℝ} (hs : 0 ≤ s) (hS : S.Nonempty) (hc : 2 * (S.card : ℝ) ≤ s)
+    (hχ : ∀ v ∈ S, (ideleClassNormTwist χ 0).IsUnramifiedAt v)
+    (f : W(s)) (hf : ∀ j : OrbitalJetIndex χ S s, spectralSobolevPairing f (jetLp(χ, S, hs, j)) = 0)
+    (n : ℕ) (φ : SchwartzBruhat C𝔽)
+    (hband : tsupport (lcaFourier μ𝔽 φ) ⊆ modulatedFrequencyBand m𝔽 χ⁻¹ (-(n : ℝ)) n) :
+    (existsUnique_schwartzBruhat_zeroLineAction μ𝔽 m𝔽 s hs).exists.choose φ f ∈
+      ((H(0, hs)).subtype.comp (P(S, 0, hs)).toLinearMap).range.topologicalClosure := by
+  classical
+  let D := (H(0, hs)).subtype.comp (globalThetaSobolevTestClass (F := F) 0 hs)
+  have hd : DenseRange D := by
+    intro x
+    apply closure_mono (t := range D) _ (denseRange_globalTheta_zeroLine hs x)
+    rintro _ ⟨u, rfl⟩
+    obtain ⟨b, hb⟩ := Submodule.mkQ_surjective
+      ((LinearMap.ker (adelicThetaLinearMap F)).comap (adelePolarSubspace F).subtype) u
+    exact ⟨b, congrArg (fun u : GlobalPolarFreeThetaSpace F ↦ (j(0, hs) u : W(s))) hb⟩
+  let A := (existsUnique_schwartzBruhat_zeroLineAction μ𝔽 m𝔽 s hs).exists.choose
+  let jets := orbitalMarkushevichBasis_synthesis_band χ S hc hχ (n + 2)
+  let J := jets.choose
+  have hJ := jets.choose_spec
+  let T := (modulatedIntervalSobolev_dual m𝔽
+    ⟨isProperMap_ideleClassNorm F, ideleClassNorm_ne_one (F := F)⟩ μ𝔽 0 0 s hI hs).exists.choose
+  let M : W(s) →L[ℂ] (J → ℂ) := ContinuousLinearMap.pi (fun j ↦ T.symm (jetLp(χ, S, hs, j.val)))
+  have hM (x : W(s)) (j : J) : M x j = spectralSobolevPairing x (jetLp(χ, S, hs, j.val)) :=
+    (spectralSobolevPairing_dual hI hs (T.symm (jetLp(χ, S, hs, j.val))) x).2.trans
+      (congrArg (spectralSobolevPairing x) (T.apply_symm_apply _))
+  let approx := orbitalMarkushevichBasis_synthesis_correct (B := ℬ₀) (X := W(s)) (Y := J → ℂ) D hd M f
+    (funext fun j ↦ (hM _ j).trans (hf j.val))
+  let b := approx.choose
+  have hb := approx.choose_spec.1
+  have hbto := approx.choose_spec.2
+  apply (Submodule.isClosed_topologicalClosure _).mem_of_tendsto
+    ((A φ).continuous.continuousAt.tendsto.comp hbto)
+  apply Filter.Eventually.of_forall
+  intro l
+  have hs' : 1 < s := by
+    have : (1 : ℝ) ≤ S.card := by exact_mod_cast Nat.succ_le_of_lt (Finset.card_pos.mpr hS)
+    linarith
+  obtain ⟨u, hu⟩ := orbitalMarkushevichBasis_synthesis_cutoff χ S hs hs' hχ n φ hband (b l)
+    (fun t ht ↦ orbitalMarkushevichBasis_synthesis_germ χ S hs hχ (b l) t (fun k hk ↦ by
+      obtain ⟨j, hj, he⟩ := hJ t ht k hk
+      exact ⟨j, he, (hM (D (b l)) ⟨j, hj⟩).symm.trans (congrFun (hb l) ⟨j, hj⟩)⟩))
+  exact Submodule.le_topologicalClosure _ ⟨u, hu⟩
+
+/-- Every isotypic vector with zero admitted moments can be approximated in Sobolev norm
+by principal values. Commutativity of the square on p. 486 gives the forward inclusion.
+For the converse one needs density of the Euler multiplier image in this joint kernel. -/
+private theorem orbitalMarkushevichBasis_synthesis (χ : PontryaginDual C𝔽) (S : Finset V)
+    {s : ℝ} (hs : 0 ≤ s) (hS : S.Nonempty) (hc : 2 * (S.card : ℝ) ≤ s)
+    (hχ : ∀ v ∈ S, (ideleClassNormTwist χ 0).IsUnramifiedAt v)
+    (f : Wω(hs, χ.comp restriction))
+    (hf : ∀ j : OrbitalJetIndex χ S s, spectralSobolevPairing f.val (jetLp(χ, S, hs, j)) = 0) :
+    f ∈ N(S, hs, χ.comp restriction) := by
+  classical
+  let V₀ := ((H(0, hs)).subtype.comp (P(S, 0, hs)).toLinearMap).range.topologicalClosure
+  obtain ⟨φ, U, -, -, hband, hU, hlim⟩ := exists_spectralLineIsotypeConvolution χ hs
+  change f.val ∈ V₀
+  apply (Submodule.isClosed_topologicalClosure _).mem_of_tendsto
+    (continuous_subtype_val.continuousAt.tendsto.comp (hlim f))
+  apply Filter.Eventually.of_forall
+  intro n
+  change (U n f).val ∈ V₀
+  rw [hU]
+  exact orbitalMarkushevichBasis_synthesis_onBand χ S hs hS hc hχ f.val hf n (φ n) (hband n)
+
+/-- The logarithmic Sobolev weight has polynomial growth, so Schwartz functions
+embed continuously and densely in its scalar weighted L² space. -/
+private theorem orbitalMarkushevichBasis_singleJet_denseSpan_weight (c : ℝ≥0) {s : ℝ} (hs : 0 ≤ s) :
+    let w (x : ℝ) := intervalSobolevDensity 0 0 s x
+    ((c • (volume : Measure ℝ)).withDensity fun x ↦ ENNReal.ofReal (w x)).HasTemperateGrowth := by
+  intro w
+  obtain ⟨n, hn⟩ := exists_nat_ge s
+  have hw (x : ℝ) : w x = (1 + x ^ 2) ^ (s / 2) := by simp [w, intervalSobolevDensity]
+  have hc : Continuous w := by rw [funext hw]; fun_prop (disch := positivity)
+  refine ⟨n + 2, ?_⟩
+  apply (integrable_withDensity_iff hc.measurable.ennreal_ofReal (.of_forall fun _ ↦ ENNReal.ofReal_lt_top)).2
+  have hi : Integrable (fun x : ℝ ↦ (1 + ‖x‖) ^ (-(2 : ℝ))) volume :=
+    integrable_one_add_norm (by norm_num)
+  apply hi.smul_measure_nnreal.mono'
+  · apply AEStronglyMeasurable.mul
+    · exact ((continuous_const.add continuous_norm).rpow_const fun x : ℝ ↦
+        Or.inl (show 1 + ‖x‖ ≠ 0 by positivity)).aestronglyMeasurable
+    · exact hc.measurable.ennreal_ofReal.ennreal_toReal.aestronglyMeasurable
+  · apply Filter.Eventually.of_forall
+    intro x
+    have hpos : 0 < 1 + ‖x‖ := by positivity
+    have h1 : 1 + x ^ 2 ≤ (1 + ‖x‖) ^ 2 := by
+      rw [Real.norm_eq_abs]; nlinarith [abs_nonneg x, sq_abs x]
+    have hbound : w x ≤ (1 + ‖x‖) ^ (n : ℝ) := calc
+      w x ≤ ((1 + ‖x‖) ^ 2) ^ (s / 2) := hw x ▸ Real.rpow_le_rpow (by positivity) h1 (by linarith)
+      _ = (1 + ‖x‖) ^ s := by rw [← Real.rpow_two, ← Real.rpow_mul hpos.le]; ring_nf
+      _ ≤ _ := Real.rpow_le_rpow_of_exponent_le (by linarith [norm_nonneg x]) hn
+    rw [ENNReal.toReal_ofReal (by rw [hw]; positivity), Real.norm_of_nonneg (by rw [hw]; positivity)]
+    convert mul_le_mul_of_nonneg_left hbound (Real.rpow_nonneg hpos.le (-(↑(n + 2) : ℝ))) using 1
+    rw [← Real.rpow_add hpos]
+    push_cast
+    ring_nf
+
+/-- Continuous representatives in the positive isotype are inverse-character
+multiples of continuous log-norm profiles. Such representatives are dense. -/
+private theorem orbitalMarkushevichBasis_singleJet_denseSpan_continuous (χ : PontryaginDual C𝔽)
+    {s : ℝ} (hs : 0 ≤ s) :
+    Dense {y : Wω(hs, χ.comp restriction) | ∃ p : ℝ → ℂ, Continuous p ∧
+      (y.val : C𝔽 → ℂ) =ᵐ[μ𝔽] fun x ↦ (χ x : ℂ)⁻¹ * p (logNorm x)} := by
+  let A := (existsUnique_spectralLineTestCompletion (F := F) 0 hs (χ.comp restriction)).exists
+  apply A.choose_spec.2.1.mono
+  rintro _ ⟨φ, rfl⟩
+  let f := φ.val.val
+  have hf : ((A.choose φ).val : C𝔽 → ℂ) =ᵐ[μ𝔽] f := by
+    simpa only [modulationWeight_zero] using A.choose_spec.1 φ
+  let φ₀ := modulatedExponentialDecayTwist m𝔽 univ ⟨0, mem_univ _⟩ φ.val
+  have hcont : Continuous f := by
+    have h := continuous_of_bruhatSmooth (schwartzBruhat_isBruhatSmooth φ₀)
+    change Continuous (modulationWeight m𝔽 0 f) at h
+    rwa [modulationWeight_zero] at h
+  have he (k : C₁) (x : C𝔽) : f (k.val⁻¹ * x) = (χ k.val : ℂ) * f x := by
+    let u := (A.choose φ).val
+    have hk := (mem_actionIsotype _ _ _).mp (A.choose φ).property k
+    change ρ(hs) k.val u = (χ k.val : ℂ) • u at hk
+    have ht := hardySobolevTranslation_apply μ𝔽 m𝔽 0 0 s hI hs k.val u
+    rw [hk] at ht
+    have hpos : μ𝔽 ≪ (μ𝔽).withDensity (fun g ↦ ENNReal.ofReal (intervalSobolevDensity 0 0 s (logNorm g))) := by
+      apply withDensity_absolutelyContinuous'
+      · have h := (orbitalJet_density_continuous (F := F) s).measurable.inv
+        simpa only [Pi.inv_apply, inv_inv] using h.ennreal_ofReal.aemeasurable
+      · exact .of_forall fun g ↦ (ENNReal.ofReal_pos.mpr (inv_pos.mp (orbitalJet_density_pos s g))).ne'
+    have hh : (fun z ↦ f (k.val⁻¹ * z)) =ᵐ[μ𝔽] fun z ↦ (χ k.val : ℂ) * f z := by
+      filter_upwards [(measurePreserving_mul_left μ𝔽 k.val⁻¹).quasiMeasurePreserving.ae_eq_comp hf,
+        ht, hpos.ae_le (Lp.coeFn_smul (χ k.val : ℂ) u), hf] with z hz ht' hs' hf'
+      exact hz.symm.trans (ht'.symm.trans (hs'.trans (congrArg ((χ k.val : ℂ) * ·) hf')))
+    exact congrFun (Measure.eq_of_ae_eq hh (hcont.comp (continuous_const.mul continuous_id))
+      (continuous_const.mul hcont)) x
+  let e := Real.expOrderIso.toHomeomorph.trans (Nonneg.unitsHomeomorphPos ℝ).symm
+  let σ (t : ℝ) : C𝔽 := QuotientGroup.mk (canonicalIdeleNormSection F (e t))
+  have hσ : Continuous σ := QuotientGroup.continuous_mk.comp
+    ((canonicalIdeleNormSection_continuous F).comp e.continuous)
+  have hσnorm (x : C𝔽) : ideleClassNorm F (σ (logNorm x)) = ideleClassNorm F x := by
+    rw [show ideleClassNorm F (σ (logNorm x)) = e (logNorm x) from canonicalIdeleNormSection_rightInverse F _]
+    apply Units.ext
+    apply NNReal.eq
+    change Real.exp (Real.log _) = _
+    exact Real.exp_log (NNReal.coe_pos.mpr (Units.zero_lt _))
+  refine ⟨fun t ↦ (χ (σ t) : ℂ) * f (σ t),
+    ((continuous_subtype_val.comp χ.continuous).comp hσ).mul (hcont.comp hσ), hf.trans (.of_forall fun x ↦ ?_)⟩
+  let y := σ (logNorm x)
+  let k : C₁ := ⟨y * x⁻¹, by change ideleClassNorm F (y * x⁻¹) = 1; rw [map_mul, map_inv, hσnorm, mul_inv_cancel]⟩
+  have hky : k.val⁻¹ * y = x := by dsimp [k]; group
+  change f x = (χ x : ℂ)⁻¹ * ((χ y : ℂ) * f y)
+  calc
+    f x = (χ k.val : ℂ) * f y := hky ▸ he k y
+    _ = _ := by
+      change (χ (y * x⁻¹) : ℂ) * f y = _
+      simp only [map_mul, map_inv, Circle.coe_mul, Circle.coe_inv]
+      ring
+
+/-- Pulling scalar Schwartz functions back along log-norm and multiplying by the
+inverse character gives a continuous map with dense range in the positive isotype. -/
+private theorem orbitalMarkushevichBasis_singleJet_denseSpan_lift (χ : PontryaginDual C𝔽)
+    {s : ℝ} (hs : 0 ≤ s) :
+    ∃ T : SchwartzMap ℝ ℂ →L[ℂ] Wω(hs, χ.comp restriction), DenseRange T ∧
+      ∀ p, ((T p).val : C𝔽 → ℂ) =ᵐ[μ𝔽] fun x ↦ (χ x : ℂ)⁻¹ * p (logNorm x) := by
+  have hm : IsModulation m𝔽 := ⟨isProperMap_ideleClassNorm F, ideleClassNorm_ne_one (F := F)⟩
+  let ν := canonicalModulatedHaar m𝔽 hm
+  let : ν.IsHaarMeasure := (existsUnique_canonicalModulatedHaar m𝔽 hm).exists.choose_spec.1
+  let c := Measure.haarScalarFactor μ𝔽 ν
+  have hl : MeasurePreserving logNorm μ𝔽 (c • volume) := by
+    rw [Measure.isMulLeftInvariant_eq_smul μ𝔽 ν]
+    exact orbitalJet_logNorm_measurePreserving.smul_measure _
+  let w := intervalSobolevDensity 0 0 s
+  have hw (x : ℝ) : w x = (1 + x ^ 2) ^ (s / 2) := by simp [w, intervalSobolevDensity]
+  have hc : Continuous w := by rw [funext hw]; fun_prop (disch := positivity)
+  have hp (x : ℝ) : 0 < w x := by rw [hw]; positivity
+  let η := (c • (volume : Measure ℝ)).withDensity (fun x ↦ ENNReal.ofReal (w x))
+  let μ := (μ𝔽).withDensity (fun x ↦ ENNReal.ofReal (w (logNorm x)))
+  have hpres : MeasurePreserving logNorm μ η := by
+    refine ⟨hl.measurable, ?_⟩
+    ext b hb
+    rw [Measure.map_apply hl.measurable hb, withDensity_apply _ (hl.measurable hb), withDensity_apply _ hb]
+    exact hl.setLIntegral_comp_preimage hb hc.measurable.ennreal_ofReal
+  have hac : μ𝔽 ≪ μ := withDensity_absolutelyContinuous'
+    (hc.measurable.comp hl.measurable).ennreal_ofReal.aemeasurable
+    (.of_forall fun x ↦ (ENNReal.ofReal_pos.mpr (hp _)).ne')
+  let P := Lp.compMeasurePreservingₗᵢ (E := ℂ) (p := 2) ℂ logNorm hpres
+  let v (x : C𝔽) := ((χ x)⁻¹ : Circle).val
+  have hv : MemLp v ⊤ μ := memLp_top_of_bound
+    (continuous_subtype_val.comp χ.continuous.inv).aestronglyMeasurable 1
+    (.of_forall fun x ↦ (Circle.norm_coe _).le)
+  let B := ContinuousLinearMap.mul ℂ ℂ
+  let L := ((B.holderL μ ⊤ 2 2) (hv.toLp v)).comp P.toContinuousLinearMap
+  have hL (p : Lp ℂ 2 η) : (L p : C𝔽 → ℂ) =ᵐ[μ𝔽] fun x ↦ (χ x : ℂ)⁻¹ * p (logNorm x) := by
+    apply hac.ae_le
+    filter_upwards [B.coeFn_holder (r := 2) (hv.toLp v) (P p), hv.coeFn_toLp,
+      Lp.coeFn_compMeasurePreserving p hpres] with x hx hvx hpx
+    change L p x = (hv.toLp v) x * P p x at hx
+    change P p x = p (logNorm x) at hpx
+    rw [hx, hvx, hpx]
+    exact congrArg (· * p (logNorm x)) (Circle.coe_inv _)
+  have hmem (p : Lp ℂ 2 η) : L p ∈ Wω(hs, χ.comp restriction) := by
+    apply (mem_actionIsotype _ _ _).2
+    intro k
+    apply Lp.ext
+    apply (withDensity_absolutelyContinuous μ𝔽 _).ae_le
+    have ht := (hardySobolevTranslation_apply μ𝔽 m𝔽 0 0 s hI hs k.val (L p)).trans
+      ((measurePreserving_mul_left μ𝔽 k.val⁻¹).quasiMeasurePreserving.ae_eq_comp (hL p))
+    filter_upwards [ht, hac.ae_le (Lp.coeFn_smul (χ k.val : ℂ) (L p)), hL p] with x hx hsx hpx
+    change ρ(hs) k.val (L p) x = ((χ k.val : ℂ) • L p) x
+    rw [hx, hsx, Pi.smul_apply, smul_eq_mul, hpx]
+    dsimp only [Function.comp_apply, logIdeleClassNorm]
+    rw [map_mul (ideleClassNorm F), map_inv (ideleClassNorm F),
+      show ideleClassNorm F k.val = 1 from k.property, inv_one, one_mul]
+    simp only [map_mul, map_inv, Circle.coe_mul, Circle.coe_inv, mul_inv_rev, inv_inv]
+    ring
+  let R := L.codRestrict Wω(hs, χ.comp restriction) hmem
+  have hd : DenseRange R := by
+    apply (orbitalMarkushevichBasis_singleJet_denseSpan_continuous χ hs).mono
+    rintro y ⟨p, hpc, hy⟩
+    have hcomp : MemLp (p ∘ logNorm) 2 μ := by
+      apply (Lp.memLp y.val).mono (hpc.comp orbitalJet_logNorm_continuous).aestronglyMeasurable
+      filter_upwards [(withDensity_absolutelyContinuous μ𝔽 _).ae_le hy] with x hx
+      simp [hx]
+    have hm : MemLp p 2 η := by
+      rw [← hpres.map_eq]
+      exact (memLp_map_measure_iff hpc.aestronglyMeasurable hpres.aemeasurable).2 hcomp
+    refine ⟨hm.toLp p, Subtype.ext (Lp.ext ?_)⟩
+    apply (withDensity_absolutelyContinuous μ𝔽 _).ae_le
+    filter_upwards [hL (hm.toLp p), hac.ae_le (hpres.quasiMeasurePreserving.ae_eq_comp hm.coeFn_toLp),
+      hy] with x hx hp hyx
+    exact hx.trans ((congrArg ((χ x : ℂ)⁻¹ * ·) hp).trans hyx.symm)
+  let : η.HasTemperateGrowth := orbitalMarkushevichBasis_singleJet_denseSpan_weight c hs
+  let : IsLocallyFiniteMeasure η := IsLocallyFiniteMeasure.withDensity_ofReal hc
+  let T := R.comp (SchwartzMap.toLpCLM ℂ ℂ 2 η)
+  refine ⟨T, hd.comp (SchwartzMap.denseRange_toLpCLM (F := ℂ) (by simp : (2 : ENNReal) ≠ ⊤) (μ := η))
+    R.continuous, fun p ↦ (hL _).trans ?_⟩
+  exact hac.ae_le ((hpres.quasiMeasurePreserving.ae_eq_comp (p.coeFn_toLp 2 η)).mono
+    fun x hx ↦ congrArg ((χ x : ℂ)⁻¹ * ·) hx)
+
+/-- With Mathlib's Fourier convention a moment of order k is a nonzero
+multiple of the kth derivative at frequency −t/(2π). -/
+private theorem orbitalMarkushevichBasis_singleJet_denseSpan_moment (χ : PontryaginDual C𝔽)
+    (S : Finset V) {s : ℝ} (hs : 0 ≤ s) (j : OrbitalJetIndex χ S s) (p : SchwartzMap ℝ ℂ)
+    (y : W(s)) (hy : (y : C𝔽 → ℂ) =ᵐ[μ𝔽] fun x ↦ (χ x : ℂ)⁻¹ * p (logNorm x)) :
+    spectralSobolevPairing y (jetLp(χ, S, hs, j)) = 0 ↔
+      iteratedDeriv j.val.2 (FourierTransform.fourier p : SchwartzMap ℝ ℂ) (-j.val.1 / (2 * Real.pi)) = 0 := by
+  let k := j.val.2
+  let t := j.val.1
+  let q (r : ℝ) := p r * Complex.exp ((r : ℂ) * (t : ℂ) * Complex.I) * (r : ℂ) ^ k
+  have hm : IsModulation m𝔽 := ⟨isProperMap_ideleClassNorm F, ideleClassNorm_ne_one (F := F)⟩
+  let ν := canonicalModulatedHaar m𝔽 hm
+  let : ν.IsHaarMeasure := (existsUnique_canonicalModulatedHaar m𝔽 hm).exists.choose_spec.1
+  let c := Measure.haarScalarFactor μ𝔽 ν
+  have hc : (c : ℂ) ≠ 0 := Complex.ofReal_ne_zero.mpr (by exact_mod_cast
+    (Measure.haarScalarFactor_pos_of_isHaarMeasure μ𝔽 ν).ne')
+  have hpair : spectralSobolevPairing y (jetLp(χ, S, hs, j)) = (c : ℂ) * ∫ r, q r := by
+    calc
+      _ = ∫ x, q (logNorm x) ∂μ𝔽 := by
+        apply integral_congr_ae
+        filter_upwards [hy, orbitalJet_ae_of_ae_withDensity (MemLp.coeFn_toLp (orbitalJet_memLp χ S hs j))]
+          with x hx hj
+        rw [hx, hj]
+        let u : ℝ := (ideleClassNorm F x).val
+        have hu : 0 < u := NNReal.coe_pos.mpr (Units.zero_lt _)
+        change _ * (((χ x : ℂ) * (u : ℂ) ^ (0 + (t : ℂ) * Complex.I)) * _) = _
+        rw [zero_add, Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr hu.ne'),
+          ← Complex.ofReal_log hu.le]
+        change (χ x : ℂ)⁻¹ * p _ * ((↑(χ x) * Complex.exp _) * _) =
+          p _ * Complex.exp _ * _
+        simp only [← mul_assoc, mul_right_comm (↑(χ x))⁻¹ (p _), inv_mul_cancel₀ (Circle.coe_ne_zero _), one_mul,
+          logIdeleClassNorm, u, k, t]
+        ring_nf
+      _ = _ := by
+        have hl := orbitalJet_logNorm_measurePreserving (F := F)
+        have hq : Continuous q := by dsimp [q]; fun_prop
+        have hint : (∫ x, q (logNorm x) ∂ν) = ∫ r, q r := by
+          rw [← hl.map_eq, integral_map hl.aemeasurable hq.aestronglyMeasurable]
+        rw [Measure.isMulLeftInvariant_eq_smul μ𝔽 ν, integral_smul_nnreal_measure, hint]
+        rfl
+  let d := (-2 * (Real.pi : ℂ) * Complex.I) ^ k
+  have hd : d ≠ 0 := by dsimp [d]; exact pow_ne_zero _ (by simp [Real.pi_ne_zero])
+  have hfour : iteratedDeriv k (FourierTransform.fourier p : SchwartzMap ℝ ℂ)
+      (-t / (2 * Real.pi)) = d * ∫ r, q r := by
+    have hpow (n : ℕ) : Integrable (fun x : ℝ ↦ x ^ n • p x) := by
+      apply (p.integrable_pow_mul volume n).mono' (by fun_prop)
+      exact .of_forall fun x ↦ by simp
+    rw [SchwartzMap.fourier_coe,
+      Real.iteratedDeriv_fourier (N := ⊤) (fun n _ ↦ hpow n) le_top,
+      Real.fourier_real_eq_integral_exp_smul, ← integral_const_mul]
+    apply integral_congr_ae (.of_forall fun x ↦ ?_)
+    have he : ((-2 * Real.pi * x * (-t / (2 * Real.pi)) : ℝ) : ℂ) * Complex.I =
+        (x : ℂ) * (t : ℂ) * Complex.I := by push_cast; field_simp [Real.pi_ne_zero]
+    simp only [he, smul_eq_mul, q, d, mul_pow]
+    ring
+  rw [hpair, hfour, mul_eq_zero, mul_eq_zero]
+  simp [hc, hd]
+
+/-- A bump equal to one near an isolated frequency times a centered
+monomial singles out one derivative there and vanishes near all other frequencies. -/
+private theorem orbitalMarkushevichBasis_singleJet_denseSpan_bump {Z : Set ℝ}
+    (hZ : IsDiscrete Z) {a : ℝ} (ha : a ∈ Z) (m : ℕ) :
+    ∃ b : SchwartzMap ℝ ℂ, ∀ t ∈ Z, ∀ k : ℕ,
+      iteratedDeriv k (⇑b) t ≠ 0 ↔ t = a ∧ k = m := by
+  obtain ⟨U, ho, he⟩ := isDiscrete_iff_forall_mem_exists_isOpen.mp hZ a ha
+  have haU : a ∈ U := (show a ∈ U ∩ Z from he.symm ▸ mem_singleton _).1
+  obtain ⟨r, hr, hball⟩ := Metric.mem_nhds_iff.mp (ho.mem_nhds haU)
+  let B : ContDiffBump a := ⟨r / 3, r / 2, by positivity, by linarith⟩
+  let P (x : ℝ) := (x - a) ^ m • (1 : ℂ)
+  let f (x : ℝ) := B x • P x
+  have hc : HasCompactSupport f := B.hasCompactSupport.smul_right
+  let b := hc.toSchwartzMap (B.contDiff.smul (((contDiff_id.sub contDiff_const).pow m).smul contDiff_const))
+  refine ⟨b, fun t ht k ↦ ?_⟩
+  by_cases h : t = a
+  · subst t
+    have hnear : (⇑b) =ᶠ[nhds a] P := B.eventuallyEq_one.mono fun x hx ↦ by
+      change B x • P x = P x
+      rw [show B x = 1 from hx, one_smul]
+    rw [hnear.iteratedDeriv_eq]
+    dsimp only [P]
+    rw [iteratedDeriv_smul_const (by fun_prop), iteratedDeriv_comp_sub_const k (fun x : ℝ ↦ x ^ m) a]
+    simp only [sub_self, iteratedDeriv_fun_pow_zero]
+    split_ifs <;> simp_all [Nat.factorial_ne_zero]
+  · have hout : t ∉ tsupport B := by
+      intro ht'
+      have hsmall : t ∈ Metric.ball a r := (Metric.closedBall_subset_ball (by
+        change r / 2 < r; linarith)) (B.tsupport_eq ▸ ht')
+      have htU : t ∈ U ∩ Z := ⟨hball hsmall, ht⟩
+      exact h (mem_singleton_iff.mp (he ▸ htU))
+    have hnear : (⇑b) =ᶠ[nhds t] 0 := (notMem_tsupport_iff_eventuallyEq.mp hout).mono fun x hx ↦ by
+      change B x • P x = 0
+      rw [show B x = 0 from hx, zero_smul]
+    simp [hnear.iteratedDeriv_eq, h]
+
+/-- Subtract the single-coordinate interpolants of a finite moment vector.
+The remainder has empty support and hence belongs to the same span. -/
+private theorem orbitalMarkushevichBasis_singleJet_denseSpan_finite {J E : Type*}
+    [AddCommGroup E] [Module ℂ E] (L : J → E →ₗ[ℂ] ℂ)
+    (hb : ∀ i, ∃ b, ∀ j, L j b ≠ 0 ↔ j = i) (y : E)
+    (hy : (support fun i ↦ L i y).Finite) :
+    y ∈ Submodule.span ℂ {x : E | (support fun i ↦ L i x).Subsingleton} := by
+  classical
+  choose b h using hb
+  let M := Submodule.span ℂ {x : E | (support fun i ↦ L i x).Subsingleton}
+  have hbM (i : J) : b i ∈ M := Submodule.subset_span
+    (fun j hj k hk ↦ ((h i j).mp hj).trans ((h i k).mp hk).symm)
+  let v (i : J) := (L i (b i))⁻¹ • b i
+  have hv (i j : J) : L j (v i) = if i = j then 1 else 0 := by
+    simp only [v, map_smul, smul_eq_mul]
+    split_ifs with e
+    · subst j
+      exact inv_mul_cancel₀ ((h i i).2 rfl)
+    · rw [not_ne_iff.mp (fun hn ↦ e ((h i j).mp hn).symm), mul_zero]
+  let z := ∑ i ∈ hy.toFinset, L i y • v i
+  have hz : z ∈ M := M.sum_mem fun i _ ↦ M.smul_mem _ (M.smul_mem _ (hbM i))
+  have hrem (j : J) : L j (y - z) = 0 := by
+    simp only [z, map_sub, map_sum, map_smul, hv, smul_eq_mul, mul_ite, mul_one, mul_zero,
+      Finset.sum_ite_eq']
+    by_cases hj : L j y = 0 <;> simp [Set.Finite.mem_toFinset, Function.mem_support, hj]
+  have hremM : y - z ∈ M := Submodule.subset_span (by
+    change (support fun j ↦ L j (y - z)).Subsingleton
+    simp [hrem])
+  exact sub_add_cancel y z ▸ M.add_mem hremM hz
+
+/-- Compact frequency support meets a closed discrete set in finitely many
+points. Local bump interpolants then decompose every such profile modulo the
+joint jet kernel. -/
+private theorem orbitalMarkushevichBasis_singleJet_denseSpan_profiles
+    {J E : Type*} [NormedAddCommGroup E] [NormedSpace ℂ E]
+    (L : J → E →ₗ[ℂ] ℂ) (T : SchwartzMap ℝ ℂ →L[ℂ] E) (hd : DenseRange T)
+    (a : J → ℝ) (k : J → ℕ) (hinj : Injective fun j ↦ (a j, k j))
+    (Z : Set ℝ) (hZc : IsClosed Z) (hZd : IsDiscrete Z) (hZ : ∀ j, a j ∈ Z)
+    (n : ℕ) (hn : ∀ j, k j < n)
+    (hL : ∀ p j, L j (T p) = 0 ↔ iteratedDeriv (k j) (⇑p) (a j) = 0) :
+    Dense (Submodule.span ℂ {x : E | (support fun j ↦ L j x).Subsingleton} : Set E) := by
+  classical
+  have hb (i : J) : ∃ b, ∀ j, L j b ≠ 0 ↔ j = i := by
+    obtain ⟨p, hp⟩ := orbitalMarkushevichBasis_singleJet_denseSpan_bump hZd (hZ i) (k i)
+    refine ⟨T p, fun j ↦ (not_congr (hL p j)).trans ((hp (a j) (hZ j) (k j)).trans ?_)⟩
+    exact ⟨fun h ↦ hinj (Prod.ext h.1 h.2), fun h ↦ h ▸ ⟨rfl, rfl⟩⟩
+  apply hd.dense_of_mapsTo T.continuous (SchwartzMap.dense_hasCompactSupport (E := ℝ) (F := ℂ))
+  intro p hp
+  apply orbitalMarkushevichBasis_singleJet_denseSpan_finite L hb
+  let K := tsupport (p : ℝ → ℂ) ∩ Z
+  have hK : K.Finite := (hp.inter_right hZc).finite (hZd.mono inter_subset_right)
+  apply ((hK.prod (Set.finite_Iio n)).preimage hinj.injOn).subset
+  intro j hj
+  refine ⟨⟨?_, hZ j⟩, hn j⟩
+  by_contra habs
+  have he := (notMem_tsupport_iff_eventuallyEq.mp habs).iteratedDeriv_eq (n := k j)
+  exact hj ((hL p j).2 (he.trans (by simp)))
+
+/-- In the positive isotype the vectors with at most one nonzero jet moment span
+densely. It suffices to approximate by smooth compactly supported Fourier profiles in
+the log-norm coordinate and interpolate the finitely many jets in each support.
+The strong approximation cited on p. 486 alone does not supply those interpolants. -/
+private theorem orbitalMarkushevichBasis_singleJet_denseSpan (χ : PontryaginDual C𝔽) (S : Finset V)
+    {s : ℝ} (hs : 0 ≤ s) (hS : S.Nonempty) (hc : 2 * (S.card : ℝ) ≤ s)
+    (hχ : ∀ v ∈ S, (ideleClassNormTwist χ 0).IsUnramifiedAt v) :
+    let E := Wω(hs, χ.comp restriction)
+    Dense (Submodule.span ℂ {f : E |
+      (Function.support fun j : OrbitalJetIndex χ S s ↦
+        spectralSobolevPairing f.val (jetLp(χ, S, hs, j))).Subsingleton} : Set E) := by
+  classical
+  intro E
+  let J := OrbitalJetIndex χ S s
+  let a (j : J) := -j.val.1 / (2 * Real.pi)
+  let k (j : J) := j.val.2
+  let z (u : ℝ) := frequency(-u * (2 * Real.pi))
+  have hz (j : J) : z (a j) = frequency(j.val.1) := by
+    dsimp only [z, a]
+    rw [neg_div, neg_neg, div_mul_cancel₀ _ (by positivity)]
+  have hzi : Injective z := by
+    intro t u he
+    have him := congrArg Complex.im he
+    simp only [z, Complex.mul_I_im, Complex.ofReal_re] at him
+    exact neg_injective (mul_right_cancel₀ (by positivity : 2 * Real.pi ≠ 0) him)
+  let Z := {w : ℂ | 0 < orbitalEulerMultiplicity χ S w}
+  have hm : Meromorphic (reciprocalPartialHeckeEulerProduct χ S) :=
+    fun w ↦ (OrbitalJetIndex.isZero_analyticAt χ S w).meromorphicAt
+  have hdiv : Zᶜ ∈ Filter.codiscrete ℂ := by
+    filter_upwards [hm.meromorphicOn.codiscreteWithin_setOfPred_meromorphicOrderAt_eq_zero_or_top]
+      with w hw
+    rcases hw.2 with h | h <;> simp [Z, orbitalEulerMultiplicity, h]
+  obtain ⟨hclosed, hdisc⟩ := compl_mem_codiscrete_iff.mp hdiv
+  have hzc : Continuous z := by dsimp [z]; fun_prop
+  obtain ⟨R, hR, hrep⟩ := orbitalMarkushevichBasis_singleJet_denseSpan_lift χ hs
+  let U := FourierTransform.fourierCLE ℂ (SchwartzMap ℝ ℂ)
+  let T := R.comp U.symm.toContinuousLinearMap
+  let D := (modulatedIntervalSobolev_dual m𝔽
+    ⟨isProperMap_ideleClassNorm F, ideleClassNorm_ne_one (F := F)⟩ μ𝔽 0 0 s hI hs).exists.choose
+  let L (j : J) := ((D.symm (jetLp(χ, S, hs, j))).comp Wω(hs, χ.comp restriction).subtypeL).toLinearMap
+  have hL (j : J) (y : E) : L j y = spectralSobolevPairing y.val (jetLp(χ, S, hs, j)) :=
+    (spectralSobolevPairing_dual hI hs (D.symm _) y.val).2.trans
+      (congrArg (spectralSobolevPairing y.val) (D.apply_symm_apply _))
+  simp_rw [← hL]
+  apply orbitalMarkushevichBasis_singleJet_denseSpan_profiles L T
+    (hR.comp U.symm.surjective.denseRange R.continuous) a k _ (z ⁻¹' Z)
+    (hclosed.preimage hzc) (hdisc.preimage hzc.continuousOn hzi) _ S.card
+  · intro j
+    have h := (lt_spectralBoundaryMultiplicity _ _ _ |>.mp j.property).1
+    rw [orbitalEulerMultiplicity_eq_card] at h
+    exact h.trans_le (Finset.card_filter_le ..)
+  · intro p j
+    rw [hL]
+    have he := orbitalMarkushevichBasis_singleJet_denseSpan_moment χ S hs j
+      (U.symm p) (T p).val (hrep (U.symm p))
+    change _ ↔ iteratedDeriv (k j) (⇑(U (U.symm p))) (a j) = 0 at he
+    exact he.trans (congrArg (fun q : SchwartzMap ℝ ℂ ↦ iteratedDeriv (k j) (⇑q) (a j) = 0)
+      (U.apply_symm_apply p)).to_iff
+  · intro i j he
+    obtain ⟨ha, hk⟩ := Prod.mk.inj he
+    have hf := congrArg z ha
+    change z (a i) = z (a j) at hf
+    rw [hz, hz] at hf
+    exact Subtype.ext (Prod.ext (by simpa using congrArg Complex.im hf) hk)
+  · intro j
+    change 0 < orbitalEulerMultiplicity χ S (z (a j))
+    rw [hz]
+    exact (lt_spectralBoundaryMultiplicity _ _ _ |>.mp j.property).1.pos
+
+/-- A total family of functionals has dense span in the Hilbert dual, by the Riesz
+isometry. This is the Hilbert-space argument of Ch10_TraceSpectral/Sec2. -/
+private theorem orbitalMarkushevichBasis_denseDual {Q J : Type*}
+    [NormedAddCommGroup Q] [InnerProductSpace ℂ Q] [CompleteSpace Q]
+    (Λ : J → StrongDual ℂ Q) (h : ∀ q, (∀ j, Λ j q = 0) → q = 0) :
+    Dense (Submodule.span ℂ (range Λ) : Set (StrongDual ℂ Q)) := by
+  let R := InnerProductSpace.toDual ℂ Q
+  let v (j : J) := R.symm (Λ j)
+  have hv : Dense (Submodule.span ℂ (range v) : Set Q) := by
+    rw [Submodule.dense_iff_topologicalClosure_eq_top,
+      Submodule.topologicalClosure_eq_top_iff, Submodule.eq_bot_iff]
+    intro q hq
+    exact h q fun j ↦ by
+      simpa only [v, R, InnerProductSpace.toDual_symm_apply] using
+        (Submodule.mem_orthogonal _ q).mp hq (v j) (Submodule.subset_span (mem_range_self j))
+  apply (R.surjective.denseRange.dense_image R.continuous hv).mono
+  apply (Submodule.image_span_subset R.toLinearEquiv.toLinearMap _ _).mpr
+  rintro _ ⟨j, rfl⟩
+  exact (R.apply_symm_apply (Λ j)).symm ▸ Submodule.subset_span (mem_range_self j)
+
+/-- After quotienting by the joint kernel, every vector with a single nonzero
+coordinate is proportional to a fixed normalized representative of that coordinate. -/
+private theorem orbitalMarkushevichBasis_of_sparse {J E : Type*} [NormedAddCommGroup E]
+    [InnerProductSpace ℂ E] [CompleteSpace E] (N : Submodule ℂ E) [IsClosed (N : Set E)]
+    (L : J → StrongDual ℂ E) (b : J → E → ℂ) (hb : ∀ j f, L j f = b j f)
+    (hk : ∀ f, f ∈ N ↔ ∀ j, b j f = 0)
+    (hne : ∀ j, ∃ f, b j f ≠ 0)
+    (hd : Dense (Submodule.span ℂ {f : E | (support fun j ↦ b j f).Subsingleton} : Set E)) :
+    ∃ (x : J → E ⧸ N) (Λ : J → StrongDual ℂ (E ⧸ N)), IsSpectralMarkushevichBasis x Λ ∧
+      ∀ j f, Λ j (N.mkQ f) = b j f := by
+  classical
+  obtain rfl : (fun j f ↦ L j f) = b := funext fun j ↦ funext (hb j)
+  let Λ (j : J) := N.liftQL (L j) (fun f hf ↦ (hk f).mp hf j)
+  let A := {f : E | (support fun j ↦ L j f).Subsingleton}
+  have hA (j : J) : ∃ f ∈ A, L j f ≠ 0 := by
+    by_contra! hh
+    have hle : Submodule.span ℂ A ≤ (L j).ker := Submodule.span_le.mpr hh
+    obtain ⟨f, hf⟩ := hne j
+    exact hf (closure_minimal hle (L j).isClosed_ker (hd f))
+  choose f hf hn using hA
+  let v (i : J) := (L i (f i))⁻¹ • f i
+  have hv (i j : J) : L j (v i) = if i = j then 1 else 0 := by
+    simp only [v, map_smul, smul_eq_mul]
+    split_ifs with e
+    · subst j
+      exact inv_mul_cancel₀ (hn i)
+    · have hz : L j (f i) = 0 := by
+        by_contra hj
+        exact e (hf i (hn i) hj)
+      rw [hz, mul_zero]
+  have hz (q : E ⧸ N) (hq : ∀ j, Λ j q = 0) : q = 0 := by
+    obtain ⟨f, rfl⟩ := N.mkQ_surjective q
+    exact (Submodule.Quotient.mk_eq_zero N).mpr ((hk _).mpr hq)
+  let x (j : J) := N.mkQ (v j)
+  refine ⟨x, Λ, ⟨fun i ↦ (hv i i).trans (ite_eq_left rfl),
+    fun i j hij ↦ (hv i j).trans (ite_eq_right hij), ?_,
+    orbitalMarkushevichBasis_denseDual Λ hz⟩, fun _ _ ↦ rfl⟩
+  let M := Submodule.span ℂ (range x)
+  apply N.mkQ_surjective.denseRange.dense_of_mapsTo N.mkQL.continuous hd
+  change Submodule.span ℂ A ≤ M.comap N.mkQ
+  apply Submodule.span_le.mpr
+  intro y hy
+  change N.mkQ y ∈ M
+  by_cases he : ∃ i, L i y ≠ 0
+  · obtain ⟨i, hi⟩ := he
+    have eqv : N.mkQ y = L i y • x i := by
+      apply sub_eq_zero.mp
+      apply hz
+      intro j
+      change Λ j (N.mkQ y - L i y • N.mkQ (v i)) = 0
+      rw [map_sub, map_smul]
+      change L j y - L i y * L j (v i) = 0
+      rw [hv]
+      split_ifs with h
+      · subst j
+        ring
+      · have hj : L j y = 0 := by
+          by_contra hj
+          exact h (hy hi hj)
+        simp [hj]
+    exact eqv.symm ▸ M.smul_mem _ (Submodule.subset_span (mem_range_self i))
+  · have h := hz (N.mkQ y) (fun j ↦ not_ne_iff.mp (fun hj ↦ he ⟨j, hj⟩))
+    exact h.symm ▸ M.zero_mem
+
 /-- Paper: Theorem 11.2.0.2 and Terminology 11.2.0.1, p. 485. The zero jets
 constitute an orbital Markushevich basis in the strong dual of the isotypic
 quotient, realized by the bilinear Sobolev pairing. The biorthogonal vectors
@@ -2311,7 +3495,37 @@ theorem orbitalMarkushevichBasis (χ : PontryaginDual C𝔽) (S : Finset V) {s :
     ∃ (x : J → Q) (Λ : J → StrongDual ℂ Q),
       IsSpectralMarkushevichBasis x Λ ∧ ∀ (j : J) (f : Wω(hs, ω)),
         Λ j ((N(S, hs, ω)).mkQ f) = spectralSobolevPairing f.val (jetLp(χ, S, hs, j)) :=
-  by sorry
+  by
+    classical
+    intro J ω Q
+    let K := Wω(hs, ω)
+    have : CompleteSpace K := (isClosed_actionIsotype _ ω).completeSpace_coe
+    let : IsClosed (N(S, hs, ω) : Set K) := instClosedOrbitalSobolevSubmoduleSec2a S hs ω
+    let hm : IsModulation m𝔽 := ⟨isProperMap_ideleClassNorm F, ideleClassNorm_ne_one (F := F)⟩
+    let T := (modulatedIntervalSobolev_dual m𝔽 hm μ𝔽 0 0 s hI hs).exists.choose
+    let A (j : J) : StrongDual ℂ W(s) := T.symm (jetLp(χ, S, hs, j))
+    have hA (j : J) (y : W(s)) : A j y = spectralSobolevPairing y (jetLp(χ, S, hs, j)) :=
+      (spectralSobolevPairing_dual hI hs (A j) y).2.trans
+        (congrArg (spectralSobolevPairing y) (T.apply_symm_apply _))
+    refine ⟨orbitalMarkushevichBasis_countable χ S s, ?_⟩
+    apply orbitalMarkushevichBasis_of_sparse (J := J) (E := K) (N(S, hs, ω))
+      (fun j ↦ (A j).comp K.subtypeL) _ (fun j f ↦ hA j f.val)
+    · intro f
+      refine ⟨fun hf j ↦ (hA j f.val).symm.trans
+        (orbitalMarkushevichBasis_annihilates χ S hs j (A j) (hA j) f hf), ?_⟩
+      rcases S.eq_empty_or_nonempty with h | h
+      · intro _
+        have hall : N(S, hs, ω) = ⊤ :=
+          (congrArg (fun T : Finset V ↦ N(T, hs, ω)) h).trans (orbitalSobolevSubmodule_empty hs ω)
+        exact hall.ge Submodule.mem_top
+      · exact orbitalMarkushevichBasis_synthesis χ S hs h _hcard _hχ f
+    · exact orbitalMarkushevichBasis_nonzero χ S hs
+    · rcases S.eq_empty_or_nonempty with h | h
+      · have : IsEmpty J := ⟨fun j ↦ by
+          have hk := (lt_spectralBoundaryMultiplicity _ _ _ |>.mp j.property).1
+          simp [orbitalEulerMultiplicity_eq_card, h] at hk⟩
+        simp [Set.subsingleton_of_subsingleton]
+      · exact orbitalMarkushevichBasis_singleJet_denseSpan χ S hs h _hcard _hχ
 
 /-- A Hilbert quotient of a closed subspace maps isometrically into the dual
 model of the ambient space, onto the functionals that kill the orthogonal

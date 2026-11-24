@@ -228,11 +228,1380 @@ theorem sLocalAdelicThetaSpace_empty_frechet : IsFrechetTVS (Θₛ(∅)) :=
     (show IsNuclearTVS.{0} (ℬₛ(∅)) from sAdeleSchwartz_nuclear F ∅).2.1
     (empty_test_metrizable (F := F)) (Kₛ(∅)) (sLocalAdelicTheta_ker_isClosed (F := F) (S := ∅))
 
+open Set TopologicalSpace in
+/-- A space with a continuous linear closed embedding into a Fréchet space is Fréchet. -/
+private theorem sLocalAdelicThetaSpace_strictLF_frechet_of_closed_embedding {X Y : Type*}
+    [AddCommGroup X] [Module ℂ X] [TopologicalSpace X] [IsTopologicalAddGroup X]
+    [AddCommGroup Y] [Module ℂ Y] [TopologicalSpace Y] (i : X →L[ℂ] Y)
+    (hi : IsClosedEmbedding i) (hY : IsFrechetTVS Y) : IsFrechetTVS X := by
+  obtain ⟨a, p, m, c⟩ := hY
+  let : UniformSpace Y := IsTopologicalAddGroup.rightUniformSpace Y
+  let : IsUniformAddGroup Y := isUniformAddGroup_of_addCommGroup
+  let : CompleteSpace Y := c
+  let : UniformSpace X := IsTopologicalAddGroup.rightUniformSpace X
+  let : IsUniformAddGroup X := isUniformAddGroup_of_addCommGroup
+  have hu := AddMonoidHom.isUniformInducing_of_isInducing
+    (f := i.toLinearMap.toAddMonoidHom) hi.isInducing
+  exact ⟨inferInstance, hi.eq_induced ▸ PolynormableSpace.induced i.toLinearMap,
+    hi.isEmbedding.metrizableSpace, hu.completeSpace hi.isClosed_range.isComplete⟩
+
+open Set TopologicalSpace in
+/-- The range of a continuous linear embedding of a Fréchet space into a Hausdorff
+topological vector space is closed, and Fréchet in the induced topology. -/
+private theorem sLocalAdelicThetaSpace_strictLF_embedded_frechet_range {X E : Type*}
+    [AddCommGroup X] [Module ℂ X] [TopologicalSpace X] [AddCommGroup E] [Module ℂ E]
+    [TopologicalSpace E] [IsTopologicalAddGroup E] [T2Space E] (i : X →L[ℂ] E)
+    (hi : IsEmbedding i) (hX : IsFrechetTVS X) :
+    IsClosed (range i) ∧ IsFrechetTVS i.toLinearMap.range := by
+  obtain ⟨a, p, m, c⟩ := hX
+  let : UniformSpace X := IsTopologicalAddGroup.rightUniformSpace X
+  let : IsUniformAddGroup X := isUniformAddGroup_of_addCommGroup
+  let : CompleteSpace X := c
+  let : UniformSpace E := IsTopologicalAddGroup.rightUniformSpace E
+  let : IsUniformAddGroup E := isUniformAddGroup_of_addCommGroup
+  let e := LinearEquiv.ofInjective i.toLinearMap hi.injective
+  have he : IsInducing e := IsInducing.subtypeVal.of_comp_iff.mp hi.isInducing
+  let h := e.toEquiv.toHomeomorphOfIsInducing he
+  let L : X ≃L[ℂ] i.toLinearMap.range := ⟨e, h.continuous, h.continuous_symm⟩
+  exact ⟨(AddMonoidHom.isUniformInducing_of_isInducing (f := i.toLinearMap.toAddMonoidHom)
+      hi.isInducing).isComplete_range.isClosed,
+    sLocalAdelicThetaSpace_strictLF_frechet_of_closed_embedding L.symm.toContinuousLinearMap
+      L.symm.toHomeomorph.isClosedEmbedding ⟨a, p, m, c⟩⟩
+
+open Set TopologicalSpace in
+/-- By the Baire category theorem, the range of a continuous linear map from a Fréchet space
+lies in one member of a countable cover of the target by closed subspaces. -/
+private theorem sLocalAdelicThetaSpace_strictLF_frechet_range_in_cover {ι X E : Type*}
+    [Countable ι] [AddCommGroup X] [Module ℂ X] [TopologicalSpace X] [AddCommGroup E]
+    [Module ℂ E] [TopologicalSpace E] (i : X →L[ℂ] E) (hX : IsFrechetTVS X)
+    (D : ι → Submodule ℂ E) (hd : ∀ t, IsClosed (D t : Set E)) (hc : ∀ x : E, ∃ t, x ∈ D t) :
+    ∃ t, i.toLinearMap.range ≤ D t := by
+  obtain ⟨a, p, m, c⟩ := hX
+  let : UniformSpace X := IsTopologicalAddGroup.rightUniformSpace X
+  let : IsUniformAddGroup X := isUniformAddGroup_of_addCommGroup
+  let : CompleteSpace X := c
+  have : (uniformity X).IsCountablyGenerated := by
+    rw [uniformity_eq_comap_nhds_zero X]
+    infer_instance
+  let : BaireSpace X := by
+    let := UniformSpace.metricSpace X
+    infer_instance
+  let K (t : ι) := (D t).comap i.toLinearMap
+  have hcov : (⋃ t, (K t : Set X)) = univ :=
+    eq_univ_of_forall fun x ↦ (hc (i x)).elim fun t ht ↦ mem_iUnion.mpr ⟨t, ht⟩
+  obtain ⟨t, ht⟩ := nonempty_interior_of_iUnion_of_closed
+    (fun t ↦ (hd t).preimage i.continuous) hcov
+  have htop : K t = ⊤ := (K t).eq_top_of_nonempty_interior' ht
+  exact ⟨t, fun _ ⟨x, hx⟩ ↦ hx ▸ (show x ∈ K t from htop.symm ▸ Submodule.mem_top)⟩
+
+open Set TopologicalSpace in
+/-- An LF-space covered by countably many closed subspaces that are Fréchet in the induced
+topology is strict. The closure of each defining stage lies in one member of the cover. -/
+private theorem sLocalAdelicThetaSpace_strictLF_of_countable_frechet_cover {ι E : Type*}
+    [Countable ι] [AddCommGroup E] [Module ℂ E] [TopologicalSpace E] [IsTopologicalAddGroup E]
+    [ContinuousSMul ℂ E] (hLF : IsLFSpace E) (D : ι → Submodule ℂ E)
+    (hd : ∀ t, IsClosed (D t : Set E)) (hD : ∀ t, IsFrechetTVS (D t))
+    (hc : ∀ x : E, ∃ t, x ∈ D t) : IsStrictLFSpace E := by
+  obtain ⟨h₂, X, _, _, _, hX, j, i, h⟩ := hLF
+  let R (k : ℕ) := (i k).toLinearMap.range
+  let C (k : ℕ) := (R k).topologicalClosure
+  have hP : WithSeminorms (Subtype.val :
+      {p : Seminorm ℂ E // ∀ k, Continuous (p ∘ (i k).toLinearMap)} → _) := ⟨h.topology_eq⟩
+  have hC (k : ℕ) : IsFrechetTVS (C k) := by
+    obtain ⟨t, ht⟩ :=
+      sLocalAdelicThetaSpace_strictLF_frechet_range_in_cover (i k) (hX k) D hd hc
+    have hst : C k ≤ D t := closure_minimal ht (hd t)
+    let l := Submodule.inclusion hst
+    have he : IsEmbedding l := IsEmbedding.subtypeVal.of_comp_iff.mp IsEmbedding.subtypeVal
+    have hr : range l = Subtype.val ⁻¹' (C k : Set E) := by
+      ext x
+      exact ⟨fun ⟨y, hy⟩ ↦ hy ▸ y.property, fun hx ↦ ⟨⟨x.val, hx⟩, rfl⟩⟩
+    exact sLocalAdelicThetaSpace_strictLF_frechet_of_closed_embedding ⟨l, he.continuous⟩
+      ⟨he, hr ▸ (R k).isClosed_topologicalClosure.preimage continuous_subtype_val⟩ (hD t)
+  refine ⟨h₂, C, monotone_nat_of_le_succ (fun k ↦ ?_), hC, fun x ↦ ?_, ?_⟩
+  · apply closure_mono
+    rintro _ ⟨y, rfl⟩
+    exact ⟨j k y, DFunLike.congr_fun (h.compatible k) y⟩
+  · obtain ⟨k, hk⟩ := h.exhaustive x
+    exact ⟨k, subset_closure hk⟩
+  · have hs : (fun p : Seminorm ℂ E ↦ ∀ k, Continuous (p ∘ (C k).subtype)) =
+        (fun p : Seminorm ℂ E ↦ ∀ k, Continuous (p ∘ (i k).toLinearMap)) := by
+      funext p
+      apply propext
+      refine ⟨fun hp k ↦ ?_,
+        fun hp k ↦ (hP.continuous_seminorm ⟨p, hp⟩).comp continuous_subtype_val⟩
+      exact (hp k).comp
+        ((i k).codRestrict (C k) (fun y ↦ subset_closure (mem_range_self y))).continuous
+    unfold locallyConvexFinalTopology
+    rw [hs]
+    exact hP.withSeminorms_eq
+
+open Set TopologicalSpace in
+/-- A continuous linear injection between Fréchet spaces with closed range is an
+embedding, by the open mapping theorem applied onto its range. -/
+private theorem sLocalAdelicThetaSpace_strictLF_frechet_embedding {A B : Type*}
+    [AddCommGroup A] [Module ℂ A] [TopologicalSpace A] [AddCommGroup B] [Module ℂ B]
+    [TopologicalSpace B] (hA : IsFrechetTVS A) (hB : IsFrechetTVS B) (f : A →L[ℂ] B)
+    (hi : Injective f) (hc : IsClosed (range f)) : IsEmbedding f := by
+  let : IsTopologicalAddGroup A := hA.1
+  let : IsTopologicalAddGroup B := hB.1
+  let : PolynormableSpace ℂ A := hA.2.1
+  let : MetrizableSpace A := hA.2.2.1
+  let R := f.toLinearMap.range
+  let g := f.codRestrict R (fun x ↦ ⟨x, rfl⟩)
+  have hs : Surjective g := fun z ↦ z.property.elim fun x hx ↦ ⟨x, Subtype.ext hx⟩
+  have hR := sLocalAdelicThetaSpace_strictLF_frechet_of_closed_embedding R.subtypeL
+    hc.isClosedEmbedding_subtypeVal hB
+  have ho := isOpenMap_of_surjective_toLF (isLFSpace_of_isFrechetTVS hR) (X := fun _ ↦ A)
+    (fun _ ↦ hA) (fun _ ↦ ContinuousLinearMap.id ℂ A) (fun _ ↦ Subset.rfl)
+    (fun x ↦ ⟨0, x, rfl⟩) g hs
+  let e := Equiv.ofBijective g ⟨fun _ _ he ↦ hi (congrArg Subtype.val he), hs⟩
+  exact IsEmbedding.subtypeVal.comp
+    (e.toHomeomorphOfContinuousOpen g.continuous ho).isEmbedding
+
+open Set TopologicalSpace in
+/-- An LF-space exhausted by rising closed ranges of continuous linear injections of
+Fréchet spaces is strict: the injections form a strict system by the open mapping
+theorem, so each of them is an embedding. -/
+private theorem sLocalAdelicThetaSpace_strictLF_of_closed_frechet_images {E : Type*}
+    [AddCommGroup E] [Module ℂ E] [TopologicalSpace E] [IsTopologicalAddGroup E]
+    [ContinuousSMul ℂ E] [T2Space E] {X : ℕ → Type*}
+    [∀ n, AddCommGroup (X n)] [∀ n, Module ℂ (X n)] [∀ n, TopologicalSpace (X n)]
+    (lf : IsLFSpace E) (hX : ∀ n, IsFrechetTVS (X n)) (u : ∀ n, X n →L[ℂ] E)
+    (hi : ∀ n, Injective (u n)) (hr : ∀ n, range (u n) ⊆ range (u (n+1)))
+    (hc : ∀ n, IsClosed (range (u n))) (cover : ∀ x, ∃ n, x ∈ range (u n)) :
+    IsStrictLFSpace E := by
+  let R n := (u n).toLinearMap.range
+  have step (n : ℕ) : ∃ v : X n →L[ℂ] X (n+1), (u (n+1)).comp v = u n := by
+    let b := (u (n+1)).codRestrict (R (n+1)) (fun x ↦ ⟨x, rfl⟩)
+    let a := (u n).codRestrict (R (n+1)) (fun x ↦ hr n ⟨x, rfl⟩)
+    have sur : Surjective b := fun z ↦ z.property.elim fun x hx ↦ ⟨x, Subtype.ext hx⟩
+    obtain ⟨_, v, hv⟩ := frechet_factorization (X := fun _ ↦ X (n+1)) (fun _ ↦ hX _)
+      (fun _ ↦ b) (fun _ _ _ eq ↦ hi _ (congrArg Subtype.val eq))
+      (fun _ ↦ Subset.rfl) (fun y ↦ ⟨0, sur y⟩) (hX n) a
+    exact ⟨v, ContinuousLinearMap.ext fun x ↦ congrArg Subtype.val (DFunLike.congr_fun hv x)⟩
+  choose j hj using step
+  have hem (n : ℕ) : IsEmbedding (j n) := by
+    refine sLocalAdelicThetaSpace_strictLF_frechet_embedding (hX n) (hX _) _ ?_ ?_
+    · intro a b hab
+      exact hi n (((DFunLike.congr_fun (hj n) a).symm.trans
+        (congrArg (u (n+1)) hab)).trans (DFunLike.congr_fun (hj n) b))
+    · have eq : range (j n) = u (n+1) ⁻¹' range (u n) := by
+        ext x
+        constructor
+        · rintro ⟨y, rfl⟩
+          exact ⟨y, (DFunLike.congr_fun (hj n) y).symm⟩
+        · rintro ⟨y, hy⟩
+          exact ⟨y, hi _ ((DFunLike.congr_fun (hj n) y).trans hy)⟩
+      rw [eq]
+      exact (hc n).preimage (u _).continuous
+  have hlim : IsInjectiveLCLimit j u := by
+    refine ⟨hi, hj, cover, ?_⟩
+    obtain ⟨_, Y, _, _, _, hY, _, i, h⟩ := lf
+    have hP : WithSeminorms (Subtype.val :
+        {p : Seminorm ℂ E // ∀ n, Continuous (p ∘ (i n).toLinearMap)} → _) := ⟨h.topology_eq⟩
+    have eq : (fun p : Seminorm ℂ E ↦ ∀ n, Continuous (p ∘ (u n).toLinearMap)) =
+        (fun p : Seminorm ℂ E ↦ ∀ n, Continuous (p ∘ (i n).toLinearMap)) := by
+      funext p
+      apply propext
+      constructor
+      · intro hp n
+        obtain ⟨k, v, hv⟩ := frechet_factorization hX u hi hr cover (hY n) (i n)
+        exact hv ▸ (hp k).comp v.continuous
+      · intro hp k
+        exact (hP.continuous_seminorm ⟨p, hp⟩).comp (u k).continuous
+    unfold locallyConvexFinalTopology
+    rw [eq]
+    exact hP.withSeminorms_eq
+  let (n : ℕ) : IsTopologicalAddGroup (X n) := (hX n).1
+  let (n : ℕ) : PolynormableSpace ℂ (X n) := (hX n).2.1
+  have hf n := (sLocalAdelicThetaSpace_strictLF_embedded_frechet_range (u n)
+    (hlim.isEmbedding_stage hem n) (hX n)).2
+  exact sLocalAdelicThetaSpace_strictLF_of_countable_frechet_cover lf R hc hf cover
+
+
+open Set TopologicalSpace in
+/-- An LF-space with a rising cover by closed subspaces, each inside the range of a
+continuous linear map from a Fréchet space, is strict. -/
+private theorem sLocalAdelicThetaSpace_strictLF_of_closed_levels {E : Type*}
+    [AddCommGroup E] [Module ℂ E] [TopologicalSpace E] [IsTopologicalAddGroup E]
+    [ContinuousSMul ℂ E] {Y : ℕ → Type*}
+    [∀ n, AddCommGroup (Y n)] [∀ n, Module ℂ (Y n)] [∀ n, TopologicalSpace (Y n)]
+    (lf : IsLFSpace E) (L : ℕ → Submodule ℂ E) (hmono : Monotone L)
+    (hclosed : ∀ n, IsClosed (L n : Set E)) (hcover : ∀ x, ∃ n, x ∈ L n)
+    (hY : ∀ n, IsFrechetTVS (Y n)) (p : ∀ n, Y n →L[ℂ] E)
+    (hp : ∀ n, (L n : Set E) ⊆ range (p n)) : IsStrictLFSpace E := by
+  let : T2Space E := lf.1
+  let (n : ℕ) : IsTopologicalAddGroup (Y n) := (hY n).1
+  let M (n : ℕ) : Submodule ℂ (Y n) := (L n).comap (p n).toLinearMap
+  have hMc (n : ℕ) : IsClosed (M n : Set (Y n)) := (hclosed n).preimage (p n).continuous
+  have hM (n : ℕ) : IsFrechetTVS (M n) :=
+    sLocalAdelicThetaSpace_strictLF_frechet_of_closed_embedding (M n).subtypeL
+      (hMc n).isClosedEmbedding_subtypeVal (hY n)
+  let q (n : ℕ) : M n →L[ℂ] E := (p n).comp (M n).subtypeL
+  let K (n : ℕ) := (q n).ker
+  let u (n : ℕ) := (K n).liftQL (q n) le_rfl
+  have hr (n : ℕ) : range (u n) = (L n : Set E) := by
+    have h1 : range (u n) = range (q n) := ((K n).mkQ_surjective.range_comp (u n)).symm
+    rw [h1]
+    ext x
+    constructor
+    · rintro ⟨y, rfl⟩
+      exact y.property
+    · intro hx
+      obtain ⟨y, rfl⟩ := hp n hx
+      exact ⟨⟨y, hx⟩, rfl⟩
+  apply sLocalAdelicThetaSpace_strictLF_of_closed_frechet_images lf
+    (fun n ↦ isFrechetTVS_quotient (hM n) (K n) (q n).isClosed_ker) u
+    (fun n ↦ LinearMap.ker_eq_bot.mp ((K n).ker_liftQ_eq_bot' (q n).toLinearMap rfl))
+  · intro n
+    rw [hr, hr]
+    exact hmono n.le_succ
+  · intro n
+    rw [hr]
+    exact hclosed n
+  · intro x
+    obtain ⟨n, hn⟩ := hcover x
+    exact ⟨n, (hr n).symm ▸ hn⟩
+
+/-- A finite power of a Fréchet space is Fréchet. -/
+private theorem sLocalAdelicThetaSpace_strictLF_frechet_pi {A : Type*} [AddCommGroup A]
+    [Module ℂ A] [TopologicalSpace A] (hA : IsFrechetTVS A) (d : ℕ) :
+    IsFrechetTVS (Fin d → A) := by
+  obtain ⟨hadd, hpoly, hmet, hcomp⟩ := hA
+  let : UniformSpace A := IsTopologicalAddGroup.rightUniformSpace A
+  let : IsUniformAddGroup A := isUniformAddGroup_of_addCommGroup
+  let : CompleteSpace A := hcomp
+  refine ⟨inferInstance, inferInstance, inferInstance, ?_⟩
+  rw [IsUniformAddGroup.rightUniformSpace_eq]
+  infer_instance
+
+open Set in
+/-- Strictness of the quotient of a test space by the kernel of a linear transform into
+continuous functions, when that quotient is an LF-space. The classes whose transforms take
+equal values on the pairs of `R n` form a closed subspace. If these subspaces rise to
+cover the quotient, and each is represented by finitely many continuous families of
+tests over a fixed Fréchet space, the quotient is a strict LF-space. -/
+private theorem sLocalAdelicThetaSpace_strictLF_of_levels {X Q A : Type*}
+    [AddCommGroup X] [Module ℂ X] [TopologicalSpace X] [IsTopologicalAddGroup X]
+    [ContinuousSMul ℂ X] [TopologicalSpace Q] [AddCommGroup A] [Module ℂ A]
+    [TopologicalSpace A] (θ : X →ₗ[ℂ] C(Q, ℂ)) (lf : IsLFSpace (X ⧸ LinearMap.ker θ))
+    (hA : IsFrechetTVS A) (hev : ∀ g : Q, Continuous (fun f ↦ θ f g))
+    (R : ℕ → Set (Q × Q)) (hR : ∀ n, R (n+1) ⊆ R n)
+    (hcover : ∀ f, ∃ n, ∀ r ∈ R n, θ f r.1 = θ f r.2)
+    (hgen : ∀ n, ∃ (d : ℕ) (p : Fin d → (A →L[ℂ] X)), ∀ f,
+      (∀ r ∈ R n, θ f r.1 = θ f r.2) → ∃ a : Fin d → A, θ (∑ j, p j (a j)) = θ f) :
+    IsStrictLFSpace (X ⧸ LinearMap.ker θ) := by
+  let K := LinearMap.ker θ
+  let ev (g : Q) : X ⧸ K →L[ℂ] ℂ :=
+    K.liftQL (⟨(ContinuousMap.evalCLM ℂ g).toLinearMap.comp θ, hev g⟩ : X →L[ℂ] ℂ)
+      (fun f h ↦ congrArg (fun φ : C(Q, ℂ) ↦ φ g) (LinearMap.mem_ker.mp h))
+  let L (n : ℕ) : Submodule ℂ (X ⧸ K) :=
+    { carrier := {t | ∀ r ∈ R n, ev r.1 t = ev r.2 t}
+      zero_mem' := fun r _ ↦ by simp only [map_zero]
+      add_mem' := fun {x y} hx hy r hr ↦ by simp only [map_add, hx r hr, hy r hr]
+      smul_mem' := fun c {x} hx r hr ↦ by simp only [map_smul, hx r hr] }
+  have hmem (n : ℕ) (f : X) : K.mkQ f ∈ L n ↔ ∀ r ∈ R n, θ f r.1 = θ f r.2 := Iff.rfl
+  have hmono : Monotone L := monotone_nat_of_le_succ fun n t ht r hr ↦ ht r (hR n hr)
+  have hclosed (n : ℕ) : IsClosed (L n : Set (X ⧸ K)) := by
+    have hset : (L n : Set (X ⧸ K)) = ⋂ r ∈ R n, {t | ev r.1 t = ev r.2 t} := by
+      ext t
+      simp only [mem_iInter]
+      rfl
+    rw [hset]
+    exact isClosed_biInter fun r _ ↦ isClosed_eq (ev r.1).continuous (ev r.2).continuous
+  have hcov (t : X ⧸ K) : ∃ n, t ∈ L n := by
+    obtain ⟨f, rfl⟩ := K.mkQ_surjective t
+    exact (hcover f).imp fun n hn ↦ (hmem n f).mpr hn
+  choose d p hp using hgen
+  let P (n : ℕ) : (Fin (d n) → A) →L[ℂ] X ⧸ K :=
+    K.mkQL.comp (∑ j, (p n j).comp (ContinuousLinearMap.proj j))
+  refine sLocalAdelicThetaSpace_strictLF_of_closed_levels lf L hmono hclosed hcov
+    (fun n ↦ sLocalAdelicThetaSpace_strictLF_frechet_pi hA (d n)) P (fun n t ht ↦ ?_)
+  obtain ⟨f, rfl⟩ := K.mkQ_surjective t
+  obtain ⟨a, ha⟩ := hp n f ((hmem n f).mp ht)
+  refine ⟨a, ?_⟩
+  have hP : P n a = K.mkQ (∑ j, p n j (a j)) := by
+    simp only [P, ContinuousLinearMap.comp_apply, sum_apply,
+      ContinuousLinearMap.proj_apply]
+    rfl
+  rw [hP]
+  apply (Submodule.Quotient.eq K).mpr
+  rw [LinearMap.mem_ker, map_sub, ha, sub_self]
+
+
+open Set in
+/-- A locally constant function with compact support on a discretely valued field is
+unchanged when its argument is multiplied by an element close enough to one. -/
+private theorem sLocalAdelicThetaSpace_strictLF_local_dilation {K : Type*} [Field K]
+    [Valued K (WithZero (Multiplicative ℤ))] (f : K → ℂ) (hf : IsLocallyConstant f)
+    (hc : HasCompactSupport f) :
+    ∃ m : ℕ, ∀ u y : K, Valued.v (u - 1) ≤ WithZero.exp (-(m + 1 : ℤ)) → f (u * y) = f y := by
+  let G : K × K → ℂ := fun p ↦ f (p.1 * p.2) - f p.2
+  have hG : IsLocallyConstant G :=
+    (hf.comp_continuous (continuous_fst.mul continuous_snd)).comp₂
+      (hf.comp_continuous continuous_snd) (· - ·)
+  let N : Set (K × K) := G ⁻¹' {0}
+  have hN : IsOpen N := hG.isOpen_fiber 0
+  have hsub : ({1} : Set K) ×ˢ tsupport f ⊆ N := by
+    rintro ⟨u, y⟩ ⟨hu, -⟩
+    have hu' : u = 1 := hu
+    simp only [N, G, mem_preimage, mem_singleton_iff, hu', one_mul, sub_self]
+  obtain ⟨U, W, hU, -, h1U, hCW, hUW⟩ := generalized_tube_lemma isCompact_singleton hc hN hsub
+  have hU1 : U ∈ 𝓝 (1 : K) := hU.mem_nhds (h1U rfl)
+  have hinv : (fun u : K ↦ u⁻¹) ⁻¹' U ∈ 𝓝 (1 : K) :=
+    (continuousAt_inv₀ (one_ne_zero (α := K))) (by simpa only [inv_one] using hU1)
+  obtain ⟨γ, hγ⟩ := Valued.mem_nhds.mp (inter_mem hU1 hinv)
+  let ν : Valuation K (WithZero (Multiplicative ℤ)) := Valued.v
+  let r : WithZero (Multiplicative ℤ) := MonoidWithZeroHom.ValueGroup₀.embedding γ.val
+  have hr : r ≠ 0 := by simp [r]
+  let k : ℤ := WithZero.log r
+  refine ⟨(-k).toNat, fun u y hu ↦ ?_⟩
+  have hlt : WithZero.exp (-(((-k).toNat : ℤ) + 1)) < r :=
+    calc WithZero.exp (-(((-k).toNat : ℤ) + 1)) < WithZero.exp k :=
+          WithZero.exp_lt_exp.mpr (by have := Int.self_le_toNat (-k); omega)
+      _ = r := WithZero.exp_log hr
+  have huU : u ∈ U ∩ (fun u : K ↦ u⁻¹) ⁻¹' U :=
+    hγ ((ν.restrict_lt_iff_lt_embedding).mpr (lt_of_le_of_lt hu hlt))
+  have huU₁ : u ∈ U := huU.1
+  have huU₂ : u⁻¹ ∈ U := huU.2
+  have hu0 : u ≠ 0 := by
+    rintro rfl
+    have h1 : ν ((0 : K) - 1) = 1 := by
+      rw [zero_sub, Valuation.map_neg, Valuation.map_one]
+    have h2 : WithZero.exp (-(((-k).toNat : ℤ) + 1)) < 1 := by
+      rw [← WithZero.exp_zero]
+      exact WithZero.exp_lt_exp.mpr (by omega)
+    exact absurd (h1 ▸ hu) (not_le.mpr h2)
+  by_cases hy : y ∈ tsupport f
+  · have h0 : G (u, y) = 0 := hUW (⟨huU₁, hCW hy⟩ : (u, y) ∈ U ×ˢ W)
+    exact sub_eq_zero.mp h0
+  · have hy0 : f y = 0 := image_eq_zero_of_notMem_tsupport hy
+    by_contra hne
+    have huy : u * y ∈ tsupport f := subset_tsupport f fun h0 ↦ hne (h0.trans hy0.symm)
+    have h0 : G (u⁻¹, u * y) = 0 := hUW (⟨huU₂, hCW huy⟩ : (u⁻¹, u * y) ∈ U ×ˢ W)
+    have h3 : f (u⁻¹ * (u * y)) = f (u * y) := sub_eq_zero.mp h0
+    rw [inv_mul_cancel_left₀ hu0] at h3
+    exact hne h3.symm
+
+open scoped TensorProduct in
+/-- Each S-adelic test function is unchanged when its finite coordinates are multiplied
+by elements close enough to one. -/
+private theorem sLocalAdelicThetaSpace_strictLF_test_dilation
+    {S : Finset (HeightOneSpectrum (𝓞 F))} (f : ℬₛ(S)) :
+    ∃ m : ℕ, ∀ h : SAdeleRing F S, h.1 = 1 →
+      (∀ w : S, Valued.v (h.2 w - 1) ≤ WithZero.exp (-(m + 1 : ℤ))) →
+      ∀ x : SAdeleRing F S, f (Multiplicative.ofAdd (h * x)) = f (Multiplicative.ofAdd x) := by
+  classical
+  let A := SchwartzBruhat (Multiplicative (InfiniteAdeleRing F))
+  let B (w : S) := SchwartzBruhat (Multiplicative (w.val.adicCompletion F))
+  let V := FinestLocallyConvex (⨂[ℂ] w, B w)
+  let P (m : ℕ) (f : ℬₛ(S)) : Prop := ∀ h : SAdeleRing F S, h.1 = 1 →
+    (∀ w : S, Valued.v (h.2 w - 1) ≤ WithZero.exp (-(m + 1 : ℤ))) →
+    ∀ x : SAdeleRing F S, f (Multiplicative.ofAdd (h * x)) = f (Multiplicative.ofAdd x)
+  have hPmono {m m' : ℕ} (hm : m ≤ m') {f : ℬₛ(S)} (hf : P m f) : P m' f :=
+    fun h h1 hw x ↦ hf h h1 (fun w ↦ (hw w).trans (WithZero.exp_le_exp.mpr (by omega))) x
+  let D : Submodule ℂ (ℬₛ(S)) :=
+    { carrier := {f | ∃ m, P m f}
+      zero_mem' := ⟨0, fun _ _ _ _ ↦ rfl⟩
+      add_mem' := by
+        rintro f g ⟨m, hm⟩ ⟨m', hm'⟩
+        refine ⟨max m m', fun h h1 hw x ↦ ?_⟩
+        exact congrArg₂ (· + ·) (hPmono (le_max_left m m') hm h h1 hw x)
+          (hPmono (le_max_right m m') hm' h h1 hw x)
+      smul_mem' := by
+        rintro c f ⟨m, hm⟩
+        exact ⟨m, fun h h1 hw x ↦ congrArg (c • ·) (hm h h1 hw x)⟩ }
+  obtain ⟨e, he⟩ := sAdeleSchwartz_inductiveTensor_equiv F S
+  have hpure (a : A) (g : ∀ w, B w) :
+      e (a ⊗ₜ[ℂ] (show V from (⨂ₜ[ℂ] w, g w))) ∈ D := by
+    have hloc (w : S) := sLocalAdelicThetaSpace_strictLF_local_dilation
+      (fun y : w.val.adicCompletion F ↦ g w (Multiplicative.ofAdd y))
+      ((mem_finitePlaceSchwartz_iff F w.val _).mp ⟨g w, fun _ ↦ rfl⟩).1
+      ((mem_finitePlaceSchwartz_iff F w.val _).mp ⟨g w, fun _ ↦ rfl⟩).2
+    choose m hm using hloc
+    refine ⟨Finset.univ.sup m, fun h h1 hw x ↦ ?_⟩
+    refine (he a g (h * x)).trans (Eq.trans ?_ (he a g x).symm)
+    have e1 : (h * x).1 = x.1 := by rw [Prod.fst_mul, h1, one_mul]
+    rw [e1]
+    congr 1
+    refine Finset.prod_congr rfl fun w _ ↦ ?_
+    refine hm w (h.2 w) (x.2 w) ((hw w).trans (WithZero.exp_le_exp.mpr ?_))
+    have := Finset.le_sup (f := m) (Finset.mem_univ w)
+    omega
+  have hgen (a : A) (v : V) : e (a ⊗ₜ[ℂ] v) ∈ D := by
+    let L : V →ₗ[ℂ] ℬₛ(S) := e.toLinearMap.comp (TensorProduct.mk ℂ A V a)
+    change L v ∈ D
+    refine PiTensorProduct.induction_on (motive := fun v : ⨂[ℂ] w, B w ↦ L v ∈ D) v ?_ ?_
+    · intro r g
+      change L (r • (show V from (⨂ₜ[ℂ] w, g w))) ∈ D
+      rw [map_smul]
+      exact D.smul_mem r (hpure a g)
+    · intro x y hx hy
+      exact (D.comap L).add_mem hx hy
+  obtain ⟨z, rfl⟩ := e.surjective f
+  exact TensorProduct.inductionOn (motive := fun z ↦ e z ∈ D) z hgen
+    (fun _ _ hx hy ↦ (D.comap e.toLinearMap).add_mem hx hy)
+
+/-- Each S-local theta function is unchanged by the finite ideles close enough to one. -/
+private theorem sLocalAdelicThetaSpace_strictLF_level_cover
+    {S : Finset (HeightOneSpectrum (𝓞 F))} (f : ℬₛ(S)) :
+    ∃ n : ℕ, ∀ h g : (SAdeleRing F S)ˣ, h.val.1 = 1 →
+      (∀ w : S, Valued.v (h.val.2 w - 1) ≤ WithZero.exp (-(n + 1 : ℤ))) →
+      sLocalAdelicTheta F S f (h * g) = sLocalAdelicTheta F S f g := by
+  obtain ⟨m, hm⟩ := sLocalAdelicThetaSpace_strictLF_test_dilation f
+  refine ⟨m, fun h g h1 hw ↦ ?_⟩
+  refine (sLocalAdelicTheta_apply F S f (h * g)).trans
+    (Eq.trans (tsum_congr fun ξ ↦ ?_) (sLocalAdelicTheta_apply F S f g).symm)
+  have e1 : (sUnitEmbedding F S ξ * (h * g)).val = h.val * (sUnitEmbedding F S ξ * g).val := by
+    simp only [Units.val_mul]
+    exact mul_left_comm _ _ _
+  exact (congrArg (fun y ↦ f (Multiplicative.ofAdd y)) e1).trans (hm h.val h1 hw _)
+
+
+/-- In a discretely valued field, an element congruent to one modulo a positive power of the
+maximal ideal has valuation one, and multiplying by it preserves this congruence class in
+both directions. -/
+private theorem sLocalAdelicThetaSpace_strictLF_level_mul {K : Type*} [Field K]
+    [Valued K (WithZero (Multiplicative ℤ))] (n : ℕ) (u y : K)
+    (hu : Valued.v (u - 1) ≤ WithZero.exp (-(n + 1 : ℤ))) :
+    Valued.v u = 1 ∧ (Valued.v (u * y - 1) ≤ WithZero.exp (-(n + 1 : ℤ)) ↔
+      Valued.v (y - 1) ≤ WithZero.exp (-(n + 1 : ℤ))) := by
+  let ν : Valuation K (WithZero (Multiplicative ℤ)) := Valued.v
+  have hlt : ν (u - 1) < 1 := lt_of_le_of_lt hu (by
+    rw [← WithZero.exp_zero]
+    exact WithZero.exp_lt_exp.mpr (by omega))
+  have hu1 : ν u = 1 := by
+    have h1 := ν.map_one_add_of_lt hlt
+    rwa [add_sub_cancel] at h1
+  refine ⟨hu1, fun h ↦ ?_, fun h ↦ ?_⟩
+  · have e : u * (y - 1) = (u * y - 1) - (u - 1) := by ring
+    have h2 : ν (u * (y - 1)) ≤ WithZero.exp (-(n + 1 : ℤ)) := by
+      rw [e]
+      exact (ν.map_sub _ _).trans (max_le h hu)
+    rwa [map_mul, hu1, one_mul] at h2
+  · have e : u * y - 1 = u * (y - 1) + (u - 1) := by ring
+    change ν (u * y - 1) ≤ _
+    rw [e]
+    refine (ν.map_add _ _).trans (max_le ?_ hu)
+    rw [map_mul, hu1, one_mul]
+    exact h
+
+open Set in
+/-- The indicators of the local integers and of the elements congruent to one modulo a
+positive power of the maximal ideal are local tests. -/
+private theorem sLocalAdelicThetaSpace_strictLF_indicator_tests
+    (w : HeightOneSpectrum (𝓞 F)) (n : ℕ) :
+    ∃ b : Bool → SchwartzBruhat (Multiplicative (w.adicCompletion F)),
+      (∀ x : w.adicCompletion F, b false (Multiplicative.ofAdd x) =
+        indicator {x : w.adicCompletion F | Valued.v x ≤ 1} 1 x) ∧
+      (∀ x : w.adicCompletion F, b true (Multiplicative.ofAdd x) =
+        indicator {x : w.adicCompletion F |
+          Valued.v (x - 1) ≤ WithZero.exp (-(n + 1 : ℤ))} 1 x) := by
+  let K := w.adicCompletion F
+  let ν : Valuation K (WithZero (Multiplicative ℤ)) := Valued.v
+  let sO : Set K := {x | ν x ≤ 1}
+  let sH : Set K := {x | ν (x - 1) ≤ WithZero.exp (-(n + 1 : ℤ))}
+  have hOc : IsCompact sO :=
+    isCompact_iff_compactSpace.mpr (compactSpace_adicCompletionIntegers w)
+  have hOo : IsOpen sO := Valued.isOpen_valuationSubring K
+  obtain ⟨z, hz⟩ := w.valuedAdicCompletion_surjective F (WithZero.exp (-(n + 1 : ℤ)))
+  have hz0 : ν.restrict z ≠ 0 := fun h0 ↦
+    WithZero.exp_ne_zero (hz.symm.trans (ν.restrict_eq_zero_iff.mp h0))
+  have hball : IsClopen {y : K | ν.restrict y ≤ ν.restrict z} :=
+    Valued.isClopen_closedBall K hz0
+  have hball' : IsClopen {y : K | ν y ≤ WithZero.exp (-(n + 1 : ℤ))} := by
+    have hset : {y : K | ν y ≤ WithZero.exp (-(n + 1 : ℤ))} =
+        {y : K | ν.restrict y ≤ ν.restrict z} := by
+      ext y
+      change ν y ≤ _ ↔ ν.restrict y ≤ ν.restrict z
+      rw [Valuation.restrict_le_iff]
+      exact hz.symm ▸ Iff.rfl
+    rw [hset]
+    exact hball
+  have hHcl : IsClopen sH := hball'.preimage (continuous_id.sub continuous_const)
+  have hHc : IsCompact sH := hOc.of_isClosed_subset hHcl.isClosed fun x hx ↦
+    (sLocalAdelicThetaSpace_strictLF_level_mul n x 1 hx).1.le
+  have key (s : Set K) (hcl : IsClopen s) (hc : IsCompact s) :
+      ∃ g : SchwartzBruhat (Multiplicative K), ∀ x : K,
+        g (Multiplicative.ofAdd x) = indicator s 1 x := by
+    refine (mem_finitePlaceSchwartz_iff F w (indicator s 1)).mpr ⟨?_, ?_⟩
+    · have h : IsLocallyConstant (⇑(LocallyConstant.charFn ℂ hcl) : K → ℂ) :=
+        (LocallyConstant.charFn ℂ hcl).isLocallyConstant
+      rwa [LocallyConstant.coe_charFn] at h
+    · exact HasCompactSupport.intro hc fun x hx ↦ indicator_of_notMem hx _
+  obtain ⟨bO, hbO⟩ := key sO ⟨hOc.isClosed, hOo⟩ hOc
+  obtain ⟨bH, hbH⟩ := key sH hHcl hHc
+  exact ⟨fun t ↦ if t then bH else bO, hbO, hbH⟩
+
+
+open Set in
+/-- Structure of the local tests fixed by the elements congruent to one modulo a positive
+power of the maximal ideal: such a test is a finite combination of dilates of the indicator
+of the local integers and of the indicator of that congruence class. Near zero the test
+is constant, which is a multiple of a dilate of the first indicator. What is left has
+compact support away from zero, covered by finitely many classes, on each of which the
+test is constant. -/
+private theorem sLocalAdelicThetaSpace_strictLF_local_expansion
+    (w : HeightOneSpectrum (𝓞 F)) (n : ℕ)
+    (b : Bool → SchwartzBruhat (Multiplicative (w.adicCompletion F)))
+    (hbO : ∀ x : w.adicCompletion F, b false (Multiplicative.ofAdd x) =
+      indicator {x : w.adicCompletion F | Valued.v x ≤ 1} 1 x)
+    (hbH : ∀ x : w.adicCompletion F, b true (Multiplicative.ofAdd x) =
+      indicator {x : w.adicCompletion F |
+        Valued.v (x - 1) ≤ WithZero.exp (-(n + 1 : ℤ))} 1 x)
+    (g : SchwartzBruhat (Multiplicative (w.adicCompletion F)))
+    (hg : ∀ u y : w.adicCompletion F, Valued.v (u - 1) ≤ WithZero.exp (-(n + 1 : ℤ)) →
+      g (Multiplicative.ofAdd (u * y)) = g (Multiplicative.ofAdd y)) :
+    g ∈ Submodule.span ℂ (range fun q : Bool × (w.adicCompletion F)ˣ ↦
+      schwartzBruhatUnitTranslate q.2 (b q.1)) := by
+  classical
+  let K := w.adicCompletion F
+  let ν : Valuation K (WithZero (Multiplicative ℤ)) := Valued.v
+  let ε : WithZero (Multiplicative ℤ) := WithZero.exp (-(n + 1 : ℤ))
+  let X : Set (SchwartzBruhat (Multiplicative K)) :=
+    range fun q : Bool × Kˣ ↦ schwartzBruhatUnitTranslate q.2 (b q.1)
+  have hX (t : Bool) (c : Kˣ) : schwartzBruhatUnitTranslate c (b t) ∈ Submodule.span ℂ X :=
+    Submodule.subset_span ⟨(t, c), rfl⟩
+  have hext (g₁ g₂ : SchwartzBruhat (Multiplicative K))
+      (h : ∀ y : K, g₁ (Multiplicative.ofAdd y) = g₂ (Multiplicative.ofAdd y)) : g₁ = g₂ :=
+    Subtype.ext (funext fun x ↦ h x.toAdd)
+  have hsub (g₁ g₂ : SchwartzBruhat (Multiplicative K)) (c : ℂ) (y : K) :
+      (g₁ - c • g₂) (Multiplicative.ofAdd y) =
+        g₁ (Multiplicative.ofAdd y) - c * g₂ (Multiplicative.ofAdd y) := rfl
+  -- the two dilated indicators
+  have hO (c : Kˣ) (y : K) : schwartzBruhatUnitTranslate c (b false) (Multiplicative.ofAdd y) =
+      indicator {x : K | ν x ≤ ν c.val} 1 y := by
+    rw [schwartzBruhatUnitTranslate_apply, hbO]
+    have hiff : (c⁻¹ : Kˣ).val * y ∈ {x : K | ν x ≤ 1} ↔ y ∈ {x : K | ν x ≤ ν c.val} := by
+      change ν ((c⁻¹ : Kˣ).val * y) ≤ 1 ↔ ν y ≤ ν c.val
+      rw [map_mul, Units.val_inv_eq_inv_val, map_inv₀,
+        inv_mul_le_iff₀ (zero_lt_iff.mpr ((ν.ne_zero_iff).mpr c.ne_zero)), mul_one]
+    by_cases hy : y ∈ {x : K | ν x ≤ ν c.val}
+    · rw [indicator_of_mem hy, indicator_of_mem (hiff.mpr hy)]
+      rfl
+    · rw [indicator_of_notMem hy, indicator_of_notMem (fun h ↦ hy (hiff.mp h))]
+  have hH (c : Kˣ) (y : K) : schwartzBruhatUnitTranslate c (b true) (Multiplicative.ofAdd y) =
+      indicator {x : K | ν ((c⁻¹ : Kˣ).val * x - 1) ≤ ε} 1 y := by
+    rw [schwartzBruhatUnitTranslate_apply, hbH]
+    rfl
+  -- the claim for tests supported in finitely many classes
+  have claim : ∀ D : Finset K, ∀ g₁ : SchwartzBruhat (Multiplicative K),
+      (∀ u y : K, ν (u - 1) ≤ ε →
+        g₁ (Multiplicative.ofAdd (u * y)) = g₁ (Multiplicative.ofAdd y)) →
+      (∀ y : K, g₁ (Multiplicative.ofAdd y) ≠ 0 → ∃ d ∈ D, d ≠ 0 ∧ ν (d⁻¹ * y - 1) ≤ ε) →
+      g₁ ∈ Submodule.span ℂ X := by
+    intro D
+    induction D using Finset.induction_on with
+    | empty =>
+      intro g₁ _ hsupp
+      have h0 : g₁ = 0 := hext g₁ 0 fun y ↦ by
+        by_contra hne
+        obtain ⟨d, hd, -⟩ := hsupp y hne
+        exact absurd hd (Finset.notMem_empty d)
+      rw [h0]
+      exact Submodule.zero_mem _
+    | insert d D hdD ih =>
+      intro g₁ hinv hsupp
+      by_cases hd0 : d = 0
+      · refine ih g₁ hinv fun y hy ↦ ?_
+        obtain ⟨d', hd', hd'0, hd'y⟩ := hsupp y hy
+        rcases Finset.mem_insert.mp hd' with rfl | hmem
+        · exact absurd hd0 hd'0
+        · exact ⟨d', hmem, hd'0, hd'y⟩
+      · let c : Kˣ := Units.mk0 d hd0
+        let g₂ := g₁ - g₁ (Multiplicative.ofAdd d) • schwartzBruhatUnitTranslate c (b true)
+        have hc : (c⁻¹ : Kˣ).val = d⁻¹ := by
+          rw [Units.val_inv_eq_inv_val]
+          rfl
+        have hg₂ (y : K) : g₂ (Multiplicative.ofAdd y) = g₁ (Multiplicative.ofAdd y) -
+            g₁ (Multiplicative.ofAdd d) * indicator {x : K | ν (d⁻¹ * x - 1) ≤ ε} 1 y := by
+          have h := hsub g₁ (schwartzBruhatUnitTranslate c (b true))
+            (g₁ (Multiplicative.ofAdd d)) y
+          rw [hH, hc] at h
+          exact h
+        have hval (y : K) (hy : ν (d⁻¹ * y - 1) ≤ ε) :
+            g₁ (Multiplicative.ofAdd y) = g₁ (Multiplicative.ofAdd d) := by
+          have := hinv (d⁻¹ * y) d hy
+          rwa [mul_comm d⁻¹ y, mul_assoc, inv_mul_cancel₀ hd0, mul_one] at this
+        have hmem : g₂ ∈ Submodule.span ℂ X := by
+          refine ih g₂ (fun u y hu ↦ ?_) (fun y hy ↦ ?_)
+          · rw [hg₂, hg₂, hinv u y hu]
+            congr 2
+            have hiff : u * y ∈ {x : K | ν (d⁻¹ * x - 1) ≤ ε} ↔
+                y ∈ {x : K | ν (d⁻¹ * x - 1) ≤ ε} := by
+              change ν (d⁻¹ * (u * y) - 1) ≤ ε ↔ ν (d⁻¹ * y - 1) ≤ ε
+              rw [show d⁻¹ * (u * y) = u * (d⁻¹ * y) by ring]
+              exact (sLocalAdelicThetaSpace_strictLF_level_mul n u (d⁻¹ * y) hu).2
+            by_cases hy : y ∈ {x : K | ν (d⁻¹ * x - 1) ≤ ε}
+            · rw [indicator_of_mem hy, indicator_of_mem (hiff.mpr hy)]
+              rfl
+            · rw [indicator_of_notMem hy, indicator_of_notMem (fun h ↦ hy (hiff.mp h))]
+          · by_cases hyd : ν (d⁻¹ * y - 1) ≤ ε
+            · exfalso
+              apply hy
+              rw [hg₂, indicator_of_mem (show y ∈ {x : K | ν (d⁻¹ * x - 1) ≤ ε} from hyd),
+                hval y hyd]
+              simp only [Pi.one_apply, mul_one, sub_self]
+            · have hy1 : g₁ (Multiplicative.ofAdd y) ≠ 0 := by
+                intro h0
+                apply hy
+                rw [hg₂, indicator_of_notMem (show y ∉ {x : K | ν (d⁻¹ * x - 1) ≤ ε} from hyd),
+                  h0, mul_zero, sub_zero]
+              obtain ⟨d', hd', hd'0, hd'y⟩ := hsupp y hy1
+              rcases Finset.mem_insert.mp hd' with rfl | hmem
+              · exact absurd hd'y hyd
+              · exact ⟨d', hmem, hd'0, hd'y⟩
+        have hdecomp : g₁ = g₂ +
+            g₁ (Multiplicative.ofAdd d) • schwartzBruhatUnitTranslate c (b true) :=
+          (sub_add_cancel _ _).symm
+        rw [hdecomp]
+        exact Submodule.add_mem _ hmem (Submodule.smul_mem _ _ (hX true c))
+  -- the test is constant near zero
+  obtain ⟨hlc, -⟩ := (mem_finitePlaceSchwartz_iff F w
+    (fun y : K ↦ g (Multiplicative.ofAdd y))).mp ⟨g, fun _ ↦ rfl⟩
+  have hU : (fun y : K ↦ g (Multiplicative.ofAdd y)) ⁻¹' {g (Multiplicative.ofAdd (0 : K))} ∈
+      𝓝 (0 : K) := (hlc.isOpen_fiber _).mem_nhds rfl
+  obtain ⟨γ, hγ⟩ := Valued.mem_nhds_zero.mp hU
+  let r : WithZero (Multiplicative ℤ) := MonoidWithZeroHom.ValueGroup₀.embedding γ.val
+  have hr : r ≠ 0 := by simp [r]
+  obtain ⟨z, hz⟩ := w.valuedAdicCompletion_surjective F (WithZero.exp (WithZero.log r - 1))
+  have hz0 : z ≠ 0 := fun h0 ↦ WithZero.exp_ne_zero (a := WithZero.log r - 1)
+    (hz.symm.trans (by rw [h0, map_zero]))
+  have hzr : ν z < r := by
+    change Valued.v z < r
+    rw [hz]
+    calc WithZero.exp (WithZero.log r - 1) < WithZero.exp (WithZero.log r) :=
+          WithZero.exp_lt_exp.mpr (by omega)
+      _ = r := WithZero.exp_log hr
+  let c₀ : Kˣ := Units.mk0 z hz0
+  have hnear (y : K) (hy : ν y ≤ ν z) :
+      g (Multiplicative.ofAdd y) = g (Multiplicative.ofAdd (0 : K)) :=
+    hγ ((ν.restrict_lt_iff_lt_embedding).mpr (lt_of_le_of_lt hy hzr))
+  let g₁ := g - g (Multiplicative.ofAdd (0 : K)) • schwartzBruhatUnitTranslate c₀ (b false)
+  have hg₁ (y : K) : g₁ (Multiplicative.ofAdd y) = g (Multiplicative.ofAdd y) -
+      g (Multiplicative.ofAdd (0 : K)) * indicator {x : K | ν x ≤ ν z} 1 y := by
+    have h := hsub g (schwartzBruhatUnitTranslate c₀ (b false))
+      (g (Multiplicative.ofAdd (0 : K))) y
+    rw [hO] at h
+    exact h
+  have hg₁zero (y : K) (hy : ν y ≤ ν z) : g₁ (Multiplicative.ofAdd y) = 0 := by
+    rw [hg₁, indicator_of_mem (show y ∈ {x : K | ν x ≤ ν z} from hy), hnear y hy]
+    simp only [Pi.one_apply, mul_one, sub_self]
+  have hg₁inv (u y : K) (hu : ν (u - 1) ≤ ε) :
+      g₁ (Multiplicative.ofAdd (u * y)) = g₁ (Multiplicative.ofAdd y) := by
+    rw [hg₁, hg₁, hg u y hu]
+    congr 2
+    have hiff : u * y ∈ {x : K | ν x ≤ ν z} ↔ y ∈ {x : K | ν x ≤ ν z} := by
+      change ν (u * y) ≤ ν z ↔ ν y ≤ ν z
+      rw [map_mul, show ν u = 1 from (sLocalAdelicThetaSpace_strictLF_level_mul n u 1 hu).1,
+        one_mul]
+    by_cases hy : y ∈ {x : K | ν x ≤ ν z}
+    · rw [indicator_of_mem hy, indicator_of_mem (hiff.mpr hy)]
+      rfl
+    · rw [indicator_of_notMem hy, indicator_of_notMem (fun h ↦ hy (hiff.mp h))]
+  -- cover the support of what is left by finitely many classes
+  obtain ⟨-, hcs⟩ := (mem_finitePlaceSchwartz_iff F w
+    (fun y : K ↦ g₁ (Multiplicative.ofAdd y))).mp ⟨g₁, fun _ ↦ rfl⟩
+  have hB : {u : K | ν (u - 1) ≤ ε} ∈ 𝓝 (1 : K) := by
+    obtain ⟨z', hz'⟩ := w.valuedAdicCompletion_surjective F ε
+    have hz'0 : ν.restrict z' ≠ 0 := fun h0 ↦
+      WithZero.exp_ne_zero (hz'.symm.trans (ν.restrict_eq_zero_iff.mp h0))
+    refine Valued.mem_nhds.mpr ⟨Units.mk0 _ hz'0, fun u hu ↦ ?_⟩
+    have hlt : ν (u - 1) < ν z' := ν.restrict_lt_iff.mp hu
+    exact (hz' ▸ hlt).le
+  have hN₀ : {y : K | ν y ≤ ν z} ∈ 𝓝 (0 : K) := by
+    have hz0' : ν.restrict z ≠ 0 := fun h0 ↦ hz0 ((ν.zero_iff).mp (ν.restrict_eq_zero_iff.mp h0))
+    refine Valued.mem_nhds_zero.mpr ⟨Units.mk0 _ hz0', fun y hy ↦ ?_⟩
+    exact (ν.restrict_lt_iff.mp hy).le
+  let U (y : K) : Set K := if y = 0 then {y' : K | ν y' ≤ ν z} else {y' : K | ν (y⁻¹ * y' - 1) ≤ ε}
+  have hUn (y : K) : U y ∈ 𝓝 y := by
+    by_cases hy : y = 0
+    · rw [show U y = {y' : K | ν y' ≤ ν z} from ite_eq_left_of_eq_true _ _ (eq_true hy), hy]
+      exact hN₀
+    · rw [show U y = {y' : K | ν (y⁻¹ * y' - 1) ≤ ε} from
+        ite_eq_right_of_eq_false _ _ (eq_false hy)]
+      have hcont : Continuous fun y' : K ↦ y⁻¹ * y' := continuous_const.mul continuous_id
+      exact hcont.continuousAt.preimage_mem_nhds (by rw [inv_mul_cancel₀ hy]; exact hB)
+  obtain ⟨D, -, hD⟩ := hcs.elim_nhds_subcover U (fun y _ ↦ hUn y)
+  have hmem : g₁ ∈ Submodule.span ℂ X := by
+    refine claim D g₁ hg₁inv fun y hy ↦ ?_
+    obtain ⟨d, hd, hyd⟩ := mem_iUnion₂.mp (hD (subset_tsupport _ hy))
+    by_cases hd0 : d = 0
+    · rw [show U d = {y' : K | ν y' ≤ ν z} from ite_eq_left_of_eq_true _ _ (eq_true hd0)] at hyd
+      exact absurd (hg₁zero y hyd) hy
+    · rw [show U d = {y' : K | ν (d⁻¹ * y' - 1) ≤ ε} from
+        ite_eq_right_of_eq_false _ _ (eq_false hd0)] at hyd
+      exact ⟨d, hd, hd0, hyd⟩
+  have hdecomp : g = g₁ +
+      g (Multiplicative.ofAdd (0 : K)) • schwartzBruhatUnitTranslate c₀ (b false) :=
+    (sub_add_cancel _ _).symm
+  rw [hdecomp]
+  exact Submodule.add_mem _ hmem (Submodule.smul_mem _ _ (hX false c₀))
+
+open Set in
+open scoped TensorProduct in
+/-- Templates on the finite coordinates for a congruence level. At each place of `S` take
+the indicator of the local integers or of the elements congruent to one modulo the
+`(n+1)`-st power of the maximal ideal. The products of these, dilated by S-ideles and
+tensored with archimedean tests, span every pure tensor whose local factors are fixed by
+the elements congruent to one. -/
+private theorem sLocalAdelicThetaSpace_strictLF_level_pure
+    (S : Finset (HeightOneSpectrum (𝓞 F))) (n : ℕ) :
+    ∃ (N : ℕ) (β : Fin N → ((w : S) → w.val.adicCompletion F) → ℂ)
+      (P : Fin N → (SAdeleRing F S)ˣ →
+        (SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)) →L[ℂ] ℬₛ(S))),
+      (∀ j c a (x : SAdeleRing F S), P j c a (Multiplicative.ofAdd x) =
+        a (Multiplicative.ofAdd x.1) * β j ((c⁻¹).val.2 * x.2)) ∧
+      (∀ j (h y : (w : S) → w.val.adicCompletion F),
+        (∀ w : S, Valued.v (h w - 1) ≤ WithZero.exp (-(n + 1 : ℤ))) →
+        β j (h * y) = β j y) ∧
+      ∀ (f' : ℬₛ(S)) (a : SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)))
+        (g : ∀ w : S, SchwartzBruhat (Multiplicative (w.val.adicCompletion F))),
+        (∀ (w : S) (u y : w.val.adicCompletion F),
+          Valued.v (u - 1) ≤ WithZero.exp (-(n + 1 : ℤ)) →
+          g w (Multiplicative.ofAdd (u * y)) = g w (Multiplicative.ofAdd y)) →
+        (∀ x : SAdeleRing F S, f' (Multiplicative.ofAdd x) =
+          a (Multiplicative.ofAdd x.1) * ∏ w : S, g w (Multiplicative.ofAdd (x.2 w))) →
+        f' ∈ Submodule.span ℂ (range fun q : Fin N × (SAdeleRing F S)ˣ ×
+          SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)) ↦ P q.1 q.2.1 q.2.2) := by
+  classical
+  let A := SchwartzBruhat (Multiplicative (InfiniteAdeleRing F))
+  let B (w : S) := SchwartzBruhat (Multiplicative (w.val.adicCompletion F))
+  let V := FinestLocallyConvex (⨂[ℂ] w, B w)
+  obtain ⟨e, he⟩ := sAdeleSchwartz_inductiveTensor_equiv F S
+  choose b hbO hbH using fun w : S ↦
+    sLocalAdelicThetaSpace_strictLF_indicator_tests (F := F) w.val n
+  let cw (c : (SAdeleRing F S)ˣ) (w : S) : (w.val.adicCompletion F)ˣ :=
+    Units.map ((Pi.evalRingHom (fun w : S ↦ w.val.adicCompletion F) w).comp
+      (RingHom.snd _ _)).toMonoidHom c
+  let loc (t : S → Bool) (c : (SAdeleRing F S)ˣ) (w : S) : B w :=
+    schwartzBruhatUnitTranslate (cw c w) (b w (t w))
+  let tens (t : S → Bool) (c : (SAdeleRing F S)ˣ) : V := ⨂ₜ[ℂ] w, loc t c w
+  let slice (v : V) : A →L[ℂ] InductiveTensor A V :=
+    ⟨(TensorProduct.mk ℂ A V).flip v, sAdeleSchwartz_continuous_tmul_fixed (A := A) (V := V) v⟩
+  let P₀ (t : S → Bool) (c : (SAdeleRing F S)ˣ) : A →L[ℂ] ℬₛ(S) :=
+    e.toContinuousLinearMap.comp (slice (tens t c))
+  let β₀ (t : S → Bool) (y : (w : S) → w.val.adicCompletion F) : ℂ :=
+    ∏ w : S, b w (t w) (Multiplicative.ofAdd (y w))
+  have hPe (t : S → Bool) (c : (SAdeleRing F S)ˣ) (a : A) :
+      P₀ t c a = e (a ⊗ₜ[ℂ] (show V from (⨂ₜ[ℂ] w, loc t c w))) := rfl
+  let Eq : (S → Bool) ≃ Fin (Fintype.card (S → Bool)) := Fintype.equivFin (S → Bool)
+  let P (j : Fin (Fintype.card (S → Bool))) := P₀ (Eq.symm j)
+  let β (j : Fin (Fintype.card (S → Bool))) := β₀ (Eq.symm j)
+  have hPEq (t : S → Bool) (c : (SAdeleRing F S)ˣ) (a : A) : P (Eq t) c a = P₀ t c a := by
+    change P₀ (Eq.symm (Eq t)) c a = P₀ t c a
+    rw [Equiv.symm_apply_apply]
+  refine ⟨Fintype.card (S → Bool), β, P, fun j c a x ↦ ?_, fun j h y hh ↦ ?_,
+    fun f' a g hg hf' ↦ ?_⟩
+  · change P₀ (Eq.symm j) c a (Multiplicative.ofAdd x) = _
+    rw [hPe]
+    exact he a (loc (Eq.symm j) c) x
+  · refine Finset.prod_congr rfl fun w _ ↦ ?_
+    change b w (Eq.symm j w) (Multiplicative.ofAdd (h w * y w)) =
+      b w (Eq.symm j w) (Multiplicative.ofAdd (y w))
+    have hlev := sLocalAdelicThetaSpace_strictLF_level_mul n (h w) (y w) (hh w)
+    cases Eq.symm j w with
+    | false =>
+      rw [hbO, hbO]
+      have hiff : h w * y w ∈ {x : w.val.adicCompletion F | Valued.v x ≤ 1} ↔
+          y w ∈ {x : w.val.adicCompletion F | Valued.v x ≤ 1} := by
+        change Valued.v (h w * y w) ≤ 1 ↔ Valued.v (y w) ≤ 1
+        rw [map_mul, hlev.1, one_mul]
+      by_cases hy : y w ∈ {x : w.val.adicCompletion F | Valued.v x ≤ 1}
+      · rw [indicator_of_mem hy, indicator_of_mem (hiff.mpr hy)]
+        rfl
+      · rw [indicator_of_notMem hy, indicator_of_notMem (fun hx ↦ hy (hiff.mp hx))]
+    | true =>
+      rw [hbH, hbH]
+      have hiff : h w * y w ∈ {x : w.val.adicCompletion F |
+            Valued.v (x - 1) ≤ WithZero.exp (-(n + 1 : ℤ))} ↔
+          y w ∈ {x : w.val.adicCompletion F |
+            Valued.v (x - 1) ≤ WithZero.exp (-(n + 1 : ℤ))} := hlev.2
+      by_cases hy : y w ∈ {x : w.val.adicCompletion F |
+          Valued.v (x - 1) ≤ WithZero.exp (-(n + 1 : ℤ))}
+      · rw [indicator_of_mem hy, indicator_of_mem (hiff.mpr hy)]
+        rfl
+      · rw [indicator_of_notMem hy, indicator_of_notMem (fun hx ↦ hy (hiff.mp hx))]
+  · let Sp : Submodule ℂ (ℬₛ(S)) := Submodule.span ℂ
+      (range fun q : Fin (Fintype.card (S → Bool)) × (SAdeleRing F S)ˣ × A ↦ P q.1 q.2.1 q.2.2)
+    let X (w : S) : Set (B w) := range fun q : Bool × (w.val.adicCompletion F)ˣ ↦
+      schwartzBruhatUnitTranslate q.2 (b w q.1)
+    let Φ : MultilinearMap (RingHom.id ℂ) (fun w : S ↦ B w) (ℬₛ(S)) :=
+      (e.toLinearMap.comp (TensorProduct.mk ℂ A V a)).compMultilinearMap
+        (PiTensorProduct.tprod ℂ)
+    have hΦ (k : ∀ w : S, B w) : Φ k = e (a ⊗ₜ[ℂ] (show V from (⨂ₜ[ℂ] w, k w))) := rfl
+    have hf'Φ : f' = Φ g := by
+      rw [hΦ]
+      exact Subtype.ext (funext fun x ↦ (hf' x.toAdd).trans (he a g x.toAdd).symm)
+    have claim : ∀ (U : Finset S) (k : ∀ w : S, B w),
+        (∀ w ∈ U, k w ∈ Submodule.span ℂ (X w)) → (∀ w ∉ U, k w ∈ X w) → Φ k ∈ Sp := by
+      intro U
+      induction U using Finset.induction_on with
+      | empty =>
+        intro k _ hk
+        choose q hq using fun w : S ↦ hk w (Finset.notMem_empty w)
+        let c : (SAdeleRing F S)ˣ :=
+          MulEquiv.prodUnits.symm (1, MulEquiv.piUnits.symm fun w ↦ (q w).2)
+        have hc (w : S) : cw c w = (q w).2 := Units.ext rfl
+        have hk' : k = loc (fun w ↦ (q w).1) c := funext fun w ↦ by
+          change k w = schwartzBruhatUnitTranslate (cw c w) (b w (q w).1)
+          rw [hc w]
+          exact (hq w).symm
+        rw [hΦ, hk']
+        exact Submodule.subset_span ⟨(Eq fun w ↦ (q w).1, c, a), hPEq _ c a⟩
+      | insert w₀ U hw₀ ih =>
+        intro k hkU hkX
+        have hle : Submodule.span ℂ (X w₀) ≤ Sp.comap (Φ.toLinearMap k w₀) := by
+          refine Submodule.span_le.mpr fun x hx ↦ ?_
+          change Φ.toLinearMap k w₀ x ∈ Sp
+          rw [MultilinearMap.toLinearMap_apply]
+          refine ih _ (fun w hw ↦ ?_) (fun w hw ↦ ?_)
+          · have hne : w ≠ w₀ := fun h ↦ hw₀ (h ▸ hw)
+            rw [Function.update_of_ne hne]
+            exact hkU w (Finset.mem_insert_of_mem hw)
+          · by_cases hww : w = w₀
+            · subst hww
+              rw [Function.update_self]
+              exact hx
+            · rw [Function.update_of_ne hww]
+              exact hkX w fun h ↦ (Finset.mem_insert.mp h).elim hww hw
+        have hmem := hle (hkU w₀ (Finset.mem_insert_self w₀ U))
+        change Φ.toLinearMap k w₀ (k w₀) ∈ Sp at hmem
+        rwa [MultilinearMap.toLinearMap_apply, Function.update_eq_self] at hmem
+    rw [hf'Φ]
+    refine claim Finset.univ g (fun w _ ↦ ?_) (fun w hw ↦ absurd (Finset.mem_univ w) hw)
+    exact sLocalAdelicThetaSpace_strictLF_local_expansion w.val n (b w) (hbO w) (hbH w) (g w)
+      (hg w)
+
+
+/-- Dilating all coordinates of a test function by an S-idele translates its S-local theta
+function by that idele. -/
+private theorem sLocalAdelicThetaSpace_strictLF_theta_dilation
+    {S : Finset (HeightOneSpectrum (𝓞 F))} (h : (SAdeleRing F S)ˣ) (f₁ f₂ : ℬₛ(S))
+    (hf : ∀ x : SAdeleRing F S, f₂ (Multiplicative.ofAdd x) =
+      f₁ (Multiplicative.ofAdd (h.val * x))) (g : (SAdeleRing F S)ˣ) :
+    sLocalAdelicTheta F S f₂ g = sLocalAdelicTheta F S f₁ (h * g) := by
+  refine (sLocalAdelicTheta_apply F S f₂ g).trans
+    (Eq.trans (tsum_congr fun ξ ↦ ?_) (sLocalAdelicTheta_apply F S f₁ (h * g)).symm)
+  have e1 : (sUnitEmbedding F S ξ * (h * g)).val = h.val * (sUnitEmbedding F S ξ * g).val := by
+    simp only [Units.val_mul]
+    exact mul_left_comm _ _ _
+  exact (hf _).trans (congrArg (fun y ↦ f₁ (Multiplicative.ofAdd y)) e1.symm)
+
+/-- Evaluating a finite combination of Schwartz–Bruhat functions at a point. -/
+private theorem sLocalAdelicThetaSpace_strictLF_eval_sum {G ι : Type*} [CommGroup G]
+    [TopologicalSpace G] (s : Finset ι) (c : ι → ℂ) (g : ι → SchwartzBruhat G) (x : G) :
+    (∑ i ∈ s, c i • g i) x = ∑ i ∈ s, c i * g i x := by
+  let ev : SchwartzBruhat G →ₗ[ℂ] ℂ :=
+    (LinearMap.proj x).comp (schwartzBruhatSubmodule _).subtype
+  change ev (∑ i ∈ s, c i • g i) = ∑ i ∈ s, c i * ev (g i)
+  simp only [map_sum, map_smul, smul_eq_mul]
+
+/-- A Schwartz–Bruhat function in the span of a set is, pointwise, a finite combination of
+members of the set. -/
+private theorem sLocalAdelicThetaSpace_strictLF_span_eval {G : Type*} [CommGroup G]
+    [TopologicalSpace G] (s : Set (SchwartzBruhat G)) (f : SchwartzBruhat G)
+    (hf : f ∈ Submodule.span ℂ s) :
+    ∃ (m : ℕ) (c : Fin m → ℂ) (g : Fin m → SchwartzBruhat G),
+      (∀ i, g i ∈ s) ∧ ∀ x : G, f x = ∑ i, c i * g i x := by
+  obtain ⟨m, c, x, hx⟩ := Submodule.mem_span_set'.mp hf
+  refine ⟨m, c, fun i ↦ (x i).val, fun i ↦ (x i).property, fun y ↦ ?_⟩
+  rw [← hx]
+  exact sLocalAdelicThetaSpace_strictLF_eval_sum Finset.univ c (fun i ↦ (x i).val) y
+
+open scoped TensorProduct in
+/-- Each S-adelic test function is a finite combination of products of an archimedean test
+and local tests at the places of `S`. -/
+private theorem sLocalAdelicThetaSpace_strictLF_pure_sum
+    {S : Finset (HeightOneSpectrum (𝓞 F))} (f : ℬₛ(S)) :
+    ∃ (m : ℕ) (c : Fin m → ℂ)
+      (a : Fin m → SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)))
+      (g : Fin m → ∀ w : S, SchwartzBruhat (Multiplicative (w.val.adicCompletion F))),
+      ∀ x : SAdeleRing F S, f (Multiplicative.ofAdd x) =
+        ∑ k, c k * (a k (Multiplicative.ofAdd x.1) *
+          ∏ w : S, g k w (Multiplicative.ofAdd (x.2 w))) := by
+  classical
+  let A := SchwartzBruhat (Multiplicative (InfiniteAdeleRing F))
+  let B (w : S) := SchwartzBruhat (Multiplicative (w.val.adicCompletion F))
+  let V := FinestLocallyConvex (⨂[ℂ] w, B w)
+  obtain ⟨e, he⟩ := sAdeleSchwartz_inductiveTensor_equiv F S
+  let D : Submodule ℂ (ℬₛ(S)) := Submodule.span ℂ (Set.range fun q : A × (∀ w : S, B w) ↦
+    e (q.1 ⊗ₜ[ℂ] (show V from (⨂ₜ[ℂ] w, q.2 w))))
+  have hpure (a : A) (g : ∀ w, B w) :
+      e (a ⊗ₜ[ℂ] (show V from (⨂ₜ[ℂ] w, g w))) ∈ D := Submodule.subset_span ⟨(a, g), rfl⟩
+  have hgen (a : A) (v : V) : e (a ⊗ₜ[ℂ] v) ∈ D := by
+    let L : V →ₗ[ℂ] ℬₛ(S) := e.toLinearMap.comp (TensorProduct.mk ℂ A V a)
+    change L v ∈ D
+    refine PiTensorProduct.induction_on (motive := fun v : ⨂[ℂ] w, B w ↦ L v ∈ D) v ?_ ?_
+    · intro r g
+      change L (r • (show V from (⨂ₜ[ℂ] w, g w))) ∈ D
+      rw [map_smul]
+      exact D.smul_mem r (hpure a g)
+    · intro x y hx hy
+      exact (D.comap L).add_mem hx hy
+  have hfD : f ∈ D := by
+    obtain ⟨z, rfl⟩ := e.surjective f
+    exact TensorProduct.inductionOn (motive := fun z ↦ e z ∈ D) z hgen
+      (fun _ _ hx hy ↦ (D.comap e.toLinearMap).add_mem hx hy)
+  obtain ⟨m, c, x, hxs, hx⟩ := sLocalAdelicThetaSpace_strictLF_span_eval _ f hfD
+  choose q hq using hxs
+  refine ⟨m, c, fun i ↦ (q i).1, fun i ↦ (q i).2, fun y ↦ ?_⟩
+  refine (hx (Multiplicative.ofAdd y)).trans (Finset.sum_congr rfl fun i _ ↦ ?_)
+  rw [← hq i]
+  exact congrArg (c i * ·) (he (q i).1 (q i).2 y)
+
+/-- Orbit sums at one finite place. The dilates of a finite family of local tests by the
+elements congruent to one modulo a positive power of the maximal ideal form a finite set of
+families, and summing a fixed member over this set gives a local test fixed by those
+elements, which permute the set. -/
+private theorem sLocalAdelicThetaSpace_strictLF_orbit_sum (w : HeightOneSpectrum (𝓞 F))
+    (n m : ℕ) (G : Fin m → SchwartzBruhat (Multiplicative (w.adicCompletion F))) :
+    ∃ Ω : Finset (Fin m → SchwartzBruhat (Multiplicative (w.adicCompletion F))),
+      Ω.Nonempty ∧
+      (∀ ω ∈ Ω, ∃ u : (w.adicCompletion F)ˣ,
+        Valued.v (u.val - 1) ≤ WithZero.exp (-(n + 1 : ℤ)) ∧
+        ∀ k, ω k = schwartzBruhatUnitTranslate u (G k)) ∧
+      ∀ (k : Fin m) (u y : w.adicCompletion F),
+        Valued.v (u - 1) ≤ WithZero.exp (-(n + 1 : ℤ)) →
+        (∑ ω ∈ Ω, ω k) (Multiplicative.ofAdd (u * y)) =
+          (∑ ω ∈ Ω, ω k) (Multiplicative.ofAdd y) := by
+  classical
+  let K := w.adicCompletion F
+  let ν : Valuation K (WithZero (Multiplicative ℤ)) := Valued.v
+  let ε : WithZero (Multiplicative ℤ) := WithZero.exp (-(n + 1 : ℤ))
+  let Hs : Set Kˣ := {u | ν (u.val - 1) ≤ ε}
+  have hmulH (u u' : Kˣ) (hu : u ∈ Hs) (hu' : u' ∈ Hs) : u * u' ∈ Hs := by
+    change ν ((u * u').val - 1) ≤ ε
+    rw [Units.val_mul]
+    exact (sLocalAdelicThetaSpace_strictLF_level_mul n u.val u'.val hu).2.mpr hu'
+  have hinvH (u : Kˣ) (hu : u ∈ Hs) : u⁻¹ ∈ Hs := by
+    refine (sLocalAdelicThetaSpace_strictLF_level_mul n u.val (u⁻¹).val hu).2.mp ?_
+    rw [← Units.val_mul, mul_inv_cancel, Units.val_one, sub_self, map_zero]
+    exact zero_le
+  have hone : (1 : Kˣ) ∈ Hs := by
+    change ν ((1 : Kˣ).val - 1) ≤ ε
+    rw [Units.val_one, sub_self, map_zero]
+    exact zero_le
+  have hext (g₁ g₂ : SchwartzBruhat (Multiplicative K))
+      (h : ∀ y : K, g₁ (Multiplicative.ofAdd y) = g₂ (Multiplicative.ofAdd y)) : g₁ = g₂ :=
+    Subtype.ext (funext fun x ↦ h x.toAdd)
+  have hτmul (u u' : Kˣ) (g : SchwartzBruhat (Multiplicative K)) :
+      schwartzBruhatUnitTranslate u (schwartzBruhatUnitTranslate u' g) =
+        schwartzBruhatUnitTranslate (u * u') g := hext _ _ fun y ↦ by
+    rw [schwartzBruhatUnitTranslate_apply, schwartzBruhatUnitTranslate_apply,
+      schwartzBruhatUnitTranslate_apply, mul_inv_rev, Units.val_mul, mul_assoc]
+  have hτone (g : SchwartzBruhat (Multiplicative K)) :
+      schwartzBruhatUnitTranslate (1 : Kˣ) g = g := hext _ _ fun y ↦ by
+    rw [schwartzBruhatUnitTranslate_apply, inv_one, Units.val_one, one_mul]
+  let T (u : Kˣ) : Fin m → SchwartzBruhat (Multiplicative K) :=
+    fun k ↦ schwartzBruhatUnitTranslate u (G k)
+  have hOfin : (T '' Hs).Finite := by
+    let C : Set K := {x | ν x ≤ 1}
+    have hC : IsCompact C :=
+      isCompact_iff_compactSpace.mpr (compactSpace_adicCompletionIntegers w)
+    have hk (k : Fin m) := finite_unit_dilates C hC (G k)
+      ((mem_finitePlaceSchwartz_iff F w _).mp ⟨G k, fun _ ↦ rfl⟩).1
+      ((mem_finitePlaceSchwartz_iff F w _).mp ⟨G k, fun _ ↦ rfl⟩).2
+    refine (Set.Finite.pi fun k ↦ hk k).subset ?_
+    rintro _ ⟨u, hu, rfl⟩ k -
+    refine ⟨⟨u, ?_, ?_⟩, rfl⟩
+    · exact (sLocalAdelicThetaSpace_strictLF_level_mul n u.val 1 hu).1.le
+    · exact (sLocalAdelicThetaSpace_strictLF_level_mul n (u⁻¹).val 1 (hinvH u hu)).1.le
+  let Ω := hOfin.toFinset
+  have hΩ (ω : Fin m → SchwartzBruhat (Multiplicative K)) : ω ∈ Ω ↔ ∃ u ∈ Hs, T u = ω := by
+    rw [Set.Finite.mem_toFinset]
+    rfl
+  refine ⟨Ω, ⟨T 1, (hΩ _).mpr ⟨1, hone, rfl⟩⟩, fun ω hω ↦ ?_, fun k u y hu ↦ ?_⟩
+  · obtain ⟨u, hu, rfl⟩ := (hΩ ω).mp hω
+    exact ⟨u, hu, fun k ↦ rfl⟩
+  · have hu1 : ν u = 1 := (sLocalAdelicThetaSpace_strictLF_level_mul n u 1 hu).1
+    have hu0 : u ≠ 0 := fun h0 ↦ by
+      rw [h0, map_zero] at hu1
+      exact zero_ne_one hu1
+    let U : Kˣ := Units.mk0 u hu0
+    have hU : U ∈ Hs := hu
+    let ev (x : K) : SchwartzBruhat (Multiplicative K) →ₗ[ℂ] ℂ :=
+      (LinearMap.proj (Multiplicative.ofAdd x)).comp (schwartzBruhatSubmodule _).subtype
+    change ev (u * y) (∑ ω ∈ Ω, ω k) = ev y (∑ ω ∈ Ω, ω k)
+    rw [map_sum, map_sum]
+    refine Finset.sum_nbij' (fun ω k ↦ schwartzBruhatUnitTranslate U⁻¹ (ω k))
+      (fun ω k ↦ schwartzBruhatUnitTranslate U (ω k)) ?_ ?_ ?_ ?_ ?_
+    · intro ω hω
+      obtain ⟨u', hu', rfl⟩ := (hΩ ω).mp hω
+      exact (hΩ _).mpr ⟨U⁻¹ * u', hmulH _ _ (hinvH U hU) hu',
+        funext fun k ↦ (hτmul U⁻¹ u' (G k)).symm⟩
+    · intro ω hω
+      obtain ⟨u', hu', rfl⟩ := (hΩ ω).mp hω
+      exact (hΩ _).mpr ⟨U * u', hmulH _ _ hU hu', funext fun k ↦ (hτmul U u' (G k)).symm⟩
+    · intro ω _
+      funext k
+      rw [hτmul, mul_inv_cancel, hτone]
+    · intro ω _
+      funext k
+      rw [hτmul, inv_mul_cancel, hτone]
+    · intro ω _
+      change ω k (Multiplicative.ofAdd (u * y)) =
+        schwartzBruhatUnitTranslate U⁻¹ (ω k) (Multiplicative.ofAdd y)
+      rw [schwartzBruhatUnitTranslate_apply, inv_inv]
+      rfl
+
+
+open scoped TensorProduct in
+/-- Averaging over a congruence level. If the theta function of a test is invariant under
+the S-ideles with archimedean coordinate `1` and finite coordinates congruent to `1` modulo
+the `(n+1)`-st power of the maximal ideals, it is a combination of theta functions of pure
+tensors whose local factors are fixed by the elements congruent to `1`. Write the test as a
+combination of pure tensors. At each place the dilates of its local factors by these
+elements form a finite set, and summing over the products of these sets replaces every
+local factor by its orbit sum, while each summand is a dilate of the test and has the same
+theta function. -/
+private theorem sLocalAdelicThetaSpace_strictLF_level_average
+    (S : Finset (HeightOneSpectrum (𝓞 F))) (n : ℕ) (f : ℬₛ(S))
+    (hf : ∀ h g : (SAdeleRing F S)ˣ, h.val.1 = 1 →
+      (∀ w : S, Valued.v (h.val.2 w - 1) ≤ WithZero.exp (-(n + 1 : ℤ))) →
+      sLocalAdelicTheta F S f (h * g) = sLocalAdelicTheta F S f g) :
+    sLocalAdelicTheta F S f ∈ Submodule.span ℂ
+      {φ | ∃ (f' : ℬₛ(S)) (a : SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)))
+        (g : ∀ w : S, SchwartzBruhat (Multiplicative (w.val.adicCompletion F))),
+        (∀ (w : S) (u y : w.val.adicCompletion F),
+          Valued.v (u - 1) ≤ WithZero.exp (-(n + 1 : ℤ)) →
+          g w (Multiplicative.ofAdd (u * y)) = g w (Multiplicative.ofAdd y)) ∧
+        (∀ x : SAdeleRing F S, f' (Multiplicative.ofAdd x) =
+          a (Multiplicative.ofAdd x.1) * ∏ w : S, g w (Multiplicative.ofAdd (x.2 w))) ∧
+        φ = sLocalAdelicTheta F S f'} := by
+  classical
+  let A := SchwartzBruhat (Multiplicative (InfiniteAdeleRing F))
+  let B (w : S) := SchwartzBruhat (Multiplicative (w.val.adicCompletion F))
+  let V := FinestLocallyConvex (⨂[ℂ] w, B w)
+  obtain ⟨e, he⟩ := sAdeleSchwartz_inductiveTensor_equiv F S
+  obtain ⟨m, c, a, g, hfg⟩ := sLocalAdelicThetaSpace_strictLF_pure_sum f
+  choose Ω hΩne hΩ hΩinv using fun w : S ↦
+    sLocalAdelicThetaSpace_strictLF_orbit_sum (F := F) w.val n m (fun k ↦ g k w)
+  let Φ (k : Fin m) : MultilinearMap (RingHom.id ℂ) (fun w : S ↦ B w) (ℬₛ(S)) :=
+    (e.toLinearMap.comp (TensorProduct.mk ℂ A V (a k))).compMultilinearMap
+      (PiTensorProduct.tprod ℂ)
+  have hΦ (k : Fin m) (t : ∀ w : S, B w) (x : SAdeleRing F S) :
+      Φ k t (Multiplicative.ofAdd x) = a k (Multiplicative.ofAdd x.1) *
+        ∏ w : S, t w (Multiplicative.ofAdd (x.2 w)) := he (a k) t x
+  let gbar (k : Fin m) (w : S) : B w := ∑ ω ∈ Ω w, ω k
+  have hGen (k : Fin m) : sLocalAdelicTheta F S (Φ k (gbar k)) ∈ Submodule.span ℂ
+      {φ | ∃ (f' : ℬₛ(S)) (a : SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)))
+        (g : ∀ w : S, SchwartzBruhat (Multiplicative (w.val.adicCompletion F))),
+        (∀ (w : S) (u y : w.val.adicCompletion F),
+          Valued.v (u - 1) ≤ WithZero.exp (-(n + 1 : ℤ)) →
+          g w (Multiplicative.ofAdd (u * y)) = g w (Multiplicative.ofAdd y)) ∧
+        (∀ x : SAdeleRing F S, f' (Multiplicative.ofAdd x) =
+          a (Multiplicative.ofAdd x.1) * ∏ w : S, g w (Multiplicative.ofAdd (x.2 w))) ∧
+        φ = sLocalAdelicTheta F S f'} :=
+    Submodule.subset_span ⟨Φ k (gbar k), a k, gbar k, fun w u y hu ↦ hΩinv w k u y hu,
+      fun x ↦ hΦ k (gbar k) x, rfl⟩
+  let R := Fintype.piFinset Ω
+  let fr (r : ∀ w : S, Fin m → B w) : ℬₛ(S) := ∑ k, c k • Φ k (fun w ↦ r w k)
+  have hfr (r : ∀ w : S, Fin m → B w) (hr : r ∈ R) :
+      sLocalAdelicTheta F S (fr r) = sLocalAdelicTheta F S f := by
+    have hr' : ∀ w, r w ∈ Ω w := Fintype.mem_piFinset.mp hr
+    choose u hu hru using fun w ↦ hΩ w (r w) (hr' w)
+    let h : (SAdeleRing F S)ˣ :=
+      MulEquiv.prodUnits.symm (1, MulEquiv.piUnits.symm fun w ↦ (u w)⁻¹)
+    have h1 : h.val.1 = 1 := rfl
+    have h2 (w : S) : h.val.2 w = ((u w)⁻¹).val := rfl
+    have hlev (w : S) : Valued.v (h.val.2 w - 1) ≤ WithZero.exp (-(n + 1 : ℤ)) := by
+      rw [h2]
+      refine (sLocalAdelicThetaSpace_strictLF_level_mul n (u w).val ((u w)⁻¹).val (hu w)).2.mp ?_
+      rw [← Units.val_mul, mul_inv_cancel, Units.val_one, sub_self, map_zero]
+      exact zero_le
+    have hpt (x : SAdeleRing F S) : fr r (Multiplicative.ofAdd x) =
+        f (Multiplicative.ofAdd (h.val * x)) := by
+      rw [hfg (h.val * x)]
+      refine (sLocalAdelicThetaSpace_strictLF_eval_sum Finset.univ c
+        (fun k ↦ Φ k (fun w ↦ r w k)) (Multiplicative.ofAdd x)).trans
+        (Finset.sum_congr rfl fun k _ ↦ ?_)
+      rw [hΦ]
+      have e1 : (h.val * x).1 = x.1 := by rw [Prod.fst_mul, h1, one_mul]
+      rw [e1]
+      congr 2
+      refine Finset.prod_congr rfl fun w _ ↦ ?_
+      rw [hru w k, schwartzBruhatUnitTranslate_apply]
+      rfl
+    ext g₀
+    exact (sLocalAdelicThetaSpace_strictLF_theta_dilation h f (fr r) hpt g₀).trans
+      (hf h g₀ h1 hlev)
+  have hsum : ∑ r ∈ R, fr r = ∑ k, c k • Φ k (gbar k) := by
+    change ∑ r ∈ R, ∑ k, c k • Φ k (fun w ↦ r w k) = _
+    rw [Finset.sum_comm]
+    refine Finset.sum_congr rfl fun k _ ↦ ?_
+    rw [← Finset.smul_sum]
+    congr 1
+    exact ((Φ k).map_sum_finset (fun w (ω : Fin m → B w) ↦ ω k) Ω).symm
+  have hRne : R.Nonempty := Fintype.piFinset_nonempty.mpr hΩne
+  have hN : (R.card : ℂ) ≠ 0 := Nat.cast_ne_zero.mpr (Finset.card_ne_zero.mpr hRne)
+  have hθ : (R.card : ℂ) • sLocalAdelicTheta F S f =
+      ∑ k, c k • sLocalAdelicTheta F S (Φ k (gbar k)) := by
+    have h3 : sLocalAdelicTheta F S (∑ r ∈ R, fr r) = ∑ r ∈ R, sLocalAdelicTheta F S f := by
+      rw [map_sum]
+      exact Finset.sum_congr rfl fun r hr ↦ hfr r hr
+    rw [hsum, map_sum] at h3
+    simp only [map_smul] at h3
+    rw [h3, Finset.sum_const, Nat.cast_smul_eq_nsmul]
+  have hfinal : sLocalAdelicTheta F S f =
+      (R.card : ℂ)⁻¹ • ∑ k, c k • sLocalAdelicTheta F S (Φ k (gbar k)) := by
+    rw [← hθ, smul_smul, inv_mul_cancel₀ hN, one_smul]
+  rw [hfinal]
+  exact Submodule.smul_mem _ _ (Submodule.sum_mem _ fun k _ ↦
+    Submodule.smul_mem _ _ (hGen k))
+
+/-- Templates for a congruence level of S-local theta functions. There are finitely many
+functions `β j` on the finite coordinates, fixed by the elements congruent to `1` modulo
+the `(n+1)`-st power of the maximal ideals, and continuous linear maps `P j c` sending an
+archimedean test `a` to the test `x ↦ a x₁ * β j (c⁻¹ x₂)`, such that the theta functions
+of these tests span every theta function invariant under the S-ideles of that level. -/
+private theorem sLocalAdelicThetaSpace_strictLF_level_templates
+    (S : Finset (HeightOneSpectrum (𝓞 F))) (n : ℕ) :
+    ∃ (N : ℕ) (β : Fin N → ((w : S) → w.val.adicCompletion F) → ℂ)
+      (P : Fin N → (SAdeleRing F S)ˣ →
+        (SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)) →L[ℂ] ℬₛ(S))),
+      (∀ j c a (x : SAdeleRing F S), P j c a (Multiplicative.ofAdd x) =
+        a (Multiplicative.ofAdd x.1) * β j ((c⁻¹).val.2 * x.2)) ∧
+      (∀ j (h y : (w : S) → w.val.adicCompletion F),
+        (∀ w : S, Valued.v (h w - 1) ≤ WithZero.exp (-(n + 1 : ℤ))) →
+        β j (h * y) = β j y) ∧
+      ∀ f : ℬₛ(S),
+        (∀ h g : (SAdeleRing F S)ˣ, h.val.1 = 1 →
+          (∀ w : S, Valued.v (h.val.2 w - 1) ≤ WithZero.exp (-(n + 1 : ℤ))) →
+          sLocalAdelicTheta F S f (h * g) = sLocalAdelicTheta F S f g) →
+        sLocalAdelicTheta F S f ∈ Submodule.span ℂ (Set.range fun q : Fin N ×
+          (SAdeleRing F S)ˣ × SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)) ↦
+            sLocalAdelicTheta F S (P q.1 q.2.1 q.2.2)) := by
+  obtain ⟨N, β, P, hP, hβ, hpure⟩ := sLocalAdelicThetaSpace_strictLF_level_pure (F := F) S n
+  refine ⟨N, β, P, hP, hβ, fun f hf ↦ ?_⟩
+  refine Submodule.span_le.mpr ?_ (sLocalAdelicThetaSpace_strictLF_level_average S n f hf)
+  rintro _ ⟨f', a, g, hg, hf', rfl⟩
+  have hmap := Submodule.apply_mem_span_image_of_mem_span (sLocalAdelicTheta F S)
+    (hpure f' a g hg hf')
+  rwa [← Set.range_comp] at hmap
+
+
+/-- Dilating all coordinates of a test function by an S-unit does not change its S-local
+theta function: the dilation permutes the terms of the series. -/
+private theorem sLocalAdelicThetaSpace_strictLF_theta_unit_dilation
+    {S : Finset (HeightOneSpectrum (𝓞 F))}
+    (ξ : (Set.integer (S : Set (HeightOneSpectrum (𝓞 F))) F)ˣ) (f₁ f₂ : ℬₛ(S))
+    (h : ∀ x : SAdeleRing F S, f₂ (Multiplicative.ofAdd x) =
+      f₁ (Multiplicative.ofAdd ((sUnitEmbedding F S ξ).val * x))) :
+    sLocalAdelicTheta F S f₂ = sLocalAdelicTheta F S f₁ := by
+  ext g
+  refine (sLocalAdelicTheta_apply F S f₂ g).trans
+    (Eq.trans ?_ (sLocalAdelicTheta_apply F S f₁ g).symm)
+  refine Eq.trans (tsum_congr fun η ↦ ?_) ((Equiv.mulLeft ξ).tsum_eq
+    (fun η ↦ f₁ (Multiplicative.ofAdd (sUnitEmbedding F S η * g).val)))
+  change f₂ (Multiplicative.ofAdd (sUnitEmbedding F S η * g).val) =
+    f₁ (Multiplicative.ofAdd (sUnitEmbedding F S (ξ * η) * g).val)
+  have e : (sUnitEmbedding F S (ξ * η) * g).val =
+      (sUnitEmbedding F S ξ).val * (sUnitEmbedding F S η * g).val := by
+    rw [map_mul (sUnitEmbedding F S) ξ η, mul_assoc, Units.val_mul]
+  rw [h, e]
+
+/-- Finiteness of the finite S-idele classes modulo S-units and a congruence level: the
+finite part of every S-idele is that of one of finitely many fixed ideles, up to an S-unit
+and a factor congruent to one. The norm-one S-idele classes are compact, and the canonical
+norm section has trivial finite part. -/
+private theorem sLocalAdelicThetaSpace_strictLF_finite_idele_classes
+    (S : Finset (HeightOneSpectrum (𝓞 F))) (n : ℕ) :
+    ∃ s : Finset (SAdeleRing F S)ˣ, ∀ c : (SAdeleRing F S)ˣ,
+      ∃ r ∈ s, ∃ (ξ : (Set.integer (S : Set (HeightOneSpectrum (𝓞 F))) F)ˣ)
+        (h : (w : S) → w.val.adicCompletion F),
+        (∀ w : S, Valued.v (h w - 1) ≤ WithZero.exp (-(n + 1 : ℤ))) ∧
+        (c⁻¹).val.2 * (sUnitEmbedding F S ξ).val.2 = (r⁻¹).val.2 * h := by
+  classical
+  obtain ⟨K, hK, hRep⟩ := sLocalTheta_exists_compact_representatives F S
+  let B (w : S) : Set (w.val.adicCompletion F) :=
+    {u | Valued.v (u - 1) ≤ WithZero.exp (-(n + 1 : ℤ))}
+  have hB (w : S) : B w ∈ 𝓝 (1 : w.val.adicCompletion F) := by
+    let ν : Valuation (w.val.adicCompletion F) (WithZero (Multiplicative ℤ)) := Valued.v
+    obtain ⟨z, hz⟩ := w.val.valuedAdicCompletion_surjective F (WithZero.exp (-(n + 1 : ℤ)))
+    have hz0 : ν.restrict z ≠ 0 := fun h0 ↦
+      WithZero.exp_ne_zero (hz.symm.trans (ν.restrict_eq_zero_iff.mp h0))
+    refine Valued.mem_nhds.mpr ⟨Units.mk0 _ hz0, fun u hu ↦ ?_⟩
+    have hlt : ν (u - 1) < ν z := ν.restrict_lt_iff.mp hu
+    exact (hz ▸ hlt).le
+  let O (r : (SAdeleRing F S)ˣ) : Set (SAdeleRing F S)ˣ :=
+    {k | ∀ w : S, r.val.2 w * (k⁻¹).val.2 w ∈ B w}
+  have hO (r : (SAdeleRing F S)ˣ) : O r ∈ 𝓝 r := by
+    have hset : O r = ⋂ w : S, {k | r.val.2 w * (k⁻¹).val.2 w ∈ B w} := by
+      ext k
+      simp only [O, Set.mem_ofPred_eq, Set.mem_iInter]
+    rw [hset]
+    refine Filter.iInter_mem.mpr fun w ↦ ?_
+    have hcont : Continuous (fun k : (SAdeleRing F S)ˣ ↦ r.val.2 w * (k⁻¹).val.2 w) :=
+      continuous_const.mul ((continuous_apply w).comp
+        (continuous_snd.comp (Units.continuous_val.comp continuous_inv)))
+    have h1 : r.val.2 w * (r⁻¹).val.2 w = 1 :=
+      congrArg (fun g : (SAdeleRing F S)ˣ ↦ g.val.2 w) (mul_inv_cancel r)
+    exact hcont.continuousAt.preimage_mem_nhds (by rw [h1]; exact hB w)
+  obtain ⟨s, -, hs⟩ := hK.elim_nhds_subcover O (fun r _ ↦ hO r)
+  refine ⟨s, fun c ↦ ?_⟩
+  let t := sIdeleNorm F S c
+  let a : (SAdeleRing F S)ˣ :=
+    Units.map (adeleProjection F S).toMonoidHom (canonicalIdeleNormSection F t)
+  have haNorm : sIdeleNorm F S a = t := sLocalTheta_radial_norm F S t
+  have hnorm : sIdeleQuotientNorm F S (QuotientGroup.mk (a⁻¹ * c)) = 1 := by
+    rw [sIdeleQuotientNorm_mk, map_mul, map_inv, haNorm]
+    exact inv_mul_cancel t
+  obtain ⟨k, hkK, hk⟩ := hRep _ hnorm
+  have hmem := QuotientGroup.eq.mp hk
+  rw [sProjectedDiagonal, MonoidHom.map_range, MonoidHom.mem_range] at hmem
+  obtain ⟨ξ, hξ⟩ := hmem
+  have hc : c⁻¹ * sUnitEmbedding F S ξ = k⁻¹ * a⁻¹ := by
+    have hξ' : sUnitEmbedding F S ξ = k⁻¹ * (a⁻¹ * c) := hξ
+    rw [hξ', mul_comm c⁻¹, ← mul_assoc, mul_inv_cancel_right]
+  have ha2 : a.val.2 = 1 := by
+    funext w
+    change (canonicalIdeleNormSection F t).val.2 w.val = 1
+    exact congrArg (fun b : FiniteAdeleRing (𝓞 F) F ↦ b w.val)
+      (canonicalIdeleNormSection_finite F t)
+  have ha2' : (a⁻¹).val.2 = 1 := by
+    have h1 : (a⁻¹).val.2 * a.val.2 = 1 :=
+      congrArg (fun g : (SAdeleRing F S)ˣ ↦ g.val.2) (inv_mul_cancel a)
+    rwa [ha2, mul_one] at h1
+  obtain ⟨r, hr, hkr⟩ := Set.mem_iUnion₂.mp (hs hkK)
+  refine ⟨r, hr, ξ, fun w ↦ r.val.2 w * (k⁻¹).val.2 w, hkr, ?_⟩
+  have e1 : (c⁻¹).val.2 * (sUnitEmbedding F S ξ).val.2 = (k⁻¹).val.2 * (a⁻¹).val.2 :=
+    congrArg (fun g : (SAdeleRing F S)ˣ ↦ g.val.2) hc
+  rw [e1, ha2', mul_one]
+  funext w
+  have h1 : (r⁻¹).val.2 w * r.val.2 w = 1 :=
+    congrArg (fun g : (SAdeleRing F S)ˣ ↦ g.val.2 w) (inv_mul_cancel r)
+  change (k⁻¹).val.2 w = (r⁻¹).val.2 w * (r.val.2 w * (k⁻¹).val.2 w)
+  rw [← mul_assoc, h1, one_mul]
+
+
+/-- Finite generation of a level of S-local theta functions. For each `n`, finitely many
+continuous linear maps `p j` from the archimedean Schwartz space to the S-adelic test space
+represent every theta function that is invariant under the S-ideles with archimedean
+coordinate `1` and finite coordinates congruent to `1` modulo the `(n+1)`-st power of the
+maximal ideals. The maps are the templates of
+`sLocalAdelicThetaSpace_strictLF_level_templates` dilated by the finitely many ideles of
+`sLocalAdelicThetaSpace_strictLF_finite_idele_classes`: any other dilate differs from one
+of these by a factor fixing the template and an S-unit, which can be moved to the
+archimedean test without changing the theta function. -/
+private theorem sLocalAdelicThetaSpace_strictLF_level_generators
+    (S : Finset (HeightOneSpectrum (𝓞 F))) (n : ℕ) :
+    ∃ (d : ℕ) (p : Fin d →
+        (SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)) →L[ℂ] ℬₛ(S))),
+      ∀ f : ℬₛ(S),
+        (∀ h g : (SAdeleRing F S)ˣ, h.val.1 = 1 →
+          (∀ w : S, Valued.v (h.val.2 w - 1) ≤ WithZero.exp (-(n + 1 : ℤ))) →
+          sLocalAdelicTheta F S f (h * g) = sLocalAdelicTheta F S f g) →
+        ∃ a : Fin d → SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)),
+          sLocalAdelicTheta F S (∑ j, p j (a j)) = sLocalAdelicTheta F S f := by
+  classical
+  obtain ⟨N, β, P, hP, hβ, hrep⟩ :=
+    sLocalAdelicThetaSpace_strictLF_level_templates (F := F) S n
+  obtain ⟨s, hs⟩ := sLocalAdelicThetaSpace_strictLF_finite_idele_classes (F := F) S n
+  let ι := Fin N × {r // r ∈ s}
+  let E : ι ≃ Fin (Fintype.card ι) := Fintype.equivFin ι
+  let p : Fin (Fintype.card ι) →
+      (SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)) →L[ℂ] ℬₛ(S)) :=
+    fun q ↦ P (E.symm q).1 (E.symm q).2.val
+  refine ⟨Fintype.card ι, p, fun f hf ↦ ?_⟩
+  let G : Submodule ℂ C((SAdeleRing F S)ˣ, ℂ) :=
+    { carrier := {φ | ∃ a : Fin (Fintype.card ι) →
+        SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)),
+        sLocalAdelicTheta F S (∑ q, p q (a q)) = φ}
+      zero_mem' := ⟨0, by simp only [Pi.zero_apply, map_zero, Finset.sum_const_zero]⟩
+      add_mem' := by
+        rintro _ _ ⟨a, rfl⟩ ⟨a', rfl⟩
+        exact ⟨a + a', by simp only [Pi.add_apply, map_add, Finset.sum_add_distrib]⟩
+      smul_mem' := by
+        rintro c _ ⟨a, rfl⟩
+        exact ⟨c • a, by simp only [Pi.smul_apply, map_smul, ← Finset.smul_sum]⟩ }
+  have hG : Submodule.span ℂ (Set.range fun q : Fin N × (SAdeleRing F S)ˣ ×
+      SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)) ↦
+        sLocalAdelicTheta F S (P q.1 q.2.1 q.2.2)) ≤ G := by
+    refine Submodule.span_le.mpr ?_
+    rintro _ ⟨⟨j, c, a⟩, rfl⟩
+    obtain ⟨r, hr, ξ, h, hh, heq⟩ := hs c
+    let u : (InfiniteAdeleRing F)ˣ :=
+      Units.map (RingHom.fst _ _).toMonoidHom (sUnitEmbedding F S ξ)
+    refine ⟨Pi.single (E (j, ⟨r, hr⟩)) (schwartzBruhatUnitTranslate u⁻¹ a), ?_⟩
+    have hsum : ∑ q, p q ((Pi.single (E (j, ⟨r, hr⟩)) (schwartzBruhatUnitTranslate u⁻¹ a) :
+        Fin (Fintype.card ι) → SchwartzBruhat (Multiplicative (InfiniteAdeleRing F))) q) =
+        P j r (schwartzBruhatUnitTranslate u⁻¹ a) := by
+      rw [Finset.sum_eq_single (E (j, ⟨r, hr⟩))]
+      · rw [Pi.single_eq_same]
+        change P (E.symm (E (j, ⟨r, hr⟩))).1 (E.symm (E (j, ⟨r, hr⟩))).2.val _ = _
+        rw [Equiv.symm_apply_apply]
+      · intro q _ hq
+        rw [Pi.single_eq_of_ne hq, map_zero]
+      · intro hne
+        exact absurd (Finset.mem_univ _) hne
+    change sLocalAdelicTheta F S (∑ q, p q ((Pi.single (E (j, ⟨r, hr⟩))
+      (schwartzBruhatUnitTranslate u⁻¹ a) : Fin (Fintype.card ι) →
+        SchwartzBruhat (Multiplicative (InfiniteAdeleRing F))) q)) = _
+    rw [hsum]
+    refine sLocalAdelicThetaSpace_strictLF_theta_unit_dilation ξ _ _ fun x ↦ ?_
+    rw [hP, hP]
+    have e0 : schwartzBruhatUnitTranslate u⁻¹ a (Multiplicative.ofAdd x.1) =
+        a (Multiplicative.ofAdd ((sUnitEmbedding F S ξ).val * x).1) :=
+      (schwartzBruhatUnitTranslate_apply u⁻¹ a x.1).trans
+        (congrArg (fun y ↦ a (Multiplicative.ofAdd (y * x.1)))
+          (congrArg Units.val (inv_inv u)))
+    have e1 : (c⁻¹).val.2 * ((sUnitEmbedding F S ξ).val * x).2 =
+        h * ((r⁻¹).val.2 * x.2) := by
+      rw [Prod.snd_mul, ← mul_assoc, heq, mul_comm (r⁻¹).val.2 h, mul_assoc]
+    rw [e0, e1, hβ j h _ hh]
+  exact hG (hrep f hf)
+
 /-- Paper: Theorem 5.2.1.1(1), p. 230.
 The S-local theta space is a strict LF-space.
 Deviation: The Fréchet stages inherit nuclearity from the separately stated
 nuclearity of the whole space under `isNuclearTVS_submodule`. -/
-theorem sLocalAdelicThetaSpace_strictLF : IsStrictLFSpace (Θₛ(S)) := by sorry
+theorem sLocalAdelicThetaSpace_strictLF : IsStrictLFSpace (Θₛ(S)) := by
+  classical
+  -- The archimedean Schwartz–Bruhat space is Fréchet: it is the classical Schwartz space.
+  obtain ⟨J, -⟩ := archimedeanSchwartzBruhat_equiv (F := F)
+  have hSch : IsFrechetTVS (SchwartzMap (mixedEmbedding.mixedSpace F) ℂ) := by
+    have : (uniformity (SchwartzMap (mixedEmbedding.mixedSpace F) ℂ)).IsCountablyGenerated := by
+      rw [uniformity_eq_comap_nhds_zero]
+      infer_instance
+    refine ⟨inferInstance, (schwartz_withSeminorms ℂ _ _).toPolynormableSpace,
+      UniformSpace.metrizableSpace, ?_⟩
+    rw [IsUniformAddGroup.rightUniformSpace_eq]
+    exact completeSpace_schwartzMap
+  have hA : IsFrechetTVS (SchwartzBruhat (Multiplicative (InfiniteAdeleRing F))) :=
+    sLocalAdelicThetaSpace_strictLF_frechet_of_closed_embedding J.symm.toContinuousLinearMap
+      J.symm.toHomeomorph.isClosedEmbedding hSch
+  -- Each value of the theta function depends continuously on the test function.
+  have hev (g : (SAdeleRing F S)ˣ) :
+      Continuous (fun f : ℬₛ(S) ↦ sLocalAdelicTheta F S f g) := by
+    let : BarrelledSpace ℂ (ℬₛ(S)) := (sAdeleSchwartz_montel (F := F) S).1
+    let : Countable F := Countable.of_moduleFinite (R := ℚ)
+    let : Countable (Set.integer (S : Set (HeightOneSpectrum (𝓞 F))) F)ˣ :=
+      Units.val_injective.countable
+    exact schwartzBruhat_continuous_of_hasSum _ _ fun f ↦
+      (sLocalAdelicTheta_hasSumUniformlyOn F S f {g} isCompact_singleton).hasSum rfl
+  -- Level `n`: invariance under the ideles with archimedean coordinate `1` and finite
+  -- coordinates congruent to `1` modulo the `(n+1)`-st power of the maximal ideals.
+  let R (n : ℕ) : Set ((SAdeleRing F S)ˣ × (SAdeleRing F S)ˣ) :=
+    {r | ∃ h : (SAdeleRing F S)ˣ, h.val.1 = 1 ∧
+      (∀ w : S, Valued.v (h.val.2 w - 1) ≤ WithZero.exp (-(n + 1 : ℤ))) ∧ r.1 = h * r.2}
+  refine sLocalAdelicThetaSpace_strictLF_of_levels (sLocalAdelicTheta F S)
+    sLocalAdelicThetaSpace_lf hA hev R ?_ ?_ ?_
+  · rintro n r ⟨h, h1, hw, hr⟩
+    refine ⟨h, h1, fun w ↦ (hw w).trans (WithZero.exp_le_exp.mpr ?_), hr⟩
+    push_cast
+    omega
+  · intro f
+    obtain ⟨n, hn⟩ := sLocalAdelicThetaSpace_strictLF_level_cover f
+    refine ⟨n, ?_⟩
+    rintro ⟨r₁, r₂⟩ ⟨h, h1, hw, hr⟩
+    rw [show r₁ = h * r₂ from hr]
+    exact hn h r₂ h1 hw
+  · intro n
+    obtain ⟨d, p, hp⟩ := sLocalAdelicThetaSpace_strictLF_level_generators (F := F) S n
+    refine ⟨d, p, fun f hf ↦ hp f fun h g h1 hw ↦ ?_⟩
+    exact hf (h * g, g) ⟨h, h1, hw, rfl⟩
 
 /-- Paper: Theorem 5.2.1.1(1), p. 230.
 The S-local theta quotient is complete. -/

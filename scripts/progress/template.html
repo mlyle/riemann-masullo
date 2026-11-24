@@ -232,6 +232,7 @@ button { font: inherit; color: inherit; }
 /* Problems panel and lists */
 .probs { border-top: 1px solid var(--line); padding-top: 18px; display: flex; flex-direction: column; gap: 12px; }
 .probs .stats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.probs .stat .v .unit { font: 500 13px var(--font-ui); color: var(--ink-2); }
 .probs .stat .v.F { color: var(--fix); } .probs .stat .v.I { color: var(--imp); } .probs .stat .v.M { color: var(--miss); } .probs .stat .v.nr { color: var(--bad); }
 .plist { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .plist td { padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; }
@@ -358,6 +359,8 @@ function s(tag, attrs) {
 const ext = (href, text, cls) => h('a', { href, target: '_blank', rel: 'noopener', class: cls }, text);
 const plural = (n, one, many) => n + ' ' + (n === 1 ? one : (many || one + 's'));
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
+// One decimal near the end, so that an unfinished project never reads 100%.
+const pctFine = (a, b) => { if (!b) return 0; const p = 100 * a / b; return p >= 99 && a < b ? (Math.floor(p * 10) / 10).toFixed(1) : Math.round(p); };
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const fmtPages = pp => pp && pp.length ? (pp.length === 1 && pp[0][0] === pp[0][1] ? 'p. ' : 'pp. ') +
   pp.map(p => p[0] === p[1] ? p[0] : p[0] + '–' + p[1]).join(' and ') : '';
@@ -713,7 +716,7 @@ const KIND_WORD = { F: 'false as stated', I: 'imprecise or wrongly justified', M
 const errataUrl = repo + '/blob/' + sha + '/ERRATA.md';
 const probsByGroup = D.groups.map(() => []), gapsByGroup = D.groups.map(() => []);
 ER.entries.forEach(e => { if (e[E_GROUP] >= 0) probsByGroup[e[E_GROUP]].push(e); });
-ER.gaps.forEach(gp => { if (gp.group >= 0) gapsByGroup[gp.group].push(gp); });
+ER.gaps.forEach(gp => { if (gp.group >= 0 && !gp.proved) gapsByGroup[gp.group].push(gp); });
 const probWeight = list => list.reduce((a, e) => a + (e[E_KIND] === 'F' ? 3 : e[E_KIND] === 'M' ? 2 : 1), 0);
 const heatMax = Math.max(1, ...probsByGroup.map(probWeight));
 const probCount = (list, k) => list.filter(e => e[E_KIND] === k).length;
@@ -747,11 +750,12 @@ function probList(list) {
 }
 function gapList(gaps) {
   return h('div', { class: 'tbl' }, h('table', { class: 'plist' }, h('tbody', null, gaps.map(gp => h('tr', null,
-    h('td', { class: 'id' }, h('span', { class: 'pk gap' }, h('b', null, '!'))),
+    h('td', { class: 'id' }, gp.proved ? h('span', { class: 'pk', title: 'since proved in Lean' }, h('b', { style: 'background:var(--ok)' }, '\u2713')) :
+      h('span', { class: 'pk gap' }, h('b', null, '!'))),
     h('td', null, h('b', null, gp.item), h('div', { class: 'muted' }, gp.missing)),
     h('td', { class: 'where' }, gp.group >= 0 ? h('a', { href: '#' + D.groups[gp.group].key }, D.groups[gp.group].num) : null,
       h('div', { class: 'st' }, gp.ids.join(', '))),
-    h('td', { class: 'st' }, 'used later: ' + gp.later))))));
+    h('td', { class: 'st' + (gp.proved ? ' ok' : '') }, gp.proved ? 'since proved in Lean' : 'used later: ' + gp.later))))));
 }
 function problemsPanel() {
   const E = ER.entries;
@@ -765,15 +769,16 @@ function problemsPanel() {
   const stat = (k, v, cls, d) => h('div', { class: 'stat' }, h('span', { class: 'k' }, k),
     h('span', { class: 'v ' + cls }, v), d ? h('span', { class: 'd' }, d) : null);
   const outside = E.filter(e => e[E_GROUP] < 0);
+  const gapsOpen = ER.gaps.filter(gp => !gp.proved);
   return h('section', { class: 'probs' },
     h('div', { class: 'chart-head' }, h('h3', null, 'Problems found in the paper'), ext(errataUrl, 'ERRATA.md')),
     h('div', { class: 'stats' },
       stat('False as stated', F.length, 'F', refuted + ' refuted in Lean' + (refResting ? ', ' + refResting + ' proved from statements still open' : '') + (refOpen ? ', ' + refOpen + ' with the refutation still open' : '')),
       stat('Imprecise or wrongly justified', I.length, 'I', 'a definition or a step of a proof that needed fixing'),
       stat('Missing material', probCount(E, 'M') + probCount(E, 'R'), 'M', 'placeholders, empty sections and missing references, and reports from reading'),
-      stat('No repair known', ER.gaps.length, 'nr', plural(ER.gaps.length, 'place') + ' (' + plural(unrepaired, 'entry', 'entries') + ') that later results depend on')),
+      stat('No repair known', gapsOpen.length, 'nr', 'places that later results depend on (' + plural(unrepaired, 'entry', 'entries') + ')')),
     h('div', { class: 'since' }, 'From ERRATA.md, without the withdrawn entries. Most problems come with a repair: the Lean states a corrected form and the proof builds on that. Where it does not, the entry says what the Lean has instead (a part left out, or a marked gap). A false statement is also kept as printed, as a proposition Printed.<name>, next to a theorem Printed.<name>_false that proves its negation; "refuted in Lean" counts those whose proof is finished and uses no theorem that is still unproved. Switch the map below to "Problems in the paper" to see which sections they are in.'),
-    h('details', { class: 'block' }, h('summary', null, 'The ' + ER.gaps.length + ' places with no known repair'), gapList(ER.gaps)),
+    h('details', { class: 'block' }, h('summary', null, 'The ' + gapsOpen.length + ' places with no known repair'), gapList(gapsOpen)),
     outside.length ? h('details', { class: 'block' }, h('summary', null, 'Problems outside the stated sections (' + outside.length + ')'), probList(outside)) : null);
 }
 
@@ -796,7 +801,7 @@ function overview() {
     h('span', { class: 'v' }, v, dl), d ? h('span', { class: 'd' }, d) : null);
   const left = h('div', null,
     h('div', { class: 'headline' }, t.proved + ' of ' + t.thms + ' theorems proved ',
-      h('small', null, '(' + pct(t.proved, t.thms) + '%)')),
+      h('small', null, '(' + pctFine(t.proved, t.thms) + '%)')),
     meter,
     h('div', { class: 'stats' },
       stat('Sections stated', t.stated + ' / ' + t.sections,
@@ -805,7 +810,10 @@ function overview() {
       stat('Definitions', t.defs, null, delta('defs')),
       stat('Theorems', t.thms, t.paper + ' cite the paper, ' + (t.thms - t.paper) + ' are helper lemmas', delta('thms')),
       stat('Proved', t.proved, soft ? t.solid + ' rest on no sorry, ' + soft + ' use open lemmas' : 'none of them uses an open lemma', delta('proved')),
-      stat('Open', t.open, t.claimed + ' claimed' + (t.unfiled ? ' · ' + t.unfiled + ' without an issue' : ''), delta('open'))),
+      stat('Open', t.open, [
+        (t.gaps || t.classical) ? [plural(t.open - (t.gaps || 0) - (t.classical || 0), 'proof') + ' to do',
+          t.gaps ? ', ' + plural(t.gaps, 'gap') : '', t.classical ? ', ' + t.classical + ' classical input' : '', h('br'), ''] : '',
+        t.claimed + ' claimed' + (t.unfiled ? ' · ' + t.unfiled + ' without an issue' : '')], delta('open'))),
     prev ? h('div', { class: 'since' },
       (['defs', 'proved', 'open'].some(k => t[k] !== prev[k]) || t.thms !== prev.stated ?
         'Changes are since the previous run, ' : 'These totals are the same as at the previous run, ') +
@@ -887,7 +895,7 @@ function overview() {
   frag.push(mapBox(dg));
 
   /* extras: ForMathlib and unplaced files */
-  const extras = D.groups.filter(g => g.id == null);
+  const extras = D.groups.filter(g => g.id == null && g.key !== 'later');
   if (extras.length) {
     frag.push(h('p', { class: 'muted' }, 'Outside the sections: ', extras.map((g, i) => [i ? '; ' : '',
       h('a', { href: '#' + g.key }, g.num), ' (' + g.title.charAt(0).toLowerCase() + g.title.slice(1) + '), ' +
@@ -950,7 +958,7 @@ function pulse() {
   const perHour = arr => arr.reduce((a, ts) => a + (ts <= now ? Math.exp((ts - now) / TAU) : 0), 0) / TAU * 3600;
   const r1 = v => v >= 10 ? String(Math.round(v)) : (Math.round(v * 10) / 10).toString();
   const closing = perHour(D.timeline.closed), filing = perHour(D.timeline.filed), net = closing - filing;
-  const open = t.issuesOpen;
+  const open = t.issuesProofs != null ? t.issuesProofs : t.issuesOpen;
   const stat = (k, v, d) => h('div', { class: 'stat' }, h('span', { class: 'k' }, k),
     h('span', { class: 'v' }, v), d ? h('span', { class: 'd' }, d) : null);
   let finish;
@@ -967,7 +975,8 @@ function pulse() {
     h('div', { class: 'stats' },
       stat('Closing', r1(closing) + ' / h', 'proof issues closed'),
       stat('Filed', r1(filing) + ' / h', 'new proof issues (new sorries)'),
-      stat('Open issues', open, 'net ' + (net >= 0 ? '−' : '+') + r1(Math.abs(net)) + ' an hour'),
+      stat('Open issues', open, (t.issuesProofs != null && t.issuesProofs !== t.issuesOpen ? 'proofs, without gaps and classical input; ' : '') +
+        'net ' + (net >= 0 ? '−' : '+') + r1(Math.abs(net)) + ' an hour'),
       finish),
     h('div', { class: 'since' }, 'Rates are averages of the proof issues closed and filed, weighted toward the last two hours ' +
       '(an exponential average with a two-hour time constant). The estimate is deliberately optimistic: it is the time to close ' +

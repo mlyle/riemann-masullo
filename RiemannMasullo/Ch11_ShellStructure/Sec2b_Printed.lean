@@ -4,7 +4,7 @@ public import RiemannMasullo.Ch11_ShellStructure.Sec2b
 import RiemannMasullo.Ch03_IdelicZeta.RatEmptyFourier
 import RiemannMasullo.Ch10_TraceSpectral.Sec1
 import RiemannMasullo.Ch11_ShellStructure.Sec2a_PrimePVRefutation
-import all RiemannMasullo.Ch06_LocalGlobal.Sec2
+import RiemannMasullo.Ch06_LocalGlobal.Sec2
 import all RiemannMasullo.Ch03_IdelicZeta.Sec3
 import Mathlib.Analysis.Calculus.BumpFunction.Normed
 import Mathlib.Analysis.Calculus.BumpFunction.FiniteDimension

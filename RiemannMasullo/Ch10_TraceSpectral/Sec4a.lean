@@ -2025,10 +2025,13 @@ private theorem combine_trace_limits {p q : (ℝ → ℂ) → Prop} {z : ℂ}
   obtain ⟨r, hr, hd⟩ := hd l hl
   exact ⟨r, hr, by simpa only [sub_add_cancel, zero_add] using hd.add hlim⟩
 
-local notation "cutoffTraces(" op ", " eps ", " rho ", " test ", " t ")" =>
+local notation "cutoffTracesAt(" degree ", " op ", " eps ", " rho ", " test ", " t ")" =>
   (∀ᶠ R in atTop, ∃ hc : IsModulatedCutoff m𝔽 R ((eps) R) ((rho) R),
-    let T := (op) a hα hs hc (test)
+    let T := (op) a hα (degree) hc (test)
     ∃ hT : IsNuclearOperator (E := W₀) (F := W₀) T, (t) R = hilbertTrace (H := W₀) ⟨T, hT⟩)
+
+local notation "cutoffTraces(" op ", " eps ", " rho ", " test ", " t ")" =>
+  cutoffTracesAt(hs, op, eps, rho, test, t)
 
 /-- A nuclear operator admits a rank-one expansion with summable trace norms. -/
 private theorem spectralRestriction_series
@@ -5331,6 +5334,155 @@ theorem spectralRestriction_trace_tendsto (φ : BruhatCompactSupport C𝔽)
     (z := hilbertTrace (H := H₀) ⟨Aₛ(φ), hquot⟩)
     (spectralTruncatedConvolution_trace_tendsto (F := F) a hα hs φ hquot ε ρ _hε _hρ)
     (spectralRestriction_offDiagonal_trace_tendsto_zero (F := F) a hα hs φ hquot ε ρ _hε _hρ)
+
+section DegreeGreaterThanOne
+
+variable (hs₁ : 1 < s)
+
+local notation "hs₀" => (zero_le_one.trans hs₁.le)
+local notation "stripAction(" φ ")" => hardySobolevTestAction μ𝔽 m𝔽 (-α) α s (hStrip(hα)) hs₀ φ
+
+/-- Paper: Theorem 10.4.2.1, p. 459. Spectral projection after convolution is nuclear.
+Deviation: The strip theorem 10.3.2.1 supplies quotient nuclearity for `1 < s`. -/
+theorem spectralProjection_convolution_nuclear_of_one_lt (φ : BruhatCompactSupport C𝔽) :
+    IsNuclearOperator ((spectralProjection (F := F) a hα hs₀).comp (stripAction(φ))) :=
+  spectralProjection_convolution_nuclear a hα hs₀ φ (spectralStripConvolution_nuclear a hα hs₁ φ)
+
+/-- Paper: Theorem 10.4.2.1, p. 459. The spectral truncation of convolution is nuclear.
+Deviation: The degree range is that of the strip theorem, `1 < s`. -/
+theorem spectralTruncatedConvolution_nuclear_of_one_lt (hρ : IsModulatedCutoff m𝔽 Λ ε ρ)
+    (φ : BruhatCompactSupport C𝔽) :
+    IsNuclearOperator (spectralTruncatedConvolution a hα hs₀ hρ φ) :=
+  spectralTruncatedConvolution_nuclear a hα hs₀ hρ φ (spectralStripConvolution_nuclear a hα hs₁ φ)
+
+/-- Paper: Theorem 10.4.2.1, p. 459. The geometric truncation of convolution is nuclear
+at each admissible cutoff.
+Deviation: The degree range is that of the strip theorem, `1 < s`. -/
+theorem geometricTruncatedConvolution_nuclear_of_one_lt (hρ : IsModulatedCutoff m𝔽 Λ ε ρ)
+    (hband : innerBand) (φ : BruhatCompactSupport C𝔽) :
+    IsNuclearOperator (geometricTruncatedConvolution a hα hs₀ hρ φ) :=
+  geometricTruncatedConvolution_nuclear a hα hs₀ hρ hband φ
+    (spectralStripConvolution_nuclear a hα hs₁ φ)
+
+/-- Paper: Theorem 10.4.2.1, p. 459. At each admissible cutoff the geometric and spectral
+traces sum to the trace of cutoff convolution, as in (10.4.2.3).
+Deviation: The strip theorem supplies quotient nuclearity for `1 < s`. -/
+theorem truncatedConvolution_trace_split_of_one_lt (hρ : IsModulatedCutoff m𝔽 Λ ε ρ)
+    (hband : innerBand) (φ : BruhatCompactSupport C𝔽) :
+    let T := (M(hρ)).comp (stripAction(φ))
+    let G := geometricTruncatedConvolution a hα hs₀ hρ φ
+    let S := spectralTruncatedConvolution a hα hs₀ hρ φ
+    ∃ (hT : IsNuclearOperator T) (hG : IsNuclearOperator G) (hS : IsNuclearOperator S),
+      hilbertTrace (H := W₀) ⟨T, hT⟩ =
+        hilbertTrace (H := W₀) ⟨G, hG⟩ + hilbertTrace (H := W₀) ⟨S, hS⟩ :=
+  truncatedConvolution_trace_split a hα hs₀ hρ hband φ
+    (spectralStripConvolution_nuclear a hα hs₁ φ)
+
+local notation "quotientTrace(" φ ")" => (hilbertTrace (H := H(a, hα, hs₀))
+  ⟨spectralConvolution (F := F) a (hStrip(hα)) hs₀ φ, spectralStripConvolution_nuclear a hα hs₁ φ⟩)
+
+/-- Paper: Theorem 10.4.2.2, p. 460. The trace of cutoff spectral projection after
+convolution tends to the strip quotient trace, as in (10.4.2.9).
+Deviation: Theorem 10.3.2.1 applies to the symmetric strip for `1 < s`, including `α = 0`. -/
+theorem spectralTruncatedConvolution_trace_tendsto_of_one_lt (φ : BruhatCompactSupport C𝔽)
+    (ε : ℝ → ℝ) (ρ : ℝ → C𝔽 → ℝ)
+    (hε : Tendsto (fun R ↦ ε R * R) atTop (𝓝 0))
+    (hρ : ∀ᶠ R in atTop, IsModulatedCutoff m𝔽 R (ε R) (ρ R) ∧
+      0 < R⁻¹ + ε R ∧ R⁻¹ + ε R < R - ε R) :
+    ∃ t : ℝ → ℂ, cutoffTracesAt(hs₀, spectralTruncatedConvolution, ε, ρ, φ, t) ∧
+      Tendsto t atTop (𝓝 quotientTrace(φ)) :=
+  spectralTruncatedConvolution_trace_tendsto a hα hs₀ φ
+    (spectralStripConvolution_nuclear a hα hs₁ φ) ε ρ hε hρ
+
+/-- Paper: Remark 10.4.2.3, p. 460. Subtracting the geometric trace from the logarithmic
+main term in (10.4.2.10) gives the strip quotient trace in the limit.
+Deviation: The strip theorem supplies quotient nuclearity for `1 < s`. -/
+theorem geometricTruncatedConvolution_trace_remainder_tendsto_of_one_lt (φ : BruhatCompactSupport C𝔽)
+    (ε : ℝ → ℝ) (ρ : ℝ → C𝔽 → ℝ)
+    (hε : Tendsto (fun R ↦ ε R * R) atTop (𝓝 0))
+    (hρ : ∀ᶠ R in atTop, IsModulatedCutoff m𝔽 R (ε R) (ρ R) ∧
+      0 < R⁻¹ + ε R ∧ R⁻¹ + ε R < R - ε R) :
+    ∃ t : ℝ → ℂ, cutoffTracesAt(hs₀, geometricTruncatedConvolution, ε, ρ, φ, t) ∧
+      Tendsto (fun R ↦ ((2 * Real.log R * (normOneIdeleClassTamagawaMeasure F).real univ : ℝ) : ℂ) *
+        φ.val 1 - t R) atTop (𝓝 quotientTrace(φ)) :=
+  geometricTruncatedConvolution_trace_remainder_tendsto a hα hs₀ φ
+    (spectralStripConvolution_nuclear a hα hs₁ φ) ε ρ hε hρ
+
+/-- Paper: Theorem 10.4.2.8, p. 463. The trace of cutoff convolution after spectral
+projection tends to the strip quotient trace, as in (10.4.2.20).
+Deviation: For `1 < s`, Theorem 10.3.2.1 supplies quotient nuclearity. The cutoff
+commutator controls the trace of the spectral-to-geometric block. -/
+theorem spectralRestriction_trace_tendsto_of_one_lt (φ : BruhatCompactSupport C𝔽)
+    (ε : ℝ → ℝ) (ρ : ℝ → C𝔽 → ℝ)
+    (hε : Tendsto (fun R ↦ ε R * R) atTop (𝓝 0))
+    (hρ : ∀ᶠ R in atTop, IsModulatedCutoff m𝔽 R (ε R) (ρ R) ∧
+      0 < R⁻¹ + ε R ∧ R⁻¹ + ε R < R - ε R) :
+    ∃ t : ℝ → ℂ, cutoffTracesAt(hs₀, spectralRestriction, ε, ρ, φ, t) ∧
+      Tendsto t atTop (𝓝 quotientTrace(φ)) :=
+  spectralRestriction_trace_tendsto a hα hs₀ φ
+    (spectralStripConvolution_nuclear a hα hs₁ φ) ε ρ hε hρ
+
+/-- The cutoff geometric-output block is the difference of the two nuclear cutoff operators. -/
+private theorem spectralRestriction_geometricOutput_trace_sub {H : Type*}
+    [NormedAddCommGroup H] [InnerProductSpace ℂ H] [CompleteSpace H]
+    (G P A M : H →L[ℂ] H) (hsplit : ∀ u, G u + P u = u)
+    (hPAP : P.comp (A.comp P) = P.comp A)
+    (hr : IsNuclearOperator (M.comp (A.comp P))) (hl : IsNuclearOperator ((M.comp P).comp A))
+    (r l : ℂ) (htr : r = hilbertTrace ⟨_, hr⟩) (htl : l = hilbertTrace ⟨_, hl⟩) :
+    ∃ hn : IsNuclearOperator (M.comp (G.comp (A.comp P))),
+      r - l = hilbertTrace ⟨_, hn⟩ := by
+  let T : nuclearEndomorphisms H := ⟨_, hr⟩
+  let S : nuclearEndomorphisms H := ⟨_, hl⟩
+  have heq : (T - S).val = M.comp (G.comp (A.comp P)) := by
+    ext u
+    change M (A (P u)) - M (P (A u)) = M (G (A (P u)))
+    have hp : P (A (P u)) = P (A u) := DFunLike.congr_fun hPAP u
+    rw [← map_sub, ← hp]
+    exact congrArg M (sub_eq_of_eq_add (hsplit _).symm)
+  have hn : IsNuclearOperator (M.comp (G.comp (A.comp P))) := heq ▸ (T - S).property
+  refine ⟨hn, ?_⟩
+  rw [htr, htl]
+  obtain ⟨tr, htr⟩ := hilbertTrace_linear (H := H)
+  calc
+    hilbertTrace T - hilbertTrace S = hilbertTrace (T - S) := by rw [← htr T, ← htr S, ← map_sub, htr]
+    _ = _ := congrArg hilbertTrace (Subtype.ext heq)
+
+/-- Paper: Theorem 10.4.2.8, p. 464. The cutoff trace of the geometric output of
+convolution on spectral inputs tends to zero.
+Deviation: This scalar conclusion follows by subtracting the traces in (10.4.2.20)
+and (10.4.2.9) for `1 < s`. Nuclearity is needed only after cutoff for this block. -/
+theorem spectralRestriction_geometricOutput_trace_tendsto_zero (φ : BruhatCompactSupport C𝔽)
+    (ε : ℝ → ℝ) (ρ : ℝ → C𝔽 → ℝ)
+    (hε : Tendsto (fun R ↦ ε R * R) atTop (𝓝 0))
+    (hρ : ∀ᶠ R in atTop, IsModulatedCutoff m𝔽 R (ε R) (ρ R) ∧
+      0 < R⁻¹ + ε R ∧ R⁻¹ + ε R < R - ε R) :
+    ∃ t : ℝ → ℂ, (∀ᶠ R in atTop, ∃ hc : IsModulatedCutoff m𝔽 R (ε R) (ρ R),
+      let T := (M(hc)).comp ((geometricProjection (F := F) a hα hs₀).comp
+        ((stripAction(φ)).comp (spectralProjection (F := F) a hα hs₀)))
+      ∃ hT : IsNuclearOperator T, t R = hilbertTrace (H := W₀) ⟨T, hT⟩) ∧
+      Tendsto t atTop (𝓝 0) := by
+  let P := spectralProjection (F := F) a hα hs₀
+  let G := geometricProjection (F := F) a hα hs₀
+  let A := stripAction(φ)
+  obtain ⟨l, hl, _⟩ := spectralTruncatedConvolution_trace_tendsto_of_one_lt a hα hs₁ φ ε ρ hε hρ
+  obtain ⟨r, hr, hlim⟩ := spectralRestriction_offDiagonal_trace_tendsto_zero a hα hs₀ φ
+    (spectralStripConvolution_nuclear a hα hs₁ φ) ε ρ hε hρ l hl
+  refine ⟨fun R ↦ r R - l R, ?_, hlim⟩
+  filter_upwards [hr, hl] with R hrR hlR
+  obtain ⟨hc, hN, hright⟩ := hrR
+  obtain ⟨_, hN', hleft⟩ := hlR
+  change IsNuclearOperator ((M(hc)).comp (A.comp P)) at hN
+  change IsNuclearOperator (((M(hc)).comp P).comp A) at hN'
+  have hadd (u : W₀) : G u + P u = u :=
+    (Θ(a, hα, hs₀)).starProjection_add_starProjection_orthogonal u
+  have hpap : P.comp (A.comp P) = P.comp A :=
+    spectralProjection_convolution_spectralProjection (F := F) a hα hs₀ φ
+  refine ⟨hc, ?_⟩
+  with_unfolding_all
+    exact spectralRestriction_geometricOutput_trace_sub (H := ↥W₀) G P A (M(hc))
+      hadd hpap hN hN' (r R) (l R) hright hleft
+
+end DegreeGreaterThanOne
 
 end Truncations
 

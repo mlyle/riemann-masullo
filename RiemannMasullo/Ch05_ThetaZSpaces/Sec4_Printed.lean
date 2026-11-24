@@ -2,9 +2,8 @@ module
 
 public import RiemannMasullo.Ch05_ThetaZSpaces.Sec4
 import all RiemannMasullo.Ch07_SchauderBasesZeta.Sec1a
-import all RiemannMasullo.Ch05_ThetaZSpaces.Sec4
 import all RiemannMasullo.Ch02_AdelicTheta.Sec3
-import all RiemannMasullo.Ch04_PeriodicSchauderBases.Sec6
+import RiemannMasullo.Ch04_PeriodicSchauderBases.Sec6
 
 /-!
 # Chapter 5.4: statements that are false as printed

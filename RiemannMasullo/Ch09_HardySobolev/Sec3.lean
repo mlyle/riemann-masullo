@@ -2184,6 +2184,13 @@ private theorem exists_frequency_line (hm : IsModulation m) (hms : Surjective m)
   change c * (c⁻¹ * t * _) = _
   rw [mul_assoc c⁻¹, mul_inv_cancel_left₀ hc]
 
+/-- The annihilator of a surjective modulation's kernel is a real frequency line.
+The character at `t` evaluates to `exp(i t log m(g))`. -/
+theorem exists_modulatedFrequencyLine (hm : IsModulation m) (hms : Surjective m) :
+    ∃ e : Multiplicative ℝ ≃ₜ* lcaAnnihilator m.toMonoidHom.ker,
+      ∀ (t : ℝ) g, (e (Multiplicative.ofAdd t)).val g = Circle.exp (t * Real.log ((m g).val : ℝ)) :=
+  exists_frequency_line m hm hms
+
 /-- A compact set of frequencies with a fixed restriction to the kernel
 lies in a bounded interval in the corresponding real frequency line. -/
 private theorem compact_subset_frequency_band (hm : IsModulation m) (hms : Surjective m)
@@ -2606,6 +2613,12 @@ private theorem schwartz_mem_modulatedSobolev (f : SchwartzBruhat G) (s : ℝ) (
       d x ≤ ((1 + |t x|) ^ 2) ^ (s / 2) :=
         Real.rpow_le_rpow (by positivity) (by nlinarith [abs_nonneg (t x)]) (by linarith)
       _ = _ := by rw [← Real.rpow_natCast (1 + |t x|) 2, ← Real.rpow_mul (by positivity)]; congr 1; ring
+
+/-- Schwartz–Bruhat functions are square-integrable with every nonnegative power of the
+logarithmic Sobolev weight of a modulation. -/
+theorem SchwartzBruhat.memLp_modulatedSobolev (f : SchwartzBruhat G) (s : ℝ) (hs : 0 ≤ s) :
+    MemLp (f : G → ℂ) 2 (sobolevMeasure μ (modulatedSobolevWeight m) s) :=
+  schwartz_mem_modulatedSobolev μ m f s hs
 
 /-- Paper: Corollary 9.3.2.3(1), p. 425. There is a Sobolev function whose
 Fourier transform has a smooth representative supported in the outer frequency band
@@ -3986,5 +3999,145 @@ theorem truncatedHardySobolevConvolution_trace_tendsto
       sub_mul] using ht'
 
 end Trace
+
+section MellinFrequencyChart
+
+variable [SecondCountableTopology G]
+
+/-- On the positive reals, the Mellin frequency normalized by exp(−it log x)
+has a surjective real Schwartz Fourier chart for every choice of Haar measure. -/
+private theorem positiveRealSchwartz_mellinFrequencyEquiv (η : Measure ℝ≥0ˣ) [η.IsHaarMeasure] :
+    ∃ e : 𝓢(ℝ, ℂ) ≃L[ℂ] SchwartzBruhat ℝ≥0ˣ,
+      ∃ r : Multiplicative ℝ ≃ₜ* PontryaginDual ℝ≥0ˣ,
+        (∀ (t : ℝ) (x : ℝ≥0ˣ), r (Multiplicative.ofAdd t) x = Circle.exp (-t * Real.log (x.val : ℝ))) ∧
+        ∀ (p : 𝓢(ℝ, ℂ)) (t : ℝ), lcaFourier η (e p) (r (Multiplicative.ofAdd t)) = p t := by
+  let : BorelSpace ℝ≥0ˣ := borelSpace_units_of_continuousInv₀ ℝ≥0
+  let : LocallyCompactSpace ℝ≥0ˣ := positiveRealLogEquiv.toHomeomorph.isOpenEmbedding.locallyCompactSpace
+  let : SecondCountableTopology ℝ≥0ˣ := Units.isEmbedding_val₀.secondCountableTopology
+  obtain ⟨R,hR⟩ := exists_realPontryaginDualEquiv
+  let d : PontryaginDual ℝ≥0ˣ ≃ₜ* PontryaginDual (Multiplicative ℝ) :=
+    { toFun := PontryaginDual.map (positiveRealLogEquiv.symm : Multiplicative ℝ →ₜ* ℝ≥0ˣ)
+      invFun := PontryaginDual.map (positiveRealLogEquiv : ℝ≥0ˣ →ₜ* Multiplicative ℝ)
+      map_mul' := (PontryaginDual.map _).map_mul
+      left_inv := fun χ ↦ PontryaginDual.ext fun u ↦ congrArg χ (positiveRealLogEquiv.symm_apply_apply u)
+      right_inv := fun χ ↦ PontryaginDual.ext fun u ↦ congrArg χ (positiveRealLogEquiv.apply_symm_apply u)
+      continuous_toFun := (PontryaginDual.map _).continuous
+      continuous_invFun := (PontryaginDual.map _).continuous }
+  let c := 2 * Real.pi
+  have hc : c ≠ 0 := mul_ne_zero two_ne_zero Real.pi_ne_zero
+  let scale : Multiplicative ℝ ≃ₜ* Multiplicative ℝ :=
+    ContinuousMulEquiv.mk' (show ℝ ≃ₜ ℝ from Homeomorph.mulLeft₀ (-c⁻¹) (neg_ne_zero.mpr (inv_ne_zero hc)))
+      fun x y ↦ mul_add _ x.toAdd y.toAdd
+  let r := scale.trans (R.trans d.symm)
+  obtain ⟨U,hU⟩ := schwartzBruhat_realCoordinate_equiv r.symm
+  obtain ⟨G,hG⟩ := schwartzBruhat_fourier_equiv η
+  let e := U.trans G.symm
+  refine ⟨e, r, ?_, fun p t ↦ ?_⟩
+  · intro t x
+    change R (Multiplicative.ofAdd (-c⁻¹ * t)) (positiveRealLogEquiv x) = _
+    rw [show positiveRealLogEquiv x = Multiplicative.ofAdd (Real.log (x.val : ℝ)) from
+      congrArg Multiplicative.ofAdd (positiveRealLogEquiv_apply x), hR]
+    congr 1
+    change c * (-c⁻¹ * t * _) = _
+    field_simp
+  · exact ((hG (e p)).2 _).symm.trans
+      ((congrArg (fun v : SchwartzBruhat (PontryaginDual ℝ≥0ˣ) ↦ v (r (Multiplicative.ofAdd t)))
+        (G.apply_symm_apply (U p))).trans ((hU p _).trans (congrArg (fun z : Multiplicative ℝ ↦ p z.toAdd)
+          (r.symm_apply_apply _))))
+
+/-- The inverse base character times arbitrary Schwartz profiles of the norm
+gives every Schwartz–Bruhat vector of the corresponding translation isotype. -/
+private theorem exists_modulatedSchwartz_isotypeLift (m : G →ₜ* ℝ≥0ˣ) (hm : IsModulation m)
+    (hms : Surjective m) (χ : PontryaginDual G) :
+    ∃ L : SchwartzBruhat ℝ≥0ˣ →L[ℂ] SchwartzBruhat G,
+      (∀ p x, L p x = ((χ⁻¹ x : Circle) : ℂ) * p (m x)) ∧
+      ∀ v : SchwartzBruhat G, (∀ (k : m.toMonoidHom.ker) (x : G), v (k.val⁻¹ * x) = (χ k.val : ℂ) * v x) → ∃ p, L p = v := by
+  obtain ⟨τ,hτ⟩ := exists_fullModulationSection m hm hms
+  obtain ⟨L,hL⟩ := exists_character_profile_lift m hm τ hτ χ⁻¹
+  refine ⟨L,hL, fun v hv ↦ ?_⟩
+  let : CompactSpace m.toMonoidHom.ker := isCompact_iff_compactSpace.mp (IsModulation.isCompact_ker (m := m) hm)
+  let : BorelSpace m.toMonoidHom.ker := inferInstance
+  let : LocallyCompactSpace m.toMonoidHom.ker := inferInstance
+  let κ : Measure m.toMonoidHom.ker := Measure.haar
+  let : κ.IsHaarMeasure := inferInstanceAs (Measure.haar (G := m.toMonoidHom.ker)).IsHaarMeasure
+  obtain ⟨M,hM⟩ := exists_schwartzBruhat_characterEquiv χ
+  let u := M v
+  have hu (k : m.toMonoidHom.ker) (x : G) : u (k.val⁻¹*x) = u x := by
+    simp only [u, hM, hv, map_mul, map_inv, Circle.coe_mul, Circle.coe_inv]
+    field_simp [Circle.coe_ne_zero]
+  obtain ⟨R, -, hR⟩ := exists_schwartzBruhat_isotype_profile m hm κ τ hτ (1 : PontryaginDual m.toMonoidHom.ker)
+  have hPu : schwartzBruhatIsotypicProjector m hm κ (1 : PontryaginDual m.toMonoidHom.ker) u = u := by
+    apply schwartzBruhatIsotypicProjector_apply_isotype
+    apply (mem_actionIsotype _ _ _).mpr
+    intro k
+    apply Subtype.ext
+    funext x
+    change schwartzBruhatTranslationAction (G := G) k.val u x = (1 : ℂ) * u x
+    rw [schwartzBruhatTranslationAction_apply, one_mul, hu]
+  refine ⟨R u, Subtype.ext (funext fun x ↦ ?_)⟩
+  let k : m.toMonoidHom.ker := ⟨x / τ (m x), by change m (x / τ (m x)) = 1; rw [map_div, hτ, div_self']⟩
+  have hk : k.val⁻¹ * x = τ (m x) := by change (x / τ (m x))⁻¹ * x = _; rw [inv_div, div_mul_cancel]
+  have hprof : R u (m x) = u x := by rw [hR, hPu, ← hk, hu]
+  change L (R u) x = v x
+  rw [hL, hprof, hM]
+  change (((χ x)⁻¹ : Circle) : ℂ) * ((χ x : ℂ) * v x) = v x
+  rw [Circle.coe_inv, inv_mul_cancel_left₀ (Circle.coe_ne_zero _)]
+
+/-- Real Schwartz profiles on a single component of the dual have a continuous
+linear inverse Fourier transform. The chart uses the Mellin ordinate, vanishes off
+that component and exhausts the Schwartz tests in its compact-character isotype. -/
+theorem exists_schwartzBruhat_mellinFrequencyChart (m : G →ₜ* ℝ≥0ˣ) (hm : IsModulation m)
+    (hms : Surjective m) (μ : Measure G) [μ.IsHaarMeasure] (χ : PontryaginDual G) :
+    ∃ (P : 𝓢(ℝ, ℂ) →L[ℂ] SchwartzBruhat G) (γ : ℝ → PontryaginDual G),
+      (∀ t x, γ t x = (χ x)⁻¹ * Circle.exp (-t * Real.log ((m x).val : ℝ))) ∧
+      (∀ p t, lcaFourier μ (P p) (γ t) = p t) ∧
+      (∀ p ψ, ψ ∉ range γ → lcaFourier μ (P p) ψ = 0) ∧
+      (∀ p (k : m.toMonoidHom.ker) (x : G), P p (k.val⁻¹ * x) = (χ k.val : ℂ) * P p x) ∧
+      ∀ v : SchwartzBruhat G, (∀ (k : m.toMonoidHom.ker) (x : G), v (k.val⁻¹ * x) = (χ k.val : ℂ) * v x) → ∃ p, P p = v := by
+  let η := (μ).map m
+  let : BorelSpace ℝ≥0ˣ := borelSpace_units_of_continuousInv₀ ℝ≥0
+  let : η.IsHaarMeasure := Measure.isHaarMeasure_map μ (m).toMonoidHom (m).continuous hms
+    (isProperMap_iff_tendsto_cocompact.mp hm.1).2
+  obtain ⟨e,r,hr,he⟩ := positiveRealSchwartz_mellinFrequencyEquiv η
+  obtain ⟨L,hL,honto⟩ := exists_modulatedSchwartz_isotypeLift m hm hms χ
+  let P := L.comp e.toContinuousLinearMap
+  let γ (t : ℝ) := χ⁻¹ * PontryaginDual.map m (r (Multiplicative.ofAdd t))
+  have hP (p : 𝓢(ℝ, ℂ)) (x : G) : P p x = ((χ⁻¹ x : Circle) : ℂ) * e p (m x) := hL _ _
+  refine ⟨P, γ, fun t x ↦ ?_, fun p t ↦ ?_, fun p ψ hψ ↦ ?_, fun p k x ↦ ?_, fun v hv ↦ ?_⟩
+  · change (χ x)⁻¹ * r (Multiplicative.ofAdd t) (m x) = _
+    rw [hr]
+  · let ξ := r (Multiplicative.ofAdd t)
+    have heq (x : G) : P p x * star (γ t x : ℂ) = (e p (m x)) * star (ξ (m x) : ℂ) := by
+      rw [hP]
+      change ↑((χ x)⁻¹) * e p (m x) * star (((χ x)⁻¹ * ξ (m x) : Circle) : ℂ) = _
+      rw [Circle.coe_mul, Circle.coe_inv_eq_conj, ← Complex.star_def, star_mul, star_star]
+      rw [show star (χ x : ℂ) = (χ x : ℂ)⁻¹ from (Circle.coe_inv_eq_conj _).symm.trans (Circle.coe_inv _)]
+      field_simp [Circle.coe_ne_zero]
+    calc
+      lcaFourier μ (P p) (γ t) = ∫ x, e p (m x) * star (ξ (m x) : ℂ) ∂μ :=
+        integral_congr_ae (.of_forall heq)
+      _ = lcaFourier η (e p) ξ :=
+        (integral_map (m).continuous.measurable.aemeasurable
+          ((continuous_schwartzBruhat (e p)).mul (continuous_subtype_val.comp ξ.continuous).star).aestronglyMeasurable).symm
+      _ = p t := he p t
+  · by_contra hne
+    obtain ⟨τ,hτ⟩ := exists_fullModulationSection m hm hms
+    have hne' : ψ ∈ support (lcaFourier μ (fun x ↦ (χ⁻¹ x : ℂ) * e p (m x))) := by
+      change lcaFourier μ _ ψ ≠ 0
+      rwa [← (show ⇑(P p) = _ from funext (hP p))]
+    obtain ⟨ξ, -, hψ'⟩ := support_fourier_character_profile μ m τ hτ χ⁻¹ (e p) (continuous_schwartzBruhat _) hne'
+    obtain ⟨z,rfl⟩ := r.surjective ξ
+    exact hψ ⟨z.toAdd,hψ'⟩
+  · have hm : m (k.val⁻¹ * x) = m x := by
+      rw [map_mul, map_inv, show m k.val = 1 from k.property, inv_one, one_mul]
+    rw [hP, hP, hm]
+    change (((χ (k.val⁻¹ * x))⁻¹ : Circle) : ℂ) * _ = _
+    rw [map_mul, map_inv, mul_inv_rev, inv_inv, Circle.coe_mul]
+    change _ = (χ k.val : ℂ) * ((((χ x)⁻¹ : Circle) : ℂ) * e p (m x))
+    ring
+  · obtain ⟨q,hq⟩ := honto v hv
+    exact ⟨e.symm q, (congrArg L (e.apply_symm_apply q)).trans hq⟩
+
+end MellinFrequencyChart
 
 end RiemannMasullo

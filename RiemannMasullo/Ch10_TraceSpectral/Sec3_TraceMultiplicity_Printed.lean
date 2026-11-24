@@ -4,6 +4,7 @@ public import RiemannMasullo.Ch10_TraceSpectral.Sec3
 
 import RiemannMasullo.Ch10_TraceSpectral.Sec1
 import RiemannMasullo.Ch12_TraceGeometric.Sec5
+import RiemannMasullo.ForMathlib.NumberTheory.NumberField.DedekindZeta.MultipleZero
 
 /-! # The line and strip trace formulas with the printed multiplicity -/
 
@@ -209,16 +210,24 @@ private theorem spectralLineConvolution_trace_false_test (F : Type) [Field F] [N
     exact mul_pos hpos hpos
 
 /-- Some completed Hecke L-function has a zero of order at least two on some vertical line,
-for some basepoint choice. `Ch10_TraceSpectral/Sec2_Printed.lean` proves this privately for
-the trivial character of the splitting field of X³ − 2, as
-`spectralLineJet_memLp_false_multipleZero`, and its public `Printed.spectralLineJet_memLp_false`
-gives the present form through `spectralLineJet_memLp`. Neither is available here, since
-a file of printed claims has no importers. -/
+for some basepoint choice. Choosing the trivial lift of the trivial norm-one character
+realizes the multiple zero of the completed Dedekind zeta function on that line. -/
 private theorem spectralLineConvolution_trace_false_multipleZero :
     ∃ (F : Type) (_ : Field F) (_ : NumberField F)
       (χ : PontryaginDual C₁(F) → PontryaginDual C𝔽(F)) (_ : IsSpectralBasepointChoice (F := F) χ)
       (a : ℝ) (ω : PontryaginDual C₁(F)) (t : ℝ),
-      2 ≤ (orderAt(F, χ ω, shift(a, t))).untop₀.toNat := by sorry
+      2 ≤ (orderAt(F, χ ω, shift(a, t))).untop₀.toNat := by
+  classical
+  obtain ⟨F, _, _, z, _, _, hz⟩ := exists_completedDedekindZeta_multipleZero
+  obtain ⟨χ, hχ⟩ := exists_spectralBasepointChoice F
+  refine ⟨F, _, _, Function.update χ 1 1, ?_, z.re, 1, z.im, ?_⟩
+  · intro ω
+    by_cases h : ω = 1
+    · subst ω
+      rw [Function.update_self]
+      rfl
+    · simpa only [Function.update_of_ne h] using hχ ω
+  · simpa only [Function.update_self, Complex.re_add_im] using Nat.succ_le_of_lt hz
 
 /-- A zero of order at least two on the line refutes the printed floor multiplicity at
 Sobolev degree three. The trace of any nuclear convolution is the sum with the strict cutoff,

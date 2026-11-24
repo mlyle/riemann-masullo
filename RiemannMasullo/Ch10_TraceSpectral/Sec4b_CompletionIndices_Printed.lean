@@ -8,6 +8,13 @@ import RiemannMasullo.Ch13_ZerosHecke.Targets
 import RiemannMasullo.Ch13_ZerosHecke.RationalExteriorZeros
 import Mathlib.Topology.ContinuousMap.SecondCountableSpace
 import RiemannMasullo.External.ZetaLab.HardyFirstZero.FirstZero
+import RiemannMasullo.External.HardyCriticalLine.CriticalLineZeroInfinitude
+import RiemannMasullo.External.HardyCriticalLine.LowerIntegralBound
+import RiemannMasullo.External.HardyCriticalLine.UpperIntegralBound
+import Mathlib.Analysis.Calculus.Deriv.Star
+import Mathlib.Analysis.Complex.LocallyUniformLimit
+import Mathlib.NumberTheory.LSeries.Nonvanishing
+import Mathlib.NumberTheory.MulChar.Lemmas
 
 import all RiemannMasullo.Ch03_IdelicZeta.Sec2
 
@@ -857,13 +864,959 @@ theorem Printed.spectralLineJet_cofinite_iff_coordinates_false_of_criticalZeros
     ¬ Printed.spectralLineJet_cofinite_iff_coordinates :=
   counterexample_of_primitive_dirichlet_zeros h
 
+open Complex in
+/-- For conductor one the Dirichlet L-function is the ordinary Riemann zeta function. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_modOne (χ : DirichletCharacter ℂ 1) :
+    {t : ℝ | χ.LFunction ((1 / 2 : ℂ) + (t : ℂ) * I) = 0}.Infinite := by
+  simp only [DirichletCharacter.LFunction_modOne_eq]
+  refine HardyCriticalLine.positiveHardyZeroHeights_infinite.mono fun t ht ↦ ?_
+  exact (HardyCriticalLine.hardyFunctionReal_eq_zero_iff t).mp ht.2
+
+open scoped ComplexConjugate in
+open Complex in
+/-- Conjugation of Dirichlet coefficients carries the character to its inverse. The identity theorem
+extends the conjugation formula from absolute convergence to the punctured plane. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_conj {N : ℕ} [NeZero N] (χ : DirichletCharacter ℂ N)
+    (z : ℂ) (hz : z ≠ 1) : conj (χ.LFunction (conj z)) = χ⁻¹.LFunction z := by
+  have hf : AnalyticOnNhd ℂ (fun w ↦ conj (χ.LFunction (conj w))) {1}ᶜ :=
+    DifferentiableOn.analyticOnNhd
+      (fun w hw ↦ (differentiableAt_conj_conj_iff.mpr <| χ.differentiableAt_LFunction _ <|
+        Or.inl ((map_ne_one_iff _ (starRingEnd ℂ).injective).mpr hw)).differentiableWithinAt)
+      isOpen_compl_singleton
+  have hg : AnalyticOnNhd ℂ χ⁻¹.LFunction {1}ᶜ :=
+    DifferentiableOn.analyticOnNhd
+      (fun w hw ↦ (χ⁻¹.differentiableAt_LFunction _ (.inl hw)).differentiableWithinAt)
+      isOpen_compl_singleton
+  have hc (w : ℂ) (hw : 1 < w.re) : conj (χ.LFunction (conj w)) = χ⁻¹.LFunction w := by
+    rw [χ.LFunction_eq_LSeries (by simpa using hw), χ⁻¹.LFunction_eq_LSeries hw]
+    unfold LSeries
+    rw [conj_tsum]
+    refine tsum_congr fun n ↦ ?_
+    by_cases hn : n = 0
+    · simp [hn]
+    rw [LSeries.term_of_ne_zero hn, LSeries.term_of_ne_zero hn, map_div₀,
+      ← conj_cpow _ _ (by rw [natCast_arg]; positivity), conj_natCast]
+    exact congrArg (fun a : ℂ ↦ a / (n : ℂ) ^ w) (MulChar.star_apply' χ (n : ZMod N))
+  have hn : {w : ℂ | 1 < w.re} ∈ 𝓝 (2 : ℂ) :=
+    (isOpen_lt (g := Complex.re) (continuous_const (y := (1 : ℝ))) continuous_re).mem_nhds (by norm_num)
+  exact hf.eqOn_of_preconnected_of_eventuallyEq hg
+    (isConnected_compl_singleton_of_one_lt_rank (by simp) 1).isPreconnected
+    (by simp : (2 : ℂ) ∈ ({1}ᶜ : Set ℂ))
+    (eventuallyEq_of_mem hn fun w hw ↦ hc w hw) hz
+
+open scoped ComplexConjugate in
+open Complex in
+/-- Conjugation preserves the parity-dependent real Gamma factor. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_gamma_conj {N : ℕ} [NeZero N] (χ : DirichletCharacter ℂ N) (z : ℂ) :
+    χ⁻¹.gammaFactor (conj z) = conj (χ.gammaFactor z) := by
+  rcases χ.even_or_odd with h | h
+  · have h' : χ⁻¹.Even := by
+      change χ⁻¹ (-1) = 1
+      rw [← MulChar.star_apply', h, star_one]
+    rw [h.gammaFactor_def, h'.gammaFactor_def, Gammaℝ_conj]
+  · have h' : χ⁻¹.Odd := by
+      change χ⁻¹ (-1) = -1
+      rw [← MulChar.star_apply', h, star_neg, star_one]
+    rw [h.gammaFactor_def, h'.gammaFactor_def, ← Gammaℝ_conj, map_add, map_one]
+
+open Complex in
+/-- The Gamma factor is nonzero in the right half-plane. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_gamma_ne {N : ℕ} (χ : DirichletCharacter ℂ N) {s : ℂ} (hs : 0 < s.re) :
+    χ.gammaFactor s ≠ 0 := by
+  rcases χ.even_or_odd with h | h
+  · rw [h.gammaFactor_def]
+    exact Gammaℝ_ne_zero_of_re_pos hs
+  · rw [h.gammaFactor_def]
+    exact Gammaℝ_ne_zero_of_re_pos (by simp; linarith)
+
+open Complex in
+/-- Recover the completed L-function from its finite and archimedean factors. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_completion {N : ℕ} [NeZero N] (χ : DirichletCharacter ℂ N)
+    {s : ℂ} (hs : 0 < s.re) :
+    χ.completedLFunction s = χ.gammaFactor s * χ.LFunction s := by
+  have h0 : s ≠ 0 := by intro h; simp [h] at hs
+  rw [χ.LFunction_eq_completed_div_gammaFactor _ (.inl h0)]
+  field_simp [primitiveDirichletL_infinite_criticalZeros_gamma_ne χ hs]
+
+open scoped ComplexConjugate in
+open Complex in
+/-- On the critical line the primitive functional equation relates each value to its conjugate. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_fe {N : ℕ} [NeZero N] {χ : DirichletCharacter ℂ N} (hχ : χ.IsPrimitive)
+    (t : ℝ) :
+    let s := (1 / 2 : ℂ) + t * I
+    χ.completedLFunction s = (N : ℂ) ^ (-(t : ℂ) * I) * χ.rootNumber * conj (χ.completedLFunction s) := by
+  intro s
+  have hre : s.re = 1 / 2 := by norm_num [s, Complex.add_re, Complex.mul_re]
+  have hne : s ≠ 1 := by intro h; norm_num [h] at hre
+  have hfe := hχ.completedLFunction_one_sub (1 - s)
+  have hc : 1 - s = conj s := by
+    dsimp only [s]
+    simp only [map_add, map_div₀, map_one, map_ofNat, map_mul, conj_ofReal, conj_I]
+    ring
+  have hh : 1 - s - 1 / 2 = - (t : ℂ) * I := by dsimp [s]; ring
+  rw [sub_sub_cancel, hh, hc] at hfe
+  refine hfe.trans ?_
+  apply congrArg (fun w : ℂ ↦ (N : ℂ) ^ (-(t : ℂ) * I) * χ.rootNumber * w)
+  rw [primitiveDirichletL_infinite_criticalZeros_completion _ (by rw [conj_re, hre]; norm_num),
+      primitiveDirichletL_infinite_criticalZeros_completion _ (by rw [hre]; norm_num), map_mul, primitiveDirichletL_infinite_criticalZeros_gamma_conj]
+  apply congrArg (fun w : ℂ ↦ conj (χ.gammaFactor s) * w)
+  simpa using (primitiveDirichletL_infinite_criticalZeros_conj χ (conj s) ((map_ne_one_iff _ (starRingEnd ℂ).injective).mpr hne)).symm
+
+open scoped ComplexConjugate in
+open Complex in
+/-- Removing the root-number phase and half of the conductor twist gives a real value. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_phase {N : ℕ} [NeZero N] {χ : DirichletCharacter ℂ N} (hχ : χ.IsPrimitive)
+    (t : ℝ) :
+    let s := (1 / 2 : ℂ) + t * I
+    let θ := (t * Real.log N - χ.rootNumber.arg) / 2
+    let H := exp ((θ : ℂ) * I) * χ.completedLFunction s
+    conj H = H := by
+  intro s θ H
+  have heps : exp ((χ.rootNumber.arg : ℂ) * I) = χ.rootNumber := by
+    simpa only [DirichletCharacter.norm_rootNumber hχ, ofReal_one, one_mul] using
+      norm_mul_exp_arg_mul_I χ.rootNumber
+  have hN : (N : ℂ) ≠ 0 := by exact_mod_cast NeZero.ne N
+  have hlog : log (N : ℂ) = ((Real.log N : ℝ) : ℂ) := by
+    rw [ofReal_log (Nat.cast_nonneg N), ofReal_natCast]
+  have hfac : exp (((θ : ℂ)) * I) * ((N : ℂ) ^ (-(t : ℂ) * I) * χ.rootNumber) =
+      conj (exp ((θ : ℂ) * I)) := by
+    rw [cpow_def_of_ne_zero hN, hlog, ← heps, ← exp_add, ← exp_add, ← exp_conj, map_mul,
+      conj_ofReal, conj_I]
+    congr 1
+    dsimp only [θ]
+    push_cast
+    ring
+  change conj (exp ((θ : ℂ) * I) * χ.completedLFunction s) =
+    exp ((θ : ℂ) * I) * χ.completedLFunction s
+  rw [map_mul, ← hfac, mul_assoc]
+  exact congrArg (fun w : ℂ ↦ exp ((θ : ℂ) * I) * w) (primitiveDirichletL_infinite_criticalZeros_fe hχ t).symm
+
+open Complex in
+/-- Normalizing a nonzero complex number near one changes its distance from one by at most a factor two. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_unit_sub_one {z : ℂ} (hz : z ≠ 0) :
+    ‖z / (‖z‖ : ℂ) - 1‖ ≤ 2 * ‖z - 1‖ := by
+  have hn : (‖z‖ : ℂ) ≠ 0 := ofReal_ne_zero.mpr (norm_ne_zero_iff.mpr hz)
+  have h : z / (‖z‖ : ℂ) - z = (z / (‖z‖ : ℂ)) * ((1 - ‖z‖ : ℝ) : ℂ) := by
+    push_cast
+    field_simp
+  have he : ‖z / (‖z‖ : ℂ) - z‖ ≤ ‖z - 1‖ := by
+    rw [h, norm_mul, norm_div, norm_real, Real.norm_eq_abs, abs_norm,
+      div_self (norm_ne_zero_iff.mpr hz), one_mul, norm_real, Real.norm_eq_abs, abs_sub_comm]
+    simpa only [norm_one] using abs_norm_sub_norm_le z (1 : ℂ)
+  simpa [two_mul] using (norm_sub_le_norm_sub_add_norm_sub (z / (‖z‖ : ℂ)) z 1).trans (add_le_add he le_rfl)
+
+open scoped ComplexConjugate in
+open Complex in
+/-- At height `t` the odd Gamma phase differs from the even one rotated by `π / 4` by at most
+`2 exp (−πt)`. The reflection formula reduces the comparison to normalizing `1 + i exp (−πt)`. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_gamma_shift (t : ℝ) :
+    let s := (1 / 2 : ℂ) + (t : ℂ) * I
+    let u (z : ℂ) := z / (‖z‖ : ℂ)
+    ‖u (Gammaℝ (s + 1)) - exp (((Real.pi / 4 : ℝ) : ℂ) * I) * u (Gammaℝ s)‖ ≤
+      2 * Real.exp (-Real.pi * t) := by
+  intro s u
+  let q := Real.exp (-Real.pi * t)
+  let θ := ((Real.pi / 4 : ℝ) : ℂ) * I
+  let y := Real.pi * t / 2
+  have hs : 1 - s = conj s := by
+    dsimp only [s]
+    simp only [map_add, map_div₀, map_one, map_ofNat, map_mul, conj_ofReal, conj_I]
+    ring
+  have hc : cos (Real.pi * s / 2) =
+      ((Real.exp y / 2 : ℝ) : ℂ) * exp (-θ) * (1 + I * (q : ℂ)) := by
+    have h1 : ((Real.pi : ℂ) * s / 2) * I = -(y : ℂ) + θ := by
+      dsimp [s, y, θ]
+      push_cast
+      ring_nf
+      simp [I_sq]
+      ring
+    have h2 : -((Real.pi : ℂ) * s / 2) * I = (y : ℂ) - θ := by
+      rw [neg_mul, h1]; ring
+    have hrot : exp (2 * θ) = I := by
+      rw [show 2 * θ = (Real.pi / 2 : ℂ) * I by dsimp [θ]; push_cast; ring, exp_pi_div_two_mul_I]
+    have hq : ((q : ℝ) : ℂ) = exp (-2 * (y : ℂ)) := by
+      dsimp only [q, y]; rw [ofReal_exp]; congr 1; push_cast; ring
+    rw [cos, h1, h2]
+    rw [hq, ← hrot]
+    rw [ofReal_div (Real.exp y) 2, ofReal_ofNat, ofReal_exp y]
+    have ha : exp (-↑y + θ) = exp (y : ℂ) * exp (-θ) * (exp (2 * θ) * exp (-2 * (y : ℂ))) := by
+      simp only [← exp_add]
+      congr 1
+      ring
+    have hb : exp (↑y - θ) = exp (y : ℂ) * exp (-θ) := by rw [sub_eq_add_neg, exp_add]
+    rw [ha, hb]
+    ring
+  have hmul (a b : ℂ) : u (a * b) = u a * u b := by
+    dsimp only [u]
+    rw [norm_mul, ofReal_mul]
+    exact div_mul_div_comm .. |>.symm
+  have hnorm (z : ℂ) (hz : z ≠ 0) : ‖u z‖ = 1 := by
+    dsimp only [u]; rw [norm_div, norm_real, Real.norm_eq_abs, abs_norm, div_self (norm_ne_zero_iff.mpr hz)]
+  have hconj (z : ℂ) : u (conj z) = conj (u z) := by
+    simp [u]
+  have hinv (z : ℂ) : u z⁻¹ = (u z)⁻¹ := by
+    simp [u, div_eq_mul_inv, mul_comm]
+  have hg : Gammaℝ s ≠ 0 := Gammaℝ_ne_zero_of_re_pos (by norm_num [s, add_re, mul_re])
+  have hq0 : (1 + I * (q : ℂ)) ≠ 0 := by
+    intro h
+    have := congrArg Complex.re h
+    simp at this
+  have hθ : ‖exp θ‖ = 1 := norm_exp_ofReal_mul_I _
+  have hθn : ‖exp (-θ)‖ = 1 := by rw [exp_neg, norm_inv, hθ, inv_one]
+  have huθ : u (exp (-θ)) = (exp θ)⁻¹ := by rw [show u (exp (-θ)) = exp (-θ) / (‖exp (-θ)‖ : ℂ) by rfl, hθn, ofReal_one, div_one, exp_neg]
+  have hpos : 0 < Real.exp y / 2 := by positivity
+  have hscale : u ((Real.exp y / 2 : ℝ) : ℂ) = 1 := by simp [u]
+  have hreflect := congrArg u (Gammaℝ_one_sub_mul_Gammaℝ_one_add s)
+  rw [hs, Gammaℝ_conj, add_comm (1 : ℂ) s, hmul, hconj, ← inv_eq_conj (hnorm _ hg), hc,
+    hinv, hmul, hmul, hscale, one_mul, huθ, mul_inv_rev, inv_inv] at hreflect
+  have hgo : u (Gammaℝ (s + 1)) = exp θ * u (Gammaℝ s) * conj (u (1 + I * (q : ℂ))) := by
+    rw [← inv_eq_conj (hnorm _ hq0)]
+    have hgu : u (Gammaℝ s) ≠ 0 := div_ne_zero hg (ofReal_ne_zero.mpr (norm_ne_zero_iff.mpr hg))
+    calc _ = u (Gammaℝ s) * ((u (Gammaℝ s))⁻¹ * u (Gammaℝ (s + 1))) := by field_simp
+         _ = _ := by rw [hreflect]; ring
+  rw [hgo, ← mul_sub_one, norm_mul, norm_mul, hθ, hnorm _ hg, one_mul, one_mul,
+    show conj (u (1 + I * (q : ℂ))) - 1 = conj (u (1 + I * (q : ℂ)) - 1) by simp,
+    norm_conj]
+  calc _ ≤ 2 * ‖(1 + I * (q : ℂ)) - 1‖ := primitiveDirichletL_infinite_criticalZeros_unit_sub_one hq0
+       _ = _ := by rw [add_sub_cancel_left, norm_mul, norm_I, one_mul, norm_real, Real.norm_of_nonneg (Real.exp_pos _).le]
+
+open Complex in
+/-- The archimedean factor is continuous at all points of the critical line. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_gamma_cont {N : ℕ} (χ : DirichletCharacter ℂ N) :
+    Continuous (fun t ↦ χ.gammaFactor (HardyCriticalLine.criticalLinePoint t)) := by
+  have hg (z : ℂ) (hz : 0 < z.re) : ContinuousAt Gammaℝ z := by
+    have h := (differentiable_Gammaℝ_inv z).continuousAt.inv₀ (inv_ne_zero (Gammaℝ_ne_zero_of_re_pos hz))
+    simpa only [Pi.inv_def, inv_inv] using h
+  apply continuous_iff_continuousAt.mpr
+  intro t
+  have hs : 0 < (HardyCriticalLine.criticalLinePoint t).re := by
+    norm_num [HardyCriticalLine.criticalLinePoint, add_re, mul_re]
+  rcases χ.even_or_odd with h | h
+  · simp_rw [h.gammaFactor_def]
+    exact (hg _ hs).comp HardyCriticalLine.continuous_criticalLinePoint.continuousAt
+  · simp_rw [h.gammaFactor_def]
+    have hr : 0 < (HardyCriticalLine.criticalLinePoint t + 1).re := by
+      rw [add_re, one_re]; linarith
+    have hfun : ContinuousAt (fun u : ℝ ↦ HardyCriticalLine.criticalLinePoint u + (1 : ℂ)) t := by
+      exact HardyCriticalLine.continuous_criticalLinePoint.continuousAt.add_const _
+    exact (hg _ hr).comp (f := fun u : ℝ ↦ HardyCriticalLine.criticalLinePoint u + (1 : ℂ)) hfun
+
+open Complex in
+/-- A fixed unit and the same Stirling phase approximate the archimedean factor of either parity. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_gamma_asymptotic {N : ℕ} (χ : DirichletCharacter ℂ N) :
+    ∃ b : ℂ, ‖b‖ = 1 ∧ ∀ t : ℝ, 1 ≤ t →
+      let s := HardyCriticalLine.criticalLinePoint t
+      ‖χ.gammaFactor s / (‖χ.gammaFactor s‖ : ℂ) -
+        b * exp (I * (HardyCriticalLine.criticalLineStirlingPhase t : ℂ))‖ ≤ 3 / t := by
+  let point := HardyCriticalLine.criticalLinePoint
+  let u (z : ℂ) := z / (‖z‖ : ℂ)
+  let W (t : ℝ) := exp (I * (HardyCriticalLine.criticalLineStirlingPhase t : ℂ))
+  have heven (t : ℝ) (ht : 1 ≤ t) :
+      ‖u (Gammaℝ (point t)) - W t‖ ≤ 11 / (16 * t) := by
+    simpa only [point, HardyCriticalLine.criticalLinePoint, W, u, mul_comm I (t : ℂ)] using
+      HardyCriticalLine.norm_criticalLineGammaR_unit_sub_exp_stirlingPhase_le ht
+  rcases χ.even_or_odd with h | h
+  · refine ⟨1, norm_one, fun t ht ↦ ?_⟩
+    dsimp only
+    rw [h.gammaFactor_def, one_mul]
+    exact (heven t ht).trans (by apply (div_le_div_iff₀ (by positivity) (by positivity)).mpr; linarith)
+  · let b := exp (((Real.pi / 4 : ℝ) : ℂ) * I)
+    have hbn : ‖b‖ = 1 := norm_exp_ofReal_mul_I _
+    refine ⟨b, hbn, fun t ht ↦ ?_⟩
+    dsimp only
+    rw [h.gammaFactor_def]
+    have hs := primitiveDirichletL_infinite_criticalZeros_gamma_shift t
+    have hq : Real.exp (-Real.pi * t) ≤ 1 / t := by
+      rw [neg_mul, Real.exp_neg, one_div, inv_le_inv₀ (Real.exp_pos _) (by positivity)]
+      have e := Real.add_one_le_exp (Real.pi * t)
+      nlinarith [mul_nonneg (sub_nonneg.mpr Real.pi_gt_three.le) (show 0 ≤ t by linarith)]
+    calc
+      _ ≤ ‖u (Gammaℝ (point t + 1)) - b * u (Gammaℝ (point t))‖ +
+          ‖b * u (Gammaℝ (point t)) - b * W t‖ := norm_sub_le_norm_sub_add_norm_sub _ _ _
+      _ = ‖u (Gammaℝ (point t + 1)) - b * u (Gammaℝ (point t))‖ + ‖u (Gammaℝ (point t)) - W t‖ := by rw [← mul_sub, norm_mul, hbn, one_mul]
+      _ ≤ 2 * (1 / t) + 11 / (16 * t) := add_le_add (hs.trans (by gcongr)) (heven t ht)
+      _ ≤ 3 / t := by field_simp; linarith
+
+open scoped ComplexConjugate in
+open Complex in
+/-- Construct a continuous real Hardy function with the same absolute value as `L` on the line.
+Its phase differs from a fixed unit times the conductor-shifted Stirling phase by `O(1/t)`. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_real_approx {N : ℕ} [NeZero N] {χ : DirichletCharacter ℂ N}
+    (hχ : χ.IsPrimitive) :
+    ∃ H : ℝ → ℝ, Continuous H ∧
+      (∀ t, |H t| = ‖χ.LFunction (HardyCriticalLine.criticalLinePoint t)‖) ∧
+      ∃ b : ℂ, ‖b‖ = 1 ∧ ∀ t : ℝ, 1 ≤ t →
+        ‖(H t : ℂ) - b * exp (I * ((HardyCriticalLine.criticalLineStirlingPhase t + (Real.log N / 2) * t : ℝ) : ℂ)) *
+          χ.LFunction (HardyCriticalLine.criticalLinePoint t)‖ ≤
+          (3 / t) * ‖χ.LFunction (HardyCriticalLine.criticalLinePoint t)‖ := by
+  let s := HardyCriticalLine.criticalLinePoint
+  let θ (t : ℝ) := (t * Real.log N - χ.rootNumber.arg) / 2
+  let r (t : ℝ) := exp ((θ t : ℂ) * I)
+  let g (t : ℝ) := χ.gammaFactor (s t)
+  let L (t : ℝ) := χ.LFunction (s t)
+  let Z (t : ℝ) := r t * (g t / (‖g t‖ : ℂ)) * L t
+  have hs (t : ℝ) : (s t).re = 1 / 2 := by norm_num [s, HardyCriticalLine.criticalLinePoint, add_re, mul_re]
+  have hn (t : ℝ) : g t ≠ 0 := primitiveDirichletL_infinite_criticalZeros_gamma_ne χ (by rw [hs]; norm_num)
+  have hnorm (t : ℝ) : ‖r t‖ = 1 := norm_exp_ofReal_mul_I _
+  have hreal (t : ℝ) : ((Z t).re : ℂ) = Z t := by
+    apply conj_eq_iff_re.mp
+    have hp := primitiveDirichletL_infinite_criticalZeros_phase hχ t
+    change conj (r t * χ.completedLFunction (s t)) = r t * χ.completedLFunction (s t) at hp
+    rw [primitiveDirichletL_infinite_criticalZeros_completion χ (by rw [hs]; norm_num)] at hp
+    have he : Z t = (r t * (g t * L t)) / (‖g t‖ : ℂ) := by dsimp only [Z]; ring
+    rw [he, map_div₀, conj_ofReal, hp]
+  have hrc : Continuous r := by unfold r θ; fun_prop
+  have hgc : Continuous g := primitiveDirichletL_infinite_criticalZeros_gamma_cont χ
+  have hLc : Continuous L := by
+    apply continuous_iff_continuousAt.mpr
+    intro t
+    have hne : s t ≠ 1 := by intro h; have e := hs t; norm_num [h] at e
+    exact (χ.differentiableAt_LFunction _ (.inl hne)).continuousAt.comp
+      HardyCriticalLine.continuous_criticalLinePoint.continuousAt
+  have hZ : Continuous Z := (hrc.mul (hgc.div (continuous_ofReal.comp hgc.norm) (fun t ↦ ofReal_ne_zero.mpr <| norm_ne_zero_iff.mpr (hn t)))).mul hLc
+  refine ⟨(fun t ↦ (Z t).re), continuous_re.comp hZ, fun t ↦ ?_, ?_⟩
+  · change |(Z t).re| = ‖L t‖
+    rw [← Real.norm_eq_abs, ← Complex.norm_real, hreal, show Z t = _ from rfl, norm_mul, norm_mul, norm_div, hnorm,
+      norm_real, Real.norm_eq_abs, abs_norm, div_self (norm_ne_zero_iff.mpr (hn _)), one_mul, one_mul]
+  · obtain ⟨b, hb, he⟩ := primitiveDirichletL_infinite_criticalZeros_gamma_asymptotic χ
+    let a := exp (((-χ.rootNumber.arg / 2 : ℝ) : ℂ) * I)
+    have han : ‖a‖=1 := norm_exp_ofReal_mul_I _
+    refine ⟨a * b, by rw [norm_mul, han, hb, one_mul], fun t ht ↦ ?_⟩
+    have heq : a * b * exp (I * ((HardyCriticalLine.criticalLineStirlingPhase t + (Real.log N / 2) * t : ℝ) : ℂ)) =
+        r t * (b * exp (I * (HardyCriticalLine.criticalLineStirlingPhase t : ℂ))) := by
+      dsimp [a, r, θ]
+      rw [mul_right_comm, ← exp_add, mul_comm b, ← mul_assoc, ← exp_add]
+      congr 2
+      push_cast
+      ring
+    rw [hreal, heq]
+    change ‖r t * (g t / (‖g t‖ : ℂ)) * L t - (r t * (b * _)) * L t‖ ≤ _
+    rw [← sub_mul, ← mul_sub, norm_mul, norm_mul, hnorm, one_mul]
+    exact mul_le_mul_of_nonneg_right (he t ht) (norm_nonneg _)
+
+open Complex in
+/-- On writing `u = x^(−d)`, the derivative of `u^(s/d)` on `0 < u ≤ 1` is bounded by `‖s‖/d`.
+This bounds differences of Dirichlet powers by a telescoping real majorant. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_power_variation {s : ℂ} {d a b : ℝ}
+    (hd : 0 < d) (hs : d ≤ s.re) (ha : 1 ≤ a) (hab : a ≤ b) :
+    ‖(a : ℂ) ^ (-s) - (b : ℂ) ^ (-s)‖ ≤
+      (‖s‖ / d) * (a ^ (-d) - b ^ (-d)) := by
+  let r := s / (d : ℂ)
+  have hr : 1 ≤ r.re := by
+    simpa [r, le_div_iff₀ hd] using hs
+  have hr0 : r ≠ 0 := by intro h; norm_num [h] at hr
+  have hap : 0 < a := lt_of_lt_of_le zero_lt_one ha
+  have hbp : 0 < b := hap.trans_le hab
+  have hrepr {x : ℝ} (hx : 0 < x) : ((x ^ (-d) : ℝ) : ℂ) ^ r = (x : ℂ) ^ (-s) := by
+    rw [cpow_def_of_ne_zero (ofReal_ne_zero.mpr (Real.rpow_pos_of_pos hx _).ne'),
+      cpow_def_of_ne_zero (ofReal_ne_zero.mpr hx.ne'), ← ofReal_log (Real.rpow_nonneg hx.le _),
+      Real.log_rpow hx, ← ofReal_log hx.le]
+    congr 1
+    dsimp only [r]
+    push_cast
+    field_simp [ofReal_ne_zero.mpr hd.ne']
+  have hlow : 0 < b ^ (-d) := Real.rpow_pos_of_pos hbp _
+  have h10 : a ^ (-d) ≤ 1 := Real.rpow_le_one_of_one_le_of_nonpos ha (neg_nonpos.mpr hd.le)
+  have hba : b ^ (-d) ≤ a ^ (-d) := Real.rpow_le_rpow_of_nonpos hap hab (neg_nonpos.mpr hd.le)
+  have hdiff (x : ℝ) (hx : x ∈ Icc (b ^ (-d)) (a ^ (-d))) :=
+    (hasDerivAt_ofReal_cpow_const (hlow.trans_le hx.1).ne' hr0).hasDerivWithinAt (s := Icc (b ^ (-d)) (a ^ (-d)))
+  have hbnd (x : ℝ) (hx : x ∈ Ico (b ^ (-d)) (a ^ (-d))) :
+      ‖r * (x : ℂ) ^ (r - 1)‖ ≤ ‖s‖ / d := by
+    rw [norm_mul, norm_cpow_eq_rpow_re_of_pos (hlow.trans_le hx.1)]
+    calc _ ≤ ‖r‖ * 1 := by
+            gcongr
+            apply Real.rpow_le_one
+            · exact (hlow.trans_le hx.1).le
+            · exact hx.2.le.trans h10
+            · simpa using sub_nonneg.mpr hr
+         _ = _ := by simp [r, Real.norm_of_nonneg hd.le]
+  have h := norm_image_sub_le_of_norm_deriv_le_segment' hdiff hbnd (a ^ (-d)) ⟨hba, le_rfl⟩
+  simpa only [hrepr hap, hrepr hbp] using h
+
+open Complex Finset in
+/-- Each full period of a nonprincipal character sums to zero, and the remaining partial sum has norm
+at most its modulus. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_character_partial {N : ℕ} [NeZero N] (χ : DirichletCharacter ℂ N)
+    (hχ : χ ≠ 1) :
+    ∀ n : ℕ, ‖∑ i ∈ range n, χ ((i : ZMod N) + 1)‖ ≤ N := by
+  let S (n : ℕ) := ∑ i ∈ range n, χ ((i : ZMod N) + 1)
+  have htotal : S N = 0 := by
+    rw [show S N = ∑ i : Fin N, χ (((i : ℕ) : ZMod N) + 1) from (Fin.sum_univ_eq_sum_range _ _).symm]
+    have he (i : Fin N) : ((i : ℕ) : ZMod N) = ZMod.finEquiv N i := by
+      cases N with
+      | zero => exact (NeZero.ne 0 rfl).elim
+      | succ n =>
+        exact ZMod.natCast_zmod_val (n := n + 1) i
+    simp_rw [he]
+    calc _ = ∑ a : ZMod N, χ (a + 1) := (ZMod.finEquiv N).toEquiv.sum_comp (fun a ↦ χ (a + 1))
+         _ = ∑ a : ZMod N, χ a := Equiv.sum_comp (Equiv.addRight (1 : ZMod N)) χ
+         _ = 0 := χ.sum_eq_zero_of_ne_one hχ
+  have hperiod : Function.Periodic S N := by
+    intro n
+    induction n with
+    | zero => simpa [S] using htotal
+    | succ n ih =>
+      rw [Nat.succ_add, show S (n + N).succ = S (n + N) + χ ((((n + N : ℕ) : ZMod N)) + 1) from sum_range_succ ..,
+        show S n.succ = S n + χ ((n : ZMod N) + 1) from sum_range_succ .., ih]
+      simp
+  intro n
+  have hmod : S n = S (n % N) := by
+    have h := hperiod.nsmul (n / N) (n % N)
+    simpa [nsmul_eq_mul, Nat.mul_comm (n / N), Nat.mod_add_div] using h
+  change ‖S n‖ ≤ N
+  rw [hmod]
+  calc ‖S (n % N)‖ ≤ ∑ i ∈ range (n % N), ‖χ ((i : ZMod N) + 1)‖ := norm_sum_le ..
+       _ ≤ ∑ _i ∈ range (n % N), (1 : ℝ) := sum_le_sum fun i _ ↦ χ.norm_le_one _
+       _ ≤ N := by simp; exact_mod_cast (Nat.mod_lt n (NeZero.pos N)).le
+
+open Complex Finset in
+/-- The tail of the telescoping majorant starting at index `k` equals `(k+1)^(−d)`. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_variation_sum {d : ℝ} (hd : 0 < d) (k : ℕ) :
+    HasSum (fun i : ℕ ↦ ((i + k + 1 : ℕ) : ℝ) ^ (-d) - ((i + 1 + k + 1 : ℕ) : ℝ) ^ (-d))
+      (((k + 1 : ℕ) : ℝ) ^ (-d)) := by
+  let v (i : ℕ) := ((i + k + 1 : ℕ) : ℝ) ^ (-d)
+  have hv : Tendsto v atTop (𝓝 0) := by
+    exact (tendsto_rpow_neg_atTop hd).comp <|
+      tendsto_natCast_atTop_atTop.comp ((tendsto_add_atTop_nat 1).comp (tendsto_add_atTop_nat k))
+  have hm (i : ℕ) : v (i + 1) ≤ v i := by
+    apply Real.rpow_le_rpow_of_nonpos (by positivity) (by norm_cast; omega) (neg_nonpos.mpr hd.le)
+  apply (hasSum_iff_tendsto_nat_of_nonneg (fun i ↦ sub_nonneg.mpr (hm i)) _).mpr
+  have ht : Tendsto (fun n ↦ v 0 - v n) atTop (𝓝 (v 0)) := by simpa using tendsto_const_nhds.sub hv
+  convert! ht using 1
+  · funext n
+    exact Finset.sum_range_sub' v n
+  · simp [v]
+
+open Complex Finset in
+/-- A nonprincipal Dirichlet L-function on `σ > 0` differs from its first `n` terms by at most
+`N(1 + ‖s‖/σ)(n+1)^(−σ)`. Summation by parts gives a locally normally convergent continuation. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_truncate {N : ℕ} [NeZero N] (χ : DirichletCharacter ℂ N) (hχ : χ ≠ 1)
+    {s : ℂ} (hs : 0 < s.re) (n : ℕ) :
+    ‖χ.LFunction s - ∑ i ∈ range n, χ ((i : ZMod N) + 1) * ((i + 1 : ℕ) : ℂ) ^ (-s)‖ ≤
+      N * (1 + ‖s‖ / s.re) * ((n + 1 : ℕ) : ℝ) ^ (-s.re) := by
+  classical
+  let P (k : ℕ) := ∑ i ∈ range k, χ ((i : ZMod N) + 1)
+  let w (z : ℂ) (i : ℕ) := ((i + 1 : ℕ) : ℂ) ^ (-z)
+  let v (d : ℝ) (i : ℕ) := ((i + 1 : ℕ) : ℝ) ^ (-d)
+  let D (i : ℕ) (z : ℂ) := P (i + 1) * (w z i - w z (i + 1))
+  let F (z : ℂ) := ∑' i, D i z
+  have hP (k : ℕ) : ‖P k‖ ≤ N := primitiveDirichletL_infinite_criticalZeros_character_partial χ hχ k
+  have hpos (d : ℝ) (i : ℕ) : 0 < v d i := Real.rpow_pos_of_pos (by positivity) _
+  have hm {d : ℝ} (hd : 0 < d) (i : ℕ) : 0 ≤ v d i - v d (i + 1) := by
+    apply sub_nonneg.mpr
+    exact Real.rpow_le_rpow_of_nonpos (by positivity) (by norm_cast; omega) (neg_nonpos.mpr hd.le)
+  have hv {d : ℝ} (hd : 0 < d) (k : ℕ) :
+      HasSum (fun i : ℕ ↦ v d (i + k) - v d (i + k + 1)) (v d k) := by
+    simpa only [v, add_right_comm] using primitiveDirichletL_infinite_criticalZeros_variation_sum hd k
+  have hb {d b : ℝ} {z : ℂ} (hd : 0 < d) (hz : d ≤ z.re) (hb : ‖z‖ ≤ b) (i : ℕ) :
+      ‖D i z‖ ≤ (N * (b / d)) * (v d i - v d (i + 1)) := by
+    have h := primitiveDirichletL_infinite_criticalZeros_power_variation (s := z) (a := ((i + 1 : ℕ) : ℝ)) (b := ((i + 1 + 1 : ℕ) : ℝ))
+      hd hz (by norm_cast; omega) (by norm_cast; omega)
+    have h' : ‖w z i - w z (i + 1)‖ ≤ (‖z‖ / d) * (v d i - v d (i + 1)) := by simpa only [w, v, ofReal_natCast] using h
+    calc ‖D i z‖ = ‖P (i + 1)‖ * ‖w z i - w z (i + 1)‖ := norm_mul ..
+         _ ≤ (N : ℝ) * ((b / d) * (v d i - v d (i + 1))) := mul_le_mul (hP _) (h'.trans (mul_le_mul_of_nonneg_right (div_le_div_of_nonneg_right hb hd.le) (hm hd i))) (norm_nonneg _) (Nat.cast_nonneg _)
+         _ = _ := by ring
+  have hsum {z : ℂ} (hz : 0 < z.re) : Summable (fun i ↦ D i z) := by
+    refine Summable.of_norm_bounded (g := fun i ↦ _ * (v z.re i - v z.re (i + 1))) ?_ (hb hz le_rfl le_rfl)
+    simpa using ((hv hz 0).summable.mul_left (N * (‖z‖ / z.re)))
+  have hfinite (z : ℂ) (k : ℕ) :
+      ∑ i ∈ range k, χ ((i : ZMod N) + 1) * w z i = (∑ i ∈ range k, D i z) + P k * w z k := by
+    induction k with
+    | zero => simp [P]
+    | succ k ih =>
+      rw [sum_range_succ, sum_range_succ, ih]
+      simp only [D, show P (k + 1) = P k + χ ((k : ZMod N) + 1) from sum_range_succ ..]
+      ring
+  have hlarge (z : ℂ) (hz : 1 < z.re) : χ.LFunction z = F z := by
+    have hL : HasSum (fun n : ℕ ↦ LSeries.term (fun n ↦ χ (n : ZMod N)) z n) (χ.LFunction z) := by
+      rw [χ.LFunction_eq_LSeries hz]; exact (χ.LSeriesSummable_of_one_lt_re hz).hasSum
+    have hL' : HasSum (fun i : ℕ ↦ χ ((i : ZMod N) + 1) * w z i) (χ.LFunction z) := by
+      have h := (hasSum_nat_add_iff' 1).mpr hL
+      convert! h using 1
+      · funext i
+        dsimp only [w]
+        rw [LSeries.term_of_ne_zero (Nat.succ_ne_zero i), div_eq_mul_inv, cpow_neg]
+        simp only [Nat.cast_succ]
+      · simp
+    have hbd : Tendsto (fun k ↦ P k * w z k) atTop (𝓝 0) := by
+      apply tendsto_zero_iff_norm_tendsto_zero.mpr
+      have ht : Tendsto (fun k : ℕ ↦ v z.re k) atTop (𝓝 0) :=
+        (tendsto_rpow_neg_atTop (zero_lt_one.trans hz)).comp <|
+          tendsto_natCast_atTop_atTop.comp (tendsto_add_atTop_nat 1)
+      apply squeeze_zero (fun _ ↦ norm_nonneg _) ?_ (by simpa using ht.const_mul (N : ℝ))
+      intro k
+      rw [norm_mul]
+      apply mul_le_mul (hP _) _ (norm_nonneg _) (Nat.cast_nonneg _)
+      have hp : (0 : ℝ) < ((k + 1 : ℕ) : ℝ) := by positivity
+      simpa [v, w, neg_re] using (norm_cpow_eq_rpow_re_of_pos hp (-z)).le
+    apply tendsto_nhds_unique hL'.tendsto_sum_nat
+    simp_rw [hfinite]
+    simpa [F] using ((hsum (zero_lt_one.trans hz)).hasSum.tendsto_sum_nat.add hbd)
+  have hU : IsOpen {z : ℂ | 0 < z.re} := isOpen_lt continuous_const continuous_re
+  have hF : DifferentiableOn ℂ F {z : ℂ | 0 < z.re} := by
+    intro z hz
+    let d := z.re / 2
+    let B := ‖z‖ + 1
+    let U := {w : ℂ | d < w.re} ∩ {w : ℂ | ‖w‖ < B}
+    have hd : 0 < d := half_pos hz
+    have hop : IsOpen U := (isOpen_lt continuous_const continuous_re).inter (isOpen_lt continuous_norm continuous_const)
+    have hzU : z ∈ U := ⟨show z.re / 2 < z.re from half_lt_self (show 0 < z.re from hz), show ‖z‖ < ‖z‖ + 1 by linarith⟩
+    have hF' : DifferentiableOn ℂ F U := by
+      refine differentiableOn_tsum_of_summable_norm (u := fun i ↦ N * (B / d) * (v d i - v d (i + 1))) ?_ ?_ hop ?_
+      · simpa using ((hv hd 0).summable.mul_left (N * (B / d)))
+      · intro i
+        have ha (k : ℕ) : Differentiable ℂ (fun z ↦ w z k) := by
+          dsimp only [w]
+          exact differentiable_neg.const_cpow (.inl (by exact_mod_cast Nat.succ_ne_zero k))
+        exact (((ha i).sub (ha (i + 1))).const_mul (P (i + 1))).differentiableOn
+      · intro i w hw
+        exact hb hd hw.1.le hw.2.le i
+    exact ((hF' z hzU).differentiableAt (hop.mem_nhds hzU)).differentiableWithinAt
+  have hFχ : AnalyticOnNhd ℂ χ.LFunction {z : ℂ | 0 < z.re} :=
+    (χ.differentiable_LFunction hχ).differentiableOn.analyticOnNhd hU
+  have hagree : χ.LFunction s = F s := by
+    have hconn : IsPreconnected {z : ℂ | 0 < z.re} := convex_halfSpace_re_gt 0 |>.isPreconnected
+    have h2 : {z : ℂ | 1 < z.re} ∈ 𝓝 (2 : ℂ) :=
+      (isOpen_lt (continuous_const (y := (1 : ℝ))) continuous_re).mem_nhds (by norm_num)
+    exact hFχ.eqOn_of_preconnected_of_eventuallyEq (hF.analyticOnNhd hU) hconn
+      (by norm_num : (2 : ℂ) ∈ {w : ℂ | 0 < w.re}) (eventuallyEq_of_mem h2 fun w hw ↦ hlarge w hw) hs
+  change ‖χ.LFunction s - ∑ i ∈ range n, χ ((i : ZMod N) + 1) * w s i‖ ≤ _
+  rw [hagree, hfinite, show F s = (∑ i ∈ range n, D i s) + ∑' i, D (i + n) s from ((hsum hs).sum_add_tsum_nat_add n).symm]
+  have htail : ‖∑' i, D (i + n) s‖ ≤ (N * (‖s‖ / s.re)) * v s.re n := by
+    exact tsum_of_norm_bounded ((hv hs n).mul_left (N * (‖s‖ / s.re))) (fun i ↦ hb hs le_rfl le_rfl (i + n))
+  have hpn : ‖P n * w s n‖ ≤ N * v s.re n := by
+    rw [norm_mul]
+    have hp : (0 : ℝ) < ((n + 1 : ℕ) : ℝ) := by positivity
+    refine mul_le_mul (hP _) ?_ (norm_nonneg _) (Nat.cast_nonneg _)
+    simpa [v, w] using (norm_cpow_eq_rpow_re_of_pos hp (-s)).le
+  rw [add_sub_add_left_eq_sub]
+  exact (norm_sub_le _ _).trans ((add_le_add htail hpn).trans_eq (by dsimp [v]; ring))
+
+open Finset in
+/-- Reindex a finite sum over the positive integers. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_sum_shift {E : Type*} [AddCommMonoid E] (f : ℕ → E) (m : ℕ) :
+    ∑ i ∈ range m, f (i + 1) = ∑ n ∈ Finset.Icc 1 m, f n := by
+  induction m with
+  | zero => simp
+  | succ m ih => rw [sum_range_succ, ih, sum_Icc_succ_top (by omega)]
+
+open Complex Finset HardyCriticalLine in
+/-- Split a weighted sum at an integer threshold and sum the majorants `C/√n` on both parts. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_split_sum (z : ℕ → ℂ) (X D : ℕ) {C E : ℝ} (hC : 0 ≤ C) (hE : 0 ≤ E)
+    (hall : ∀ n ∈ Finset.Icc 1 X, ‖z n‖ ≤ C * (1 / Real.sqrt n))
+    (hhi : ∀ n ∈ Finset.Icc 1 X, D < n → ‖z n‖ ≤ E * (1 / Real.sqrt n)) :
+    ‖∑ n ∈ Finset.Icc 1 X, z n‖ ≤ 2 * C * Real.sqrt D + 2 * E * Real.sqrt X := by
+  classical
+  let L := (Finset.Icc 1 X).filter fun n ↦ n ≤ D
+  let H := (Finset.Icc 1 X).filter fun n ↦ ¬n ≤ D
+  have hsub : L ⊆ Finset.Icc 1 D := by
+    intro n hn
+    obtain ⟨hm, hD⟩ := mem_filter.mp hn
+    exact mem_Icc.mpr ⟨(mem_Icc.mp hm).1, hD⟩
+  have hs (A : Finset ℕ) (B : ℕ) {J : ℝ} (hJ : 0 ≤ J) (hp : A ⊆ Finset.Icc 1 B)
+      (hb : ∀ n ∈ A, ‖z n‖ ≤ J * (1 / Real.sqrt n)) :
+      ‖∑ n ∈ A, z n‖ ≤ 2 * J * Real.sqrt B := by
+    calc ‖∑ n ∈ A, z n‖ ≤ ∑ n ∈ A, ‖z n‖ := norm_sum_le ..
+         _ ≤ ∑ n ∈ A, J * (1 / Real.sqrt n) := sum_le_sum hb
+         _ = J * ∑ n ∈ A, 1 / Real.sqrt n := (mul_sum ..).symm
+         _ ≤ J * (2 * Real.sqrt B) := by
+             apply mul_le_mul_of_nonneg_left _ hJ
+             exact (sum_le_sum_of_subset_of_nonneg hp fun n _ _ ↦ by positivity).trans
+               (sum_Icc_one_div_sqrt_le_two_mul_sqrt B)
+         _ = _ := by ring
+  have hl := hs L D hC hsub (fun n hn ↦ hall n (mem_filter.mp hn).1)
+  have hh := hs H X hE (filter_subset ..) (fun n hn ↦ hhi n (mem_filter.mp hn).1 (lt_of_not_ge (mem_filter.mp hn).2))
+  rw [← sum_filter_add_sum_filter_not (Finset.Icc 1 X) (fun n ↦ n ≤ D)]
+  exact (norm_add_le _ _).trans (add_le_add hl hh)
+
+open Complex Finset HardyCriticalLine in
+/-- An unphased Dirichlet monomial with `log n ≥ K > 0` has dyadic integral bounded by `4/(K√n)`. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_raw_mode {n : ℕ} (hn : 0 < n) {K T : ℝ}
+    (hK : 0 < K) (hT : 0 < T) (hnK : K ≤ Real.log n) :
+    ‖∫ t in T..2 * T, (n : ℂ) ^ (-criticalLinePoint t)‖ ≤ (4 / K) * (1 / Real.sqrt n) := by
+  let F (t : ℝ) := -t * Real.log n
+  have hd (t : ℝ) : HasDerivAt F (-Real.log n) t := by
+    simpa [F] using ((hasDerivAt_id t).neg.mul_const (Real.log n))
+  have he := norm_integral_firstDerivativeOscillation_le_four_div_c1 (F := F)
+    (F' := fun _ ↦ -Real.log n) (a := T) (b := 2 * T) (by linarith) hK
+    (fun t _ ↦ hd t) continuousOn_const monotoneOn_const
+    (fun _ _ ↦ by simpa [abs_of_pos (hK.trans_le hnK)] using hnK)
+  have hlog : log (n : ℂ) = ((Real.log n : ℝ) : ℂ) := by rw [ofReal_log (Nat.cast_nonneg n), ofReal_natCast]
+  have hm (t : ℝ) : (n : ℂ) ^ (-criticalLinePoint t) =
+      ((1 / Real.sqrt n : ℝ) : ℂ) * firstDerivativeOscillation F t := by
+    rw [cpow_neg_criticalLinePoint_eq_mode hn, cpow_neg_criticalLinePoint_zero hn, hlog]
+    dsimp only [firstDerivativeOscillation, F]
+    congr 2
+    push_cast
+    ring
+  simp_rw [hm]
+  rw [intervalIntegral.integral_const_mul, norm_mul, norm_real, Real.norm_of_nonneg (by positivity), mul_comm]
+  exact mul_le_mul_of_nonneg_right he (by positivity)
+
+open Complex Finset HardyCriticalLine in
+/-- After inserting the shifted Stirling phase, a Dirichlet monomial has the usual Hardy oscillation
+with a linear term. Its fixed unit factor drops out of the norm. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_phased_mode (c : ℝ) {n : ℕ} (hn : 0 < n) {T : ℝ} (hT : 0 < T) :
+    ‖∫ t in T..2 * T, exp (I * ((criticalLineStirlingPhase t + c * t : ℝ) : ℂ)) *
+      (n : ℂ) ^ (-criticalLinePoint t)‖ =
+      (1 / Real.sqrt n) * ‖∫ t in T..2 * T, firstDerivativeOscillation (fun u ↦ hardyOscillatoryPhase n u + c * u) t‖ := by
+  have hab : T ≤ 2 * T := by linarith
+  have heq : (∫ t in T..2 * T, exp (I * ((criticalLineStirlingPhase t + c * t : ℝ) : ℂ)) *
+      (n : ℂ) ^ (-criticalLinePoint t)) =
+      ∫ t in T..2 * T, (((1 / Real.sqrt n : ℝ) : ℂ) * exp (-I * (Real.pi / 8))) *
+        firstDerivativeOscillation (fun u ↦ hardyOscillatoryPhase n u + c * u) t := by
+    apply intervalIntegral.integral_congr
+    intro t ht
+    have ht' : 0 < t := hT.trans_le ((uIcc_of_le hab ▸ ht : t ∈ Icc T (2 * T)).1)
+    push_cast
+    rw [mul_add, exp_add, mul_right_comm, exp_stirlingPhase_mul_cpow_eq_hardyOscillatoryMode hn ht']
+    dsimp only [firstDerivativeOscillation]
+    push_cast
+    rw [mul_add, exp_add]
+    ring
+  rw [heq, intervalIntegral.integral_const_mul, norm_mul, norm_mul, norm_real, Real.norm_of_nonneg (by positivity)]
+  have h : ‖exp (-I * (Real.pi / 8))‖ = 1 := by rw [norm_exp]; norm_num
+  rw [h, mul_one]
+
+open Complex Finset HardyCriticalLine in
+/-- The shifted Hardy modes retain curvature `1/(2t)`; beyond `B√T` their slopes have magnitude
+at least `K`. The two derivative estimates control both ranges on `[T,2T]`. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_modes (c K : ℝ) (hK : 0 < K) :
+    ∃ B : ℝ, 0 < B ∧ ∀ {n : ℕ}, 0 < n → ∀ {T : ℝ}, 0 < T →
+      let F (t : ℝ) := hardyOscillatoryPhase n t + c * t
+      ‖∫ t in T..2 * T, firstDerivativeOscillation F t‖ ≤ 20 * Real.sqrt T ∧
+        (B * Real.sqrt T ≤ n → ‖∫ t in T..2 * T, firstDerivativeOscillation F t‖ ≤ 4 / K) := by
+  let B := Real.exp (c + K)
+  have hB : 0 < B := Real.exp_pos _
+  refine ⟨B, hB, ?_⟩
+  intro n hn T hT F
+  let G (t : ℝ) := hardyOscillatoryPhaseDeriv n t + c
+  have hn' : (0 : ℝ) < n := by exact_mod_cast hn
+  have hab : T ≤ 2 * T := by linarith
+  have hp (t : ℝ) (ht : t ∈ uIcc T (2 * T)) : 0 < t := hT.trans_le ((uIcc_of_le hab ▸ ht : t ∈ Icc T (2 * T)).1)
+  have hd (t : ℝ) (ht : t ∈ uIcc T (2 * T)) : HasDerivAt F (G t) t := by
+    simpa [F, G, Pi.add_def] using (hasDerivAt_hardyOscillatoryPhase hn (hp t ht)).add ((hasDerivAt_id t).const_mul c)
+  have hd' (t : ℝ) (ht : t ∈ uIcc T (2 * T)) : HasDerivAt G (1 / (2 * t)) t :=
+    (hasDerivAt_hardyOscillatoryPhaseDeriv hn (hp t ht)).add_const _
+  have hmono : MonotoneOn G (uIcc T (2 * T)) := fun x hx y hy hxy ↦
+    add_le_add (monotoneOn_hardyOscillatoryPhaseDeriv hn (hp x hx) (hp y hy) hxy) le_rfl
+  constructor
+  · refine (norm_integral_firstDerivativeOscillation_le_ten_div_sqrt
+      (r := 1 / (4 * T)) hab (by positivity) hd hd' hmono ?_).trans_eq ?_
+    · intro t ht
+      have htpos := hp t ht
+      rw [uIcc_of_le hab] at ht
+      rw [abs_of_pos (by positivity)]
+      apply (div_le_div_iff₀ (by positivity) (by positivity)).mpr
+      linarith [ht.2]
+    · rw [Real.sqrt_div (by norm_num), Real.sqrt_one, Real.sqrt_mul (by norm_num)]
+      rw [show Real.sqrt 4 = 2 by exact (Real.sqrt_eq_iff_eq_sq (by norm_num) (by norm_num)).mpr (by norm_num)]
+      field_simp [Real.sqrt_pos.mpr hT]
+      ring
+  · intro hbn
+    apply norm_integral_firstDerivativeOscillation_le_four_div_c1 hab hK hd
+      (fun t ht ↦ (hd' t ht).continuousAt.continuousWithinAt) hmono
+    intro t ht
+    have htpos := hp t ht
+    rw [uIcc_of_le hab] at ht
+    have hsq : B ^ 2 * T ≤ (n : ℝ) ^ 2 := by
+      have h := (sq_le_sq₀ (mul_nonneg hB.le (Real.sqrt_nonneg _)) hn'.le).mpr hbn
+      rwa [mul_pow, Real.sq_sqrt hT.le] at h
+    have hratio : t / (2 * Real.pi * (n : ℝ) ^ 2) ≤ 1 / B ^ 2 := by
+      apply (div_le_div_iff₀ (by positivity) (by positivity)).mpr
+      calc t * B ^ 2 ≤ (2 * T) * B ^ 2 := by gcongr; exact ht.2
+           _ = 2 * (B ^ 2 * T) := by ring
+           _ ≤ 2 * (n : ℝ) ^ 2 := by gcongr
+           _ ≤ 1 * (2 * Real.pi * (n : ℝ) ^ 2) := by nlinarith [mul_nonneg (sub_nonneg.mpr Real.pi_gt_three.le) (sq_nonneg (n : ℝ))]
+    have hl := Real.log_le_log (by positivity : 0 < t / (2 * Real.pi * (n : ℝ) ^ 2)) hratio
+    rw [one_div, Real.log_inv, Real.log_pow, show Real.log B = c + K from Real.log_exp _] at hl
+    have hg : G t ≤ -K := by dsimp [G, hardyOscillatoryPhaseDeriv]; norm_num at hl; linarith
+    rw [abs_of_neg (hg.trans_lt (neg_lt_zero.mpr hK))]
+    linarith
+
+open Complex Finset HardyCriticalLine in
+/-- At `T = k⁴` the unphased mean of a Dirichlet polynomial with first coefficient one contains
+the main term `T`. Its error and the entire phased mean are at most `40Dk³ + (8/K)√m`. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_polynomial_means (a : ℕ → ℂ) (ha : ∀ n, ‖a n‖ ≤ 1) (ha1 : a 1 = 1)
+    (c K : ℝ) (hK : 0 < K) :
+    ∃ D : ℕ, 0 < D ∧ ∀ (k m : ℕ), 0 < k → 0 < m →
+      let T : ℝ := (k : ℝ) ^ 4
+      let P (t : ℝ) := ∑ n ∈ Finset.Icc 1 m, a n * (n : ℂ) ^ (-criticalLinePoint t)
+      let E (t : ℝ) := exp (I * ((criticalLineStirlingPhase t + c * t : ℝ) : ℂ))
+      let R := 40 * (D : ℝ) * (k : ℝ) ^ 3 + (8 / K) * Real.sqrt m
+      ‖(∫ t in T..2 * T, P t) - (T : ℂ)‖ ≤ R ∧ ‖∫ t in T..2 * T, E t * P t‖ ≤ R := by
+  obtain ⟨B, hB, hmode⟩ := primitiveDirichletL_infinite_criticalZeros_modes c K hK
+  obtain ⟨D, hD⟩ := exists_nat_gt (max 1 (max B (Real.exp K)))
+  have hD1 : 1 < (D : ℝ) := (le_max_left ..).trans_lt hD
+  have hDB : B ≤ (D : ℝ) := (le_max_left ..).trans ((le_max_right ..).trans hD.le)
+  have hDK : Real.exp K ≤ D := (le_max_right ..).trans ((le_max_right ..).trans hD.le)
+  refine ⟨D, by exact_mod_cast (zero_lt_one.trans hD1), ?_⟩
+  intro k m hk hm T P E R
+  have hk' : 1 ≤ (k : ℝ) := by exact_mod_cast hk
+  have hT : 0 < T := by dsimp [T]; positivity
+  have hab : T ≤ 2 * T := by linarith
+  have hroot : Real.sqrt T = (k : ℝ) ^ 2 := by
+    change Real.sqrt ((k : ℝ) ^ 4) = _
+    rw [show (k : ℝ) ^ 4 = ((k : ℝ) ^ 2) ^ 2 by ring, Real.sqrt_sq (sq_nonneg _)]
+  let l := (D * k) ^ 2
+  have hl : Real.sqrt l = (D : ℝ) * k := by dsimp [l]; push_cast; rw [Real.sqrt_sq (by positivity)]
+  have hsplit {n : ℕ} (hn : l < n) : B * Real.sqrt T ≤ n ∧ K ≤ Real.log n := by
+    have hln : ((D : ℝ) * k) ^ 2 < n := by exact_mod_cast hn
+    have hD2 : (D : ℝ) ≤ (D : ℝ) ^ 2 := by nlinarith [mul_nonneg (sub_nonneg.mpr hD1.le) (Nat.cast_nonneg D)]
+    have h1 : 1 ≤ (k : ℝ) ^ 2 := by nlinarith [sq_nonneg ((k : ℝ) - 1)]
+    have h2 : (D : ℝ) ^ 2 * (k : ℝ) ^ 2 ≤ n := by simpa only [mul_pow] using hln.le
+    refine ⟨by rw [hroot]; exact (mul_le_mul_of_nonneg_right (hDB.trans hD2) (sq_nonneg _)).trans h2, ?_⟩
+    have hn0 : 0 < (n : ℝ) := (Real.exp_pos K).trans_le (hDK.trans (hD2.trans ((le_mul_of_one_le_right (sq_nonneg _) h1).trans h2)))
+    exact (Real.le_log_iff_exp_le hn0).mpr (hDK.trans (hD2.trans ((le_mul_of_one_le_right (sq_nonneg _) h1).trans h2)))
+  let w (n : ℕ) (t : ℝ) := (n : ℂ) ^ (-criticalLinePoint t)
+  have hint (n : ℕ) (hn : 0 < n) : IntervalIntegrable (w n) volume T (2 * T) := (continuous_cpow_neg_criticalLinePoint hn).intervalIntegrable ..
+  have hintE (n : ℕ) (hn : 0 < n) : IntervalIntegrable (fun t ↦ E t * w n t) volume T (2 * T) := by
+    apply ContinuousOn.intervalIntegrable
+    intro t ht
+    have htpos : 0 < t := hT.trans_le ((uIcc_of_le hab ▸ ht : t ∈ Icc T (2 * T)).1)
+    apply ContinuousAt.continuousWithinAt
+    apply ContinuousAt.mul _ (continuous_cpow_neg_criticalLinePoint hn).continuousAt
+    dsimp only [E, criticalLineStirlingPhase]
+    fun_prop (disch := positivity)
+  have hlimit (z : ℕ → ℂ)
+      (hal : ∀ n ∈ Finset.Icc 1 m, ‖z n‖ ≤ (20 * Real.sqrt T) * (1 / Real.sqrt n))
+      (hhi : ∀ n ∈ Finset.Icc 1 m, l < n → ‖z n‖ ≤ (4 / K) * (1 / Real.sqrt n)) :
+      ‖∑ n ∈ Finset.Icc 1 m, z n‖ ≤ R := by
+    apply (primitiveDirichletL_infinite_criticalZeros_split_sum z m l (by positivity) (by positivity) hal hhi).trans_eq
+    dsimp only [R]
+    rw [hl, hroot]
+    ring
+  constructor
+  · let z (n : ℕ) := a n * (∫ t in T..2 * T, w n t) - (if n = 1 then (T : ℂ) else 0)
+    have hsum : (∫ t in T..2 * T, P t) - (T : ℂ) = ∑ n ∈ Finset.Icc 1 m, z n := by
+      dsimp only [z, P]
+      rw [intervalIntegral.integral_finsetSum (fun n hn ↦ (hint n (mem_Icc.mp hn).1).const_mul _), sum_sub_distrib]
+      simp_rw [intervalIntegral.integral_const_mul]
+      simp [Nat.ne_of_gt hm]
+    rw [hsum]
+    have h1 : z 1 = 0 := by
+      dsimp [z, w]; simp [ha1, Algebra.smul_def]; ring
+    have hne {n : ℕ} (hn : n ≠ 1) : ‖z n‖ ≤ ‖∫ t in T..2 * T, w n t‖ := by
+      simpa [z, hn, norm_mul] using mul_le_mul_of_nonneg_right (ha n) (norm_nonneg (∫ t in T..2 * T, w n t))
+    refine hlimit z ?_ ?_
+    · intro n hn
+      by_cases he : n = 1
+      · subst n; rw [h1, norm_zero]; positivity
+      · have hpos := (mem_Icc.mp hn).1
+        refine (hne he).trans ((norm_integral_cpow_neg_criticalLinePoint_le (show 2 ≤ n by omega) T).trans ?_)
+        rw [hroot, div_eq_mul_one_div]
+        apply mul_le_mul_of_nonneg_right _ (by positivity)
+        nlinarith [sq_nonneg ((k : ℝ) - 1)]
+    · intro n hn hnl
+      have hpos := (mem_Icc.mp hn).1
+      by_cases he : n = 1
+      · subst n; rw [h1, norm_zero]; positivity
+      · exact (hne he).trans (primitiveDirichletL_infinite_criticalZeros_raw_mode hpos hK hT (hsplit hnl).2)
+  · let z (n : ℕ) := a n * ∫ t in T..2 * T, E t * w n t
+    have hsum : (∫ t in T..2 * T, E t * P t) = ∑ n ∈ Finset.Icc 1 m, z n := by
+      change (∫ t in T..2 * T, E t * ∑ n ∈ Finset.Icc 1 m, a n * w n t) = _
+      simp only [mul_sum]
+      simp_rw [show ∀ (n : ℕ) (t : ℝ), E t * (a n * w n t) = a n * (E t * w n t) by intros; ring]
+      rw [intervalIntegral.integral_finsetSum (fun n hn ↦ (hintE n (mem_Icc.mp hn).1).const_mul _)]
+      simp only [z, intervalIntegral.integral_const_mul]
+    rw [hsum]
+    have hz {n : ℕ} (hn : 0 < n) :
+        ‖z n‖ ≤ (1 / Real.sqrt n) * ‖∫ t in T..2 * T, firstDerivativeOscillation (fun u ↦ hardyOscillatoryPhase n u + c * u) t‖ := by
+      rw [← primitiveDirichletL_infinite_criticalZeros_phased_mode c hn hT, show z n = a n * _ from rfl, norm_mul]
+      exact mul_le_of_le_one_left (norm_nonneg _) (ha n)
+    refine hlimit z ?_ ?_
+    · intro n hn
+      have hp := (mem_Icc.mp hn).1
+      simpa only [mul_comm (20 * Real.sqrt T)] using (hz hp).trans (mul_le_mul_of_nonneg_left (hmode hp hT).1 (by positivity))
+    · intro n hn hnl
+      have hp := (mem_Icc.mp hn).1
+      simpa only [mul_comm (4 / K)] using (hz hp).trans (mul_le_mul_of_nonneg_left ((hmode hp hT).2 (hsplit hnl).1) (by positivity))
+
+open Complex Finset HardyCriticalLine in
+/-- On `[T,2T]` with `T = k⁴`, a cutoff of size `(AT)²` gives uniform error at most `1/16`.
+The shorter cutoff `T` gives a pointwise bound of order `√T` for the L-function. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_window_approx {N : ℕ} [NeZero N] (χ : DirichletCharacter ℂ N)
+    (hχ : χ ≠ 1) :
+    ∃ A : ℕ, 0 < A ∧ ∀ k : ℕ, 0 < k →
+      let T : ℝ := (k : ℝ) ^ 4
+      let m := (A * k ^ 4) ^ 2
+      let P (t : ℝ) := ∑ n ∈ Finset.Icc 1 m, χ (n : ZMod N) * (n : ℂ) ^ (-criticalLinePoint t)
+      ∀ t ∈ Icc T (2 * T), ‖χ.LFunction (criticalLinePoint t) - P t‖ ≤ 1 / 16 ∧
+        ‖χ.LFunction (criticalLinePoint t)‖ ≤ (2 + 7 * (N : ℝ)) * (k : ℝ) ^ 2 := by
+  let A := 128 * (N + 1)
+  have hA : 0 < A := by dsimp [A]; positivity
+  refine ⟨A, hA, ?_⟩
+  intro k hk T m P t ht
+  have hk1 : 1 ≤ (k : ℝ) := by exact_mod_cast hk
+  have hT1 : 1 ≤ T := one_le_pow₀ hk1
+  have htp : 0 ≤ t := (zero_le_one.trans hT1).trans ht.1
+  have hs : (criticalLinePoint t).re = 1 / 2 := by norm_num [criticalLinePoint, add_re, mul_re]
+  have hsn : ‖criticalLinePoint t‖ ≤ 3 * T := by
+    dsimp only [criticalLinePoint]
+    apply (norm_add_le _ _).trans
+    rw [norm_div, norm_one, norm_ofNat, norm_mul, norm_I, mul_one, norm_real, Real.norm_of_nonneg htp]
+    linarith [ht.2]
+  let Q (m' : ℕ) := ∑ n ∈ Finset.Icc 1 m', χ (n : ZMod N) * (n : ℂ) ^ (-criticalLinePoint t)
+  have hcut (j : ℕ) (hj : 0 < j) :
+      ‖χ.LFunction (criticalLinePoint t) - Q (j ^ 2)‖ ≤ 7 * N * T / j := by
+    have h := primitiveDirichletL_infinite_criticalZeros_truncate χ hχ (s := criticalLinePoint t) (by rw [hs]; norm_num) (j ^ 2)
+    have hq : (∑ i ∈ range (j ^ 2), χ ((i : ZMod N) + 1) * ((i + 1 : ℕ) : ℂ) ^ (-criticalLinePoint t)) = Q (j ^ 2) := by
+      simpa [Q] using primitiveDirichletL_infinite_criticalZeros_sum_shift (fun n : ℕ ↦ χ (n : ZMod N) * (n : ℂ) ^ (-criticalLinePoint t)) (j ^ 2)
+    rw [hq, hs, Real.rpow_neg (by positivity), ← Real.sqrt_eq_rpow] at h
+    have hj' : 0 < (j : ℝ) := by exact_mod_cast hj
+    have hr : (j : ℝ) ≤ Real.sqrt ((j ^ 2 + 1 : ℕ) : ℝ) := by
+      apply (Real.le_sqrt (Nat.cast_nonneg _) (by positivity)).mpr
+      push_cast
+      linarith
+    calc _ ≤ N * (1 + ‖criticalLinePoint t‖/(1 / 2)) * (Real.sqrt ((j ^ 2 + 1 : ℕ) : ℝ))⁻¹ := h
+         _ ≤ N * (7 * T) * (j : ℝ)⁻¹ := by
+           apply mul_le_mul _ ((inv_le_inv₀ (hj'.trans_le hr) hj').mpr hr) (inv_nonneg.mpr (Real.sqrt_nonneg _)) (by positivity)
+           apply mul_le_mul_of_nonneg_left _ (Nat.cast_nonneg _)
+           linarith
+         _ = _ := by ring
+  have hqnorm (j : ℕ) : ‖Q j‖ ≤ 2 * Real.sqrt j := by
+    refine (norm_sum_le _ _).trans ((sum_le_sum (g := fun n : ℕ ↦ 1 / Real.sqrt n) ?_).trans (sum_Icc_one_div_sqrt_le_two_mul_sqrt j))
+    intro n hn
+    rw [norm_mul, norm_cpow_neg_criticalLinePoint (Finset.mem_Icc.mp hn).1]
+    exact mul_le_of_le_one_left (by positivity) (χ.norm_le_one _)
+  constructor
+  · refine (hcut (A * k ^ 4) (by positivity)).trans ?_
+    dsimp only [T, A]
+    push_cast
+    apply (div_le_iff₀ (by positivity)).mpr
+    nlinarith [mul_nonneg (Nat.cast_nonneg (α := ℝ) N) (pow_nonneg (Nat.cast_nonneg (α := ℝ) k) 4)]
+  · have hkroot : Real.sqrt ((k ^ 2) ^ 2 : ℕ) = (k : ℝ) ^ 2 := by push_cast; rw [Real.sqrt_sq (sq_nonneg _)]
+    have h := (norm_sub_norm_le (χ.LFunction (criticalLinePoint t)) (Q ((k ^ 2) ^ 2))).trans (hcut (k ^ 2) (by positivity))
+    have hp := hqnorm ((k ^ 2) ^ 2)
+    rw [hkroot] at hp
+    have hdiv : 7 * (N : ℝ) * T / ((k ^ 2 : ℕ) : ℝ) = 7 * N * (k : ℝ) ^ 2 := by
+      dsimp only [T]; push_cast; field_simp [show (k : ℝ) ≠ 0 by positivity]
+    rw [hdiv] at h
+    linarith
+
+open Complex in
+/-- Integrating a uniform error bound over a dyadic interval costs its length. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_integral_error {f g : ℝ → ℂ} {T B : ℝ} (hT : 0 < T)
+    (hf : IntervalIntegrable f volume T (2 * T)) (hg : IntervalIntegrable g volume T (2 * T))
+    (h : ∀ t ∈ Icc T (2 * T), ‖f t - g t‖ ≤ B) :
+    ‖(∫ t in T..2 * T, f t) - ∫ t in T..2 * T, g t‖ ≤ B * T := by
+  rw [← intervalIntegral.integral_sub hf hg]
+  have hab : T ≤ 2 * T := by linarith
+  apply (intervalIntegral.norm_integral_le_of_norm_le_const (C := B) (fun t ht ↦ ?_)).trans_eq
+  · rw [abs_of_nonneg (sub_nonneg.mpr hab)]
+    ring
+  · rw [uIoc_of_le hab] at ht
+    exact h t ⟨ht.1.le, ht.2⟩
+
+open Complex Finset HardyCriticalLine in
+/-- If the Hardy function had finitely many zeros it would have constant sign on a sufficiently
+late dyadic interval. Its small signed mean would then dominate the large unphased mean. -/
+private theorem primitiveDirichletL_infinite_criticalZeros_nonprincipal {N : ℕ} [NeZero N] {χ : DirichletCharacter ℂ N}
+    (hχ : χ.IsPrimitive) (hχ1 : χ ≠ 1) :
+    {t : ℝ | χ.LFunction ((1 / 2 : ℂ) + (t : ℂ) * I) = 0}.Infinite := by
+  obtain ⟨H, hH, hnormH, b, hb, hphase⟩ := primitiveDirichletL_infinite_criticalZeros_real_approx hχ
+  obtain ⟨A, hA, hcut⟩ := primitiveDirichletL_infinite_criticalZeros_window_approx χ hχ1
+  let c := Real.log N / 2
+  let K := 256 * (A : ℝ)
+  have hK : 0 < K := by dsimp [K]; positivity
+  obtain ⟨D, hD, hmeans⟩ := primitiveDirichletL_infinite_criticalZeros_polynomial_means (fun n : ℕ ↦ χ (n : ZMod N))
+    (fun n ↦ χ.norm_le_one _) (by simp) c K hK
+  by_contra hnot
+  obtain ⟨R, hR⟩ := (Set.not_infinite.mp hnot).bddAbove
+  obtain ⟨k, hbig⟩ := exists_nat_gt (max R (max (1280 * (D : ℝ)) (48 * (2 + 7 * (N : ℝ)))))
+  have hkR : R < (k : ℝ) := (le_max_left ..).trans_lt hbig
+  have hkD : 1280 * (D : ℝ) ≤ k := (le_max_left ..).trans ((le_max_right ..).trans hbig.le)
+  have hkN : 48 * (2 + 7 * (N : ℝ)) ≤ k := (le_max_right ..).trans ((le_max_right ..).trans hbig.le)
+  have hk1 : 1 ≤ (k : ℝ) := by linarith [Nat.cast_nonneg (α := ℝ) N]
+  have hk : 0 < k := by exact_mod_cast hk1
+  have hk2 : (k : ℝ) ≤ (k : ℝ) ^ 2 := by nlinarith [mul_nonneg (sub_nonneg.mpr hk1) (Nat.cast_nonneg k)]
+  let T : ℝ := (k : ℝ) ^ 4
+  let m := (A * k ^ 4) ^ 2
+  have hm : 0 < m := by dsimp [m]; positivity
+  have hT1 : 1 ≤ T := one_le_pow₀ hk1
+  have hT : 0 < T := zero_lt_one.trans_le hT1
+  have hab : T ≤ 2 * T := by linarith
+  have hkT : (k : ℝ) ≤ T := by dsimp [T]; simpa using pow_le_pow_right₀ hk1 (by norm_num : 1 ≤ 4)
+  let L (t : ℝ) := χ.LFunction (criticalLinePoint t)
+  let P (t : ℝ) := ∑ n ∈ Finset.Icc 1 m, χ (n : ZMod N) * (n : ℂ) ^ (-criticalLinePoint t)
+  let E (t : ℝ) := exp (I * ((criticalLineStirlingPhase t + c * t : ℝ) : ℂ))
+  have hEn (t : ℝ) : ‖E t‖ = 1 := by dsimp only [E]; rw [mul_comm]; exact norm_exp_ofReal_mul_I _
+  have hiL : Continuous L := (χ.differentiable_LFunction hχ1).continuous.comp continuous_criticalLinePoint
+  have hiP : Continuous P := continuous_finsetSum _ fun n hn ↦ (continuous_cpow_neg_criticalLinePoint (mem_Icc.mp hn).1).const_mul _
+  have hiEP : IntervalIntegrable (fun t ↦ b * (E t * P t)) volume T (2 * T) := by
+    apply ContinuousOn.intervalIntegrable
+    intro t ht
+    have htpos : 0 < t := hT.trans_le ((uIcc_of_le hab ▸ ht : t ∈ Icc T (2 * T)).1)
+    apply ContinuousAt.continuousWithinAt
+    apply ContinuousAt.const_mul
+    apply ContinuousAt.mul _ hiP.continuousAt
+    dsimp only [E, criticalLineStirlingPhase]
+    fun_prop (disch := positivity)
+  have hcut' (t : ℝ) (ht : t ∈ Icc T (2 * T)) :
+      ‖L t - P t‖ ≤ 1 / 16 ∧ ‖L t‖ ≤ (2 + 7 * (N : ℝ)) * (k : ℝ) ^ 2 := hcut k hk t ht
+  have hsigned (t : ℝ) (ht : t ∈ Icc T (2 * T)) : ‖(H t : ℂ) - b * (E t * P t)‖ ≤ 1 / 8 := by
+    have htp := hT.trans_le ht.1
+    have he := hphase t (hT1.trans ht.1)
+    have hc := hcut' t ht
+    have hfrac : (3 / t) * (2 + 7 * (N : ℝ)) * (k : ℝ) ^ 2 ≤ 1 / 16 := by
+      rw [div_mul_eq_mul_div, div_mul_eq_mul_div]
+      apply (div_le_iff₀ htp).mpr
+      have hsq := mul_le_mul_of_nonneg_right (hkN.trans hk2) (sq_nonneg (k : ℝ))
+      have htt : (k : ℝ) ^ 4 ≤ t := ht.1
+      nlinarith [htt]
+    have he' : ‖(H t : ℂ) - b * E t * L t‖ ≤ 1 / 16 := by
+      exact he.trans ((mul_le_mul_of_nonneg_left hc.2 (by positivity)).trans (by linarith [hfrac]))
+    have hdiff : ‖b * E t * L t - b * (E t * P t)‖ ≤ 1 / 16 := by
+      rw [← mul_assoc b, ← mul_sub, norm_mul, norm_mul, hb, hEn, one_mul, one_mul]
+      exact hc.1
+    linarith [norm_sub_le_norm_sub_add_norm_sub (H t : ℂ) (b * E t * L t) (b * (E t * P t))]
+  have herrL := primitiveDirichletL_infinite_criticalZeros_integral_error hT (hiL.intervalIntegrable ..) (hiP.intervalIntegrable ..)
+    (fun t ht ↦ (hcut' t ht).1)
+  have herrH := primitiveDirichletL_infinite_criticalZeros_integral_error hT ((continuous_ofReal.comp hH).intervalIntegrable ..) hiEP hsigned
+  have hmn := hmeans k m hk hm
+  have hsmall : 40 * (D : ℝ) * (k : ℝ) ^ 3 + (8 / K) * Real.sqrt m ≤ T / 16 := by
+    have hms : Real.sqrt m = (A : ℝ) * T := by dsimp [m,T]; push_cast; rw [Real.sqrt_sq (by positivity)]
+    have hK' : (8 / K) * Real.sqrt m = T / 32 := by rw [hms]; dsimp [K]; field_simp; ring
+    rw [hK']
+    have hp := mul_le_mul_of_nonneg_right hkD (pow_nonneg (Nat.cast_nonneg k) 3)
+    dsimp [T]
+    nlinarith
+  have hraw : ‖(∫ t in T..2 * T, P t) - (T : ℂ)‖ ≤ T / 16 := hmn.1.trans hsmall
+  have hphis : ‖∫ t in T..2 * T, b * (E t * P t)‖ ≤ T / 16 := by
+    rw [intervalIntegral.integral_const_mul, norm_mul, hb, one_mul]
+    exact hmn.2.trans hsmall
+  have hno (t : ℝ) (ht : t ∈ Icc T (2 * T)) : H t ≠ 0 := by
+    intro he
+    have h := hnormH t
+    rw [he, abs_zero, eq_comm, norm_eq_zero] at h
+    have hb' : t ≤ R := hR (show t ∈ {u : ℝ | χ.LFunction ((1 / 2 : ℂ) + (u : ℂ) * I) = 0} from h)
+    linarith [ht.1]
+  have habs := abs_integral_eq_integral_abs_of_constant_sign hab
+    (nonnegative_or_nonpositive_on_Icc_of_continuous_ne_zero hH hab hno)
+  have hcomp : ‖∫ t in T..2 * T, L t‖ ≤ ‖∫ t in T..2 * T, (H t : ℂ)‖ := by
+    rw [intervalIntegral.integral_ofReal, norm_real, Real.norm_eq_abs, habs]
+    simpa only [hnormH] using (intervalIntegral.norm_integral_le_integral_norm (f := L) hab)
+  have h1 := norm_sub_norm_le (T : ℂ) (∫ t in T..2 * T, P t)
+  rw [norm_sub_rev, norm_real, Real.norm_of_nonneg hT.le] at h1
+  have h2 := norm_sub_norm_le (∫ t in T..2 * T, P t) (∫ t in T..2 * T, L t)
+  rw [norm_sub_rev] at h2
+  have h3 := norm_sub_norm_le (∫ t in T..2 * T, (H t : ℂ)) (∫ t in T..2 * T, b * (E t * P t))
+  linarith only [h1.trans hraw, h2.trans herrL, h3.trans herrH, hcomp, hphis, hT]
+
 /-- Classical input: every primitive Dirichlet character has infinitely many zeros on the
 critical line (Hardy 1914 for the Riemann zeta function; Bauer, Corollary 1, for Dirichlet
-characters). Not a statement of the paper and not a gap in it: a known theorem of which this
-project has no formal proof. The refutation of Theorem 10.4.3.1(2) as printed is proved from
-it by name. -/
+characters). This classical theorem supplies the arithmetic input for the refutation of
+Theorem 10.4.3.1(2) as printed. -/
 theorem primitiveDirichletL_infinite_criticalZeros : PrimitiveDirichletLInfiniteCriticalZeros := by
-  sorry
+  intro N _ χ hχ
+  by_cases hN : N = 1
+  · subst N
+    exact primitiveDirichletL_infinite_criticalZeros_modOne χ
+  · apply primitiveDirichletL_infinite_criticalZeros_nonprincipal hχ
+    intro he
+    have hc : 1 = N := by simpa only [DirichletCharacter.IsPrimitive, he,
+      DirichletCharacter.conductor_one] using hχ
+    exact hN hc.symm
 
 /-- Paper: Theorem 10.4.3.1(2), pp. 467–468. Over ℚ take `a = 1/2` and
 `s = 4`. Use the Dirichlet characters for the basepoints and put the
@@ -872,7 +1825,7 @@ critical-line ordinates (Bauer, Corollary 1), finitely many in each bounded
 interval, so each admits an absolute-value enumeration. The zeroth jets
 `(0,j,0)` escape each finite set while their first coordinate is constant.
 The proof is `Printed.spectralLineJet_cofinite_iff_coordinates_false_of_criticalZeros` applied to
-the classical input `primitiveDirichletL_infinite_criticalZeros`, which is open. -/
+the classical theorem `primitiveDirichletL_infinite_criticalZeros`. -/
 theorem Printed.spectralLineJet_cofinite_iff_coordinates_false :
     ¬ Printed.spectralLineJet_cofinite_iff_coordinates :=
   Printed.spectralLineJet_cofinite_iff_coordinates_false_of_criticalZeros

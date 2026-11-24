@@ -5,9 +5,10 @@ import Mathlib.Analysis.Calculus.BumpFunction.Normed
 import RiemannMasullo.ForMathlib.Topology.Algebra.PontryaginDual.Real
 import RiemannMasullo.Ch10_TraceSpectral.Sec1
 import Mathlib.Analysis.Complex.ExponentialBounds
+import Mathlib.NumberTheory.LSeries.ZetaZeros
 import RiemannMasullo.Ch13_ZerosHecke.Targets
+import RiemannMasullo.External.HardyCriticalLine.CriticalLineZeroInfinitude
 import RiemannMasullo.External.ZetaLab.HardyTenZeros.TenZeros
-import RiemannMasullo.External.ZetaLab.RHHeight.Main
 import Mathlib.Logic.Equiv.Nat
 
 /-! # Further assertions in the proofs of §10.3 that are false as printed -/
@@ -57,25 +58,42 @@ private theorem spectralLineSelection_three_zeta_zeros :
     exact h
   exact ⟨ts 0, ts 1, ts 2, hmono (by decide), hmono (by decide), hz 0, hz 1, hz 2⟩
 
-/-- A critical-line zero of ordinary zeta has positive order for the completed
-L-function of the trivial rational character. -/
-private theorem spectralLineSelection_mem_lineZeros (t : ℝ)
-    (ht : riemannZeta (shift(1 / 2, t)) = 0) :
-    t ∈ lineZeros((1 : PontryaginDual C𝔽(ℚ)), 1 / 2) := by
+/-- On the critical line the order of the trivial rational completed L-function is
+a finite natural number, positive exactly at the zeros of ordinary zeta. -/
+private theorem spectralLineSelection_zeta_order (t : ℝ) :
+    ∃ n : ℕ, orderAt((1 : PontryaginDual C𝔽(ℚ)), shift(1 / 2, t)) = ((n : ℤ) : WithTop ℤ) ∧
+      (0 < n ↔ riemannZeta (shift(1 / 2, t)) = 0) := by
   let z : ℂ := shift(1 / 2, t)
   have hre : z.re = 1 / 2 := by simp [z]
   have hne : z ≠ 1 := fun h ↦ by norm_num [h] at hre
+  have ha := analyticOn_riemannZeta z hne
+  have htwo : analyticOrderAt riemannZeta 2 = 0 :=
+    analyticOrderAt_eq_zero.mpr (.inr (riemannZeta_ne_zero_of_one_le_re (by norm_num)))
+  have hfin := analyticOn_riemannZeta.analyticOrderAt_ne_top_of_isPreconnected
+    (x := 2) (isConnected_compl_singleton_of_one_lt_rank (by simp) 1).isPreconnected
+    (by simp) hne (by simp [htwo])
+  obtain ⟨n, hn⟩ := ENat.ne_top_iff_exists.mp hfin
   have hm : MeromorphicOn riemannZeta univ := by
     simpa only [DirichletCharacter.LFunction_modOne_eq] using
       meromorphic_dirichletLFunction (1 : DirichletCharacter ℂ 1)
-  change 0 < meromorphicOrderAt (continuedCompletedHeckeL (1 : PontryaginDual C𝔽(ℚ))) z
-  rw [← meromorphicOrderAt_finiteHeckeL_continuation _ hm (fun s ↦
-    (dedekindZeta_rat_eq_riemannZeta s.property).symm.trans
-      (finiteHeckeL_one_eq_dedekindZeta (K := ℚ) s).symm) (by rw [hre]; norm_num)]
-  apply (tendsto_zero_iff_meromorphicOrderAt_pos (hm z (mem_univ z))).mp
-  change riemannZeta z = 0 at ht
-  rw [← ht]
-  exact (differentiableAt_riemannZeta hne).continuousAt.continuousWithinAt
+  refine ⟨n, ?_, ?_⟩
+  · change meromorphicOrderAt (continuedCompletedHeckeL (1 : PontryaginDual C𝔽(ℚ))) z = _
+    rw [← meromorphicOrderAt_finiteHeckeL_continuation _ hm (fun s ↦
+      (dedekindZeta_rat_eq_riemannZeta s.property).symm.trans
+        (finiteHeckeL_one_eq_dedekindZeta (K := ℚ) s).symm) (by rw [hre]; norm_num),
+      ha.meromorphicOrderAt_eq, ← hn, ENat.map_natCast]
+  · change 0 < n ↔ riemannZeta z = 0
+    rw [← ha.analyticOrderAt_ne_zero, ← hn]
+    simp [Nat.pos_iff_ne_zero]
+
+/-- A critical-line zero of ordinary zeta has positive order for the completed
+L-function of the trivial rational character, and conversely. -/
+private theorem spectralLineSelection_mem_lineZeros (t : ℝ) :
+    t ∈ lineZeros((1 : PontryaginDual C𝔽(ℚ)), 1 / 2) ↔ riemannZeta (shift(1 / 2, t)) = 0 := by
+  obtain ⟨n, hn, hz⟩ := spectralLineSelection_zeta_order t
+  change 0 < orderAt((1 : PontryaginDual C𝔽(ℚ)), shift(1 / 2, t)) ↔ _
+  rw [hn]
+  simpa using hz
 
 /-- Paper: Theorem 10.3.1.1, interval choice before (10.3.1.15), p. 450.
 Use F = ℚ, the trivial base character and a = 1/2. Let K consist of the first and third
@@ -101,14 +119,14 @@ theorem Printed.spectralLineSelection_exists_isolatingInterval_false :
   have hzeros : (K : Set ℝ) ⊆ lineZeros((1 : PontryaginDual C𝔽(ℚ)), 1 / 2) := by
     intro t ht
     rcases (show t = u ∨ t = w by simpa [K] using ht) with rfl | rfl
-    · exact spectralLineSelection_mem_lineZeros _ hu
-    · exact spectralLineSelection_mem_lineZeros _ hw
+    · exact (spectralLineSelection_mem_lineZeros _).2 hu
+    · exact (spectralLineSelection_mem_lineZeros _).2 hw
   have htriv : χ' 1 = 1 := Function.update_self ..
   obtain ⟨ε, hε, hK⟩ := hall ℚ χ' hχ' (1 / 2) 1 K ⟨u, huK⟩ (by simpa only [htriv] using hzeros)
   rw [htriv] at hK
   have hvK : v ∈ (K : Set ℝ) := by
     rw [← hK]
-    refine ⟨⟨?_, ?_⟩, spectralLineSelection_mem_lineZeros _ hv⟩
+    refine ⟨⟨?_, ?_⟩, (spectralLineSelection_mem_lineZeros _).2 hv⟩
     · exact (sub_le_self _ hε.le).trans ((K.min'_le u huK).trans huv.le)
     · exact hvw.le.trans ((K.le_max' w hwK).trans (le_add_of_nonneg_right hε.le))
   simp [K, huv.ne', hvw.ne] at hvK
@@ -129,184 +147,36 @@ def Printed.spectralLineBand_jetCount_le : Prop :=
       ((∑ t ∈ K, min ((orderAt(χ ω, shift(a, t))).untop₀.toNat) floorCut(s) : ℕ) : ℝ) ≤
         (floorCut(s) : ℝ) * Real.log (max |l| |r|)
 
-/-- **At least ten zeros on the critical line below height 50**: ten distinct ordinates
-`0 < t_0 < t_1 < ⋯ < t_9 < 50` with `ζ(1/2 + i t_k) = 0`. Each `t_k` lies in the two-decimal
-interval of the corresponding `zero_in_*` theorem. Adapted from Thomas Lince’s
-`HardyTenZeros.ten_zeros_on_line_below_fifty` (MIT), retaining the bounds at 22. -/
-private theorem spectralLineBand_jetCount_le_false_brackets :
-    ∃ ts : Fin 10 → ℝ, ts 1 < 22 ∧ 22 < ts 2 ∧ StrictMono ts ∧
-      ∀ k, 0 < ts k ∧ ts k < 50 ∧ riemannZeta (1 / 2 + ts k * Complex.I) = 0 := by
-  obtain ⟨t0, h0, z0⟩ := HardyFirstZero.first_zero_on_line
-  obtain ⟨t1, h1, z1⟩ := HardyTenZeros.zero_in_2102
-  obtain ⟨t2, h2, z2⟩ := HardyTenZeros.zero_in_2501
-  obtain ⟨t3, h3, z3⟩ := HardyTenZeros.zero_in_3042
-  obtain ⟨t4, h4, z4⟩ := HardyTenZeros.zero_in_3293
-  obtain ⟨t5, h5, z5⟩ := HardyTenZeros.zero_in_3758
-  obtain ⟨t6, h6, z6⟩ := HardyTenZeros.zero_in_4091
-  obtain ⟨t7, h7, z7⟩ := HardyTenZeros.zero_in_4332
-  obtain ⟨t8, h8, z8⟩ := HardyTenZeros.zero_in_4800
-  obtain ⟨t9, h9, z9⟩ := HardyTenZeros.zero_in_4977
-  obtain ⟨l0, u0⟩ := h0
-  obtain ⟨l1, u1⟩ := h1
-  obtain ⟨l2, u2⟩ := h2
-  obtain ⟨l3, u3⟩ := h3
-  obtain ⟨l4, u4⟩ := h4
-  obtain ⟨l5, u5⟩ := h5
-  obtain ⟨l6, u6⟩ := h6
-  obtain ⟨l7, u7⟩ := h7
-  obtain ⟨l8, u8⟩ := h8
-  obtain ⟨l9, u9⟩ := h9
-  refine ⟨![t0, t1, t2, t3, t4, t5, t6, t7, t8, t9], ?_, ?_, ?_, ?_⟩
-  · change t1 < 22
-    linarith
-  · change 22 < t2
-    linarith
-  · refine Fin.strictMono_iff_lt_succ.mpr fun i => ?_
-    fin_cases i <;> simp <;> linarith
-  · intro k
-    simp only [one_div] at z0 z1 z2 z3 z4 z5 z6 z7 z8 z9
-    fin_cases k <;> simp <;> refine ⟨by linarith, by linarith, by assumption⟩
-
-/-- The ten certified ordinates exhaust the count to height fifty. Only the first
-two have height at most twenty-two. -/
-private theorem spectralLineBand_jetCount_le_false_positive
-    (ts : Fin 10 → ℝ) (hmono : StrictMono ts)
-    (hts : ∀ i, 0 < ts i ∧ ts i < 50 ∧ riemannZeta (1 / 2 + ts i * Complex.I) = 0)
-    (hthird : 22 < ts 2) (hcount : RHHeight.ZeroCountUpTo 50 10)
-    (hsimple : RHHeight.RHHeight50) {t : ℝ} (ht : 0 < t) (ht' : t ≤ 22) :
-    analyticOrderAt riemannZeta (1 / 2 + t * Complex.I) =
-      if t = ts 0 ∨ t = ts 1 then 1 else 0 := by
+/-- The critical-line ordinates in (0, 50) form a finite set containing
+the ten distinct certified ordinates. -/
+private theorem spectralLineBand_jetCount_le_false_ordinates :
+    ∃ K : Finset ℝ, 10 ≤ K.card ∧ ∀ t, t ∈ K ↔
+      t ∈ Ioo (0 : ℝ) 50 ∧ riemannZeta (shift(1 / 2, t)) = 0 := by
   classical
-  let point (i : Fin 10) : ℂ := 1 / 2 + ts i * Complex.I
-  have hinj : Function.Injective point := by
-    intro i j h
-    apply hmono.injective
-    simpa [point] using congrArg Complex.im h
-  have hsub : Set.range point ⊆ RHHeight.stripZerosUpTo 50 := by
-    rintro _ ⟨i, rfl⟩
-    refine ⟨(hts i).2.2, by norm_num [point], by norm_num [point], ?_, ?_⟩
-    · simpa [point] using (hts i).1
-    · simpa [point] using (hts i).2.1.le
-  have hc : (RHHeight.stripZerosUpTo 50).ncard = 10 := hcount
-  have heq := Set.eq_of_subset_of_ncard_le hsub
-    (by simp [Set.ncard_range_of_injective hinj, hc])
-    (Set.finite_of_ncard_ne_zero (by omega))
-  let z : ℂ := 1 / 2 + t * Complex.I
-  have hEq : riemannZeta z = 0 ↔ t = ts 0 ∨ t = ts 1 := by
-    constructor
-    · intro hz
-      have hzmem : z ∈ RHHeight.stripZerosUpTo 50 :=
-        ⟨hz, by norm_num [z], by norm_num [z], by simpa [z] using ht,
-          by simpa [z] using (show t ≤ 50 by linarith)⟩
-      rw [← heq] at hzmem
-      obtain ⟨i, hi⟩ := hzmem
-      have hit : ts i = t := by simpa [z, point] using congrArg Complex.im hi
-      have hlt : i < 2 := by
-        by_contra! hge
-        have := hmono.monotone hge
-        linarith
-      have : i = 0 ∨ i = 1 := by omega
-      rcases this with rfl | rfl
-      · exact Or.inl hit.symm
-      · exact Or.inr hit.symm
-    · rintro (rfl | rfl)
-      · exact (hts 0).2.2
-      · exact (hts 1).2.2
-  split_ifs with h
-  · exact (hsimple z (hEq.mpr h) (by norm_num [z]) (by norm_num [z])
-      (by simpa [z] using ht) (by simpa [z] using (show t ≤ 50 by linarith))).2
-  · apply AnalyticAt.analyticOrderAt_eq_zero _ |>.mpr
-    · exact fun hz ↦ h (hEq.mp hz)
-    · apply analyticOn_riemannZeta
-      intro hz
-      have := congrArg Complex.re (show z = 1 from hz)
-      norm_num [z] at this
-
-/-- The first Euler–Maclaurin block at the central point excludes a real zero.
-Take the boundary limit of the quarter-plane error bound. -/
-private theorem spectralLineBand_jetCount_le_false_center
-    (herr : ∀ z : ℂ, 0 < z.re → 0 < z.im →
-      ‖riemannZeta z - (z + 2) * (z + 3) / (12 * (z - 1))‖ ≤
-        ‖z * (z + 1) * (z + 2) * (z + 3)‖ * (1 + 1 / (z.re + 3)) / 720) :
-    riemannZeta (1 / 2 : ℂ) ≠ 0 := by
-  let z (t : ℝ) : ℂ := 1 / 2 + t * Complex.I
-  have hz : ContinuousAt z 0 := by dsimp [z]; fun_prop
-  have hzeta := (differentiableAt_riemannZeta (s := z 0) (by norm_num [z])).continuousAt.comp hz
-  have h₁ : ContinuousAt (fun t ↦ ‖riemannZeta (z t) -
-      (z t + 2) * (z t + 3) / (12 * (z t - 1))‖) 0 := by
-    fun_prop (disch := norm_num [z])
-  have h₂ : ContinuousAt (fun t ↦ ‖z t * (z t + 1) * (z t + 2) * (z t + 3)‖ *
-      (1 + 1 / ((z t).re + 3)) / 720) 0 := by
-    fun_prop (disch := norm_num [z])
-  have hle := le_of_tendsto_of_tendsto
-    (h₁.tendsto.mono_left (nhdsWithin_le_nhds (s := Set.Ioi 0)))
-    (h₂.tendsto.mono_left nhdsWithin_le_nhds)
-    (by filter_upwards [self_mem_nhdsWithin] with t (ht : 0 < t)
-        exact herr (z t) (by norm_num [z]) (by simpa [z] using ht))
-  intro hzero
-  norm_num [z, hzero, norm_div, norm_mul, Complex.norm_real, ← Complex.ofReal_add,
-    ← Complex.ofReal_sub, ← Complex.ofReal_div] at hle
-
-/-- The first two positive zeta ordinates and their conjugates are the only
-zeros of the rational completed zeta function at heights in `[-22, 22]`.
-All four are simple. This is the finite analytic input to the counterexample. -/
-private theorem spectralLineBand_jetCount_le_false_low_zeros :
-    ∃ u v : ℝ, 0 < u ∧ u < v ∧ v < 22 ∧
-      ∀ t ∈ Icc (-22 : ℝ) 22,
-        orderAt((1 : PontryaginDual C𝔽(ℚ)), shift((1 / 2 : ℝ), t)) =
-          if t = -v ∨ t = -u ∨ t = u ∨ t = v then 1 else 0 := by
-  classical
-  obtain ⟨ts, hsecond, hthird, hmono, hts⟩ :=
-    spectralLineBand_jetCount_le_false_brackets
-  refine ⟨ts 0, ts 1, (hts 0).1, hmono (by decide), hsecond, ?_⟩
-  intro t ht
-  let z (r : ℝ) : ℂ := 1 / 2 + r * Complex.I
-  have hne (r : ℝ) : z r ≠ 1 := by
-    intro h
-    have := congrArg Complex.re h
-    norm_num [z] at this
-  have hm : MeromorphicOn riemannZeta univ := by
-    simpa only [DirichletCharacter.LFunction_modOne_eq] using
-      meromorphic_dirichletLFunction (1 : DirichletCharacter ℂ 1)
-  have hbridge := meromorphicOrderAt_finiteHeckeL_continuation (1 : PontryaginDual C𝔽(ℚ))
-    hm (fun s ↦ by
-      rw [finiteHeckeL_one_eq_dedekindZeta, dedekindZeta_rat_eq_riemannZeta s.property])
-    (s := z t) (by norm_num [z])
-  push_cast
-  change meromorphicOrderAt (continuedCompletedHeckeL (1 : PontryaginDual C𝔽(ℚ))) (z t) = _
-  rw [← hbridge, (analyticOn_riemannZeta _ (hne t)).meromorphicOrderAt_eq]
-  have hpos {r : ℝ} (hr : 0 < r) (hr' : r ≤ 22) := spectralLineBand_jetCount_le_false_positive
-    ts hmono hts hthird RHHeight.zero_count_fifty RHHeight.rh_height_fifty hr hr'
-  have hu := (hts 0).1
-  have hv := (hts 1).1
-  rcases lt_trichotomy t 0 with hneg | rfl | hgt
-  · have hconj : (starRingEnd ℂ) (z t) = z (-t) := by norm_num [z, map_ofNat]
-    have horder := Zeta23.analyticOrderAt_zeta_conj (hne t)
-    rw [hconj] at horder
-    rw [← horder, hpos (neg_pos.mpr hneg) (by linarith [ht.1])]
-    have htu : t ≠ ts 0 := by linarith
-    have htv : t ≠ ts 1 := by linarith
-    simp only [htu, htv, or_false, neg_eq_iff_eq_neg]
-    by_cases h0 : t = -ts 0 <;> by_cases h1 : t = -ts 1 <;> simp [h0, h1]
-  · have hz0 : riemannZeta (z 0) ≠ 0 := by
-      simpa [z] using spectralLineBand_jetCount_le_false_center
-        (fun w hw ht' ↦ RHHeight.norm_zeta_sub_main_one_le (s := w) ⟨hw, ht'⟩)
-    rw [(analyticOn_riemannZeta _ (hne 0)).analyticOrderAt_eq_zero.mpr hz0]
-    simp [hu.ne', hv.ne', hu.ne, hv.ne]
-  · rw [hpos hgt ht.2]
-    have htu : t ≠ -ts 0 := by linarith
-    have htv : t ≠ -ts 1 := by linarith
-    simp only [htu, htv, false_or]
-    split <;> simp
+  let z (t : ℝ) : ℂ := shift(1 / 2, t)
+  have hcont : Continuous z := by dsimp [z]; fun_prop
+  have hinj : Function.Injective z := fun _ _ h ↦ by simpa [z] using congrArg Complex.im h
+  have hfin : (Ioo (0 : ℝ) 50 ∩ z ⁻¹' riemannZetaZeros).Finite := by
+    have hc := (isCompact_Icc.image hcont : IsCompact (z '' Icc 0 50)).inter_riemannZetaZeros_finite
+    exact (hc.preimage hinj.injOn).subset fun t ht ↦ ⟨⟨t, Ioo_subset_Icc_self ht.1, rfl⟩, ht.2⟩
+  let K := hfin.toFinset
+  have hmem (t : ℝ) : t ∈ K ↔ t ∈ Ioo (0 : ℝ) 50 ∧ riemannZeta (z t) = 0 :=
+    hfin.mem_toFinset
+  obtain ⟨ts, hmono, hts⟩ := HardyTenZeros.ten_zeros_on_line_below_fifty
+  refine ⟨K, ?_, hmem⟩
+  have hmap : MapsTo ts (Finset.univ : Finset (Fin 10)) K := by
+    intro i _
+    refine (hmem _).2 ⟨⟨(hts i).1, (hts i).2.1⟩, ?_⟩
+    simpa [z] using (hts i).2.2
+  simpa using Finset.card_le_card_of_injOn ts hmap hmono.injective.injOn
 
 /-- Paper: Theorem 10.3.1.1, count following (10.3.1.16), p. 450.
-With cutoff one, the four lowest nonreal zeta zeros give four jets in
-the band from −22 to 22, while the stated bound is log 22 < 4. -/
+With cutoff one, the positive critical-line ordinates below 50 give at least ten
+jets. A band enclosing them inside (0, 50) has logarithmic bound below four. -/
 theorem Printed.spectralLineBand_jetCount_le_false :
     ¬ Printed.spectralLineBand_jetCount_le := by
   classical
   intro h
-  obtain ⟨u, v, hu, huv, hv, hzeros⟩ := spectralLineBand_jetCount_le_false_low_zeros
   obtain ⟨χ₀, hχ₀⟩ := exists_spectralBasepointChoice ℚ
   let χ := Function.update χ₀ 1 1
   have hχ : IsSpectralBasepointChoice χ := by
@@ -316,57 +186,49 @@ theorem Printed.spectralLineBand_jetCount_le_false :
       simp only [χ, Function.update_self]
       rfl
     · simpa only [χ, Function.update_of_ne hω] using hχ₀ ω
-  let K : Finset ℝ := {-v, -u, u, v}
-  have hK : K.Nonempty := ⟨v, by simp [K]⟩
-  have hmin : K.min' hK = -v := by
-    apply le_antisymm (Finset.min'_le _ _ (by simp [K]))
-    apply Finset.le_min'
-    intro t ht
-    simp only [K, Finset.mem_insert, Finset.mem_singleton] at ht
-    rcases ht with rfl | rfl | rfl | rfl <;> linarith
-  have hmax : K.max' hK = v := by
-    apply le_antisymm _ (Finset.le_max' _ _ (by simp [K]))
-    apply Finset.max'_le
-    intro t ht
-    simp only [K, Finset.mem_insert, Finset.mem_singleton] at ht
-    rcases ht with rfl | rfl | rfl | rfl <;> linarith
-  have hlo : K.min' hK - (22 - v) = -22 := by rw [hmin]; ring
-  have hhi : K.max' hK + (22 - v) = 22 := by rw [hmax]; ring
-  have hmem {t : ℝ} (ht : t ∈ K) : t ∈ Icc (-22 : ℝ) 22 := by
-    have h₁ := Finset.min'_le K t ht
-    have h₂ := Finset.le_max' K t ht
-    rw [hmin] at h₁
-    rw [hmax] at h₂
-    constructor <;> linarith
-  have hband : Icc (-22 : ℝ) 22 ∩ lineZeros(χ 1, (1 / 2 : ℝ)) = (K : Set ℝ) := by
+  have htriv : χ 1 = 1 := Function.update_self ..
+  obtain ⟨K, hcard, hmem⟩ := spectralLineBand_jetCount_le_false_ordinates
+  have hK : K.Nonempty := Finset.card_pos.mp (by omega)
+  let a := K.min' hK
+  let b := K.max' hK
+  have ha : 0 < a := ((hmem a).1 (K.min'_mem hK)).1.1
+  have hb : b < 50 := ((hmem b).1 (K.max'_mem hK)).1.2
+  have hab : a ≤ b := K.min'_le _ (K.max'_mem hK)
+  let ε := min a (50 - b) / 2
+  have hε : 0 < ε := half_pos (lt_min ha (sub_pos.mpr hb))
+  have hl : 0 < a - ε := by dsimp [ε]; linarith [min_le_left a (50 - b)]
+  have hr : b + ε < 50 := by dsimp [ε]; linarith [min_le_right a (50 - b)]
+  have hlr : a - ε ≤ b + ε := by linarith
+  have hband : Icc (a - ε) (b + ε) ∩ lineZeros(χ 1, 1 / 2) = (K : Set ℝ) := by
+    rw [htriv]
     ext t
-    change (t ∈ Icc (-22 : ℝ) 22 ∧ 0 < orderAt(χ 1, shift((1 / 2 : ℝ), t))) ↔ t ∈ K
-    by_cases ht : t ∈ Icc (-22 : ℝ) 22
-    · simp only [χ, Function.update_self, hzeros t ht, ht, true_and]
-      by_cases hc : t = -v ∨ t = -u ∨ t = u ∨ t = v <;> simp [K, hc]
-    · exact ⟨fun h ↦ (ht h.1).elim, fun hk ↦ (ht (hmem hk)).elim⟩
-  have hbound := h ℚ χ hχ (1 / 2) 2 (by norm_num) 1 K hK (22 - v)
-    (by linarith) (by simpa only [hlo, hhi] using hband)
+    change (t ∈ Icc (a - ε) (b + ε) ∧ t ∈ lineZeros((1 : PontryaginDual C𝔽(ℚ)), 1 / 2)) ↔ t ∈ K
+    rw [spectralLineSelection_mem_lineZeros]
+    constructor
+    · rintro ⟨⟨hlt, htr⟩, hz⟩
+      exact (hmem t).2 ⟨⟨hl.trans_le hlt, htr.trans_lt hr⟩, hz⟩
+    · intro ht
+      exact ⟨⟨(sub_le_self a hε.le).trans (K.min'_le t ht),
+        (K.le_max' t ht).trans (le_add_of_nonneg_right hε.le)⟩, ((hmem t).1 ht).2⟩
+  have hbound := h ℚ χ hχ (1 / 2) 2 (by norm_num) 1 K hK ε hε hband
   have hcut : floorCut((2 : ℝ)) = 1 := (Nat.floor_eq_iff (by norm_num)).2 (by norm_num)
   have hterm (t : ℝ) (ht : t ∈ K) :
-      min (orderAt(χ 1, shift((1 / 2 : ℝ), t))).untop₀.toNat floorCut((2 : ℝ)) = 1 := by
-    have hcases : t = -v ∨ t = -u ∨ t = u ∨ t = v := by simpa [K] using ht
-    simp only [χ, Function.update_self, hzeros t (hmem ht), ite_eq_left hcases]
-    norm_num
-  have hcard : K.card = 4 := by
-    have huv' : 0 < v := lt_trans hu huv
-    simp [K, Finset.card_insert_of_notMem, ne_of_lt huv,
-      show -v ≠ -u by linarith, show -v ≠ u by linarith, show -v ≠ v by linarith,
-      show -u ≠ u by linarith, show -u ≠ v by linarith]
-  rw [Finset.sum_congr rfl hterm, hlo, hhi, hcut] at hbound
-  norm_num [hcard] at hbound
-  have hexp : (22 : ℝ) < Real.exp 4 := by
-    have he : (5 / 2 : ℝ) < Real.exp 1 := by linarith [Real.exp_one_gt_d9]
-    calc
-      (22 : ℝ) < (5 / 2 : ℝ) ^ 4 := by norm_num
-      _ < Real.exp 1 ^ 4 := by gcongr
-      _ = Real.exp 4 := by simp
-  exact (not_lt_of_ge hbound) ((Real.log_lt_iff_lt_exp (by norm_num)).2 hexp)
+      min (orderAt(χ 1, shift(1 / 2, t))).untop₀.toNat floorCut((2 : ℝ)) = 1 := by
+    obtain ⟨n, hn, hz⟩ := spectralLineSelection_zeta_order t
+    rw [htriv, hn, hcut, WithTop.untop₀_coe, Int.toNat_natCast]
+    exact min_eq_right (show 1 ≤ n from hz.mpr ((hmem t).1 ht).2)
+  rw [Finset.sum_congr rfl hterm, hcut] at hbound
+  have hle : (K.card : ℝ) ≤ Real.log (b + ε) := by
+    change _ ≤ _ * Real.log (max |a - ε| |b + ε|) at hbound
+    simpa only [Finset.sum_const, smul_eq_mul, mul_one, Nat.cast_one,
+      one_mul, abs_of_pos hl, abs_of_pos (hl.trans_le hlr), max_eq_right hlr] using hbound
+  have hexp : (50 : ℝ) < Real.exp 4 := calc
+    (50 : ℝ) < (2.7 : ℝ) ^ 4 := by norm_num
+    _ < Real.exp 1 ^ 4 := by gcongr; linarith [Real.exp_one_gt_d9]
+    _ = Real.exp 4 := by simp
+  have hlog := (Real.log_lt_iff_lt_exp (hl.trans_le hlr)).2 (hr.trans hexp)
+  have : (10 : ℝ) ≤ K.card := by exact_mod_cast hcard
+  linarith
 
 section Plancherel
 
@@ -1148,7 +1010,10 @@ private theorem spectralLineSamples_bad_numbering (v : ℕ → ℂ) (hv : ∀ n,
 ordinates of ordinary Riemann zeta zeros on the critical line. -/
 private theorem spectralLineSamples_hardy :
     {t : ℝ | riemannZeta (shift(1 / 2, t)) = 0}.Infinite := by
-  sorry
+  refine HardyCriticalLine.positiveHardyZeroHeights_infinite.mono fun t ht ↦ ?_
+  change riemannZeta (shift(1 / 2, t)) = 0
+  push_cast
+  exact (HardyCriticalLine.hardyFunctionReal_eq_zero_iff t).mp ht.2
 
 /-- The trivial rational row on the critical line admits a numbering by ℕ. -/
 private theorem spectralLineSamples_enumeration :
@@ -1173,7 +1038,7 @@ private theorem spectralLineSamples_enumeration :
   let : Countable U := (hZ.preimage (f := fun t : ℝ ↦ shift(1 / 2, t))
     (by intro x y h; simpa using congrArg Complex.im h)).to_subtype
   let : Infinite U := (spectralLineSamples_hardy.mono fun t ht ↦
-    spectralLineSelection_mem_lineZeros t ht).to_subtype
+    (spectralLineSelection_mem_lineZeros t).2 ht).to_subtype
   exact nonempty_equiv_of_countable
 
 /-- Paper: Theorem 10.3.1.1, after (10.3.1.26), p. 453.
@@ -1231,7 +1096,8 @@ def Printed.spectralStripMellinJet_norm_le : Prop :=
 
 /-- Paper: Theorem 10.3.2.1, (10.3.2.10)–(11), p. 455.
 Over ℚ, changing the basepoint of the trivial norm-one character translates its
-critical-line ordinates. At least one of the two certified simple zeros remains at a nonzero ordinate. -/
+critical-line ordinates. Two distinct certified zeros have finite positive order,
+and at least one translated ordinate is nonzero. -/
 private theorem spectralStripMellinJet_norm_le_false_exists_zero
     (χ : PontryaginDual C₁(ℚ) → PontryaginDual C𝔽(ℚ)) (hχ : IsSpectralBasepointChoice χ) :
     ∃ (ω : PontryaginDual C₁(ℚ)) (t : ℝ), t ≠ 0 ∧
@@ -1262,39 +1128,72 @@ private theorem spectralStripMellinJet_norm_le_false_exists_zero
     change continuedCompletedHeckeL ψ w = gaussianCompletedHeckeL ψ w
     rw [hC.2 ⟨w, hw⟩, gaussianCompletedHeckeL_eq_completedHeckeL ψ w hw]
     norm_num [Rat.numberField_discr]
-  obtain ⟨u, v, hu, huv, hv, hzeros⟩ := spectralLineBand_jetCount_le_false_low_zeros
-  obtain ⟨s, hs, hsr⟩ : ∃ s : ℝ, (s = u ∨ s = v) ∧ s ≠ r := by
+  obtain ⟨u, v, _, huv, _, hu, hv, _⟩ := spectralLineSelection_three_zeta_zeros
+  obtain ⟨s, hsr, hs⟩ : ∃ s : ℝ, s ≠ r ∧ riemannZeta (shift(1 / 2, s)) = 0 := by
     by_cases h : u = r
-    · exact ⟨v, Or.inr rfl, by linarith⟩
-    · exact ⟨u, Or.inl rfl, h⟩
-  have hband : s ∈ Icc (-22 : ℝ) 22 := by
-    rcases hs with rfl | rfl <;> constructor <;> linarith
+    · exact ⟨v, h ▸ huv.ne', hv⟩
+    · exact ⟨u, h, hu⟩
   have he : shift(1 / 2, (s - r : ℝ)) + (r : ℂ) * Complex.I = shift(1 / 2, s) := by
     push_cast
     ring
-  have hone : orderAt(χ 1, shift(1 / 2, (s - r : ℝ))) = 1 := by
-    rw [horder, hshift, meromorphicOrderAt_fun_comp_add_const_eq_meromorphicOrderAt, he,
-      ← horder, hzeros s hband, ite_eq_left (Or.inr (Or.inr hs))]
+  obtain ⟨n, hn, hz⟩ := spectralLineSelection_zeta_order s
   refine ⟨1, s - r, sub_ne_zero.mpr hsr, ?_⟩
-  rw [hone]
-  norm_num
+  rw [horder, hshift, meromorphicOrderAt_fun_comp_add_const_eq_meromorphicOrderAt, he, ← horder, hn]
+  simpa using hz.mpr hs
 
 /-- Paper: Theorem 10.3.2.1, (10.3.2.10)–(11), p. 455.
-The compact-character Mellin transform of the printed test is the quantity that the printed
-bound controls. At a prescribed frequency it does not vanish for a suitable test: take the
-test trivial on the norm-one subgroup, with norm profile a nonzero smooth bump multiplied by
-the inverse of the oscillation `r ↦ r ^ (i t)`, so that the Mellin integral at `shift(0, t)`
-becomes the integral of the bump against the multiplicative Haar measure, hence is nonzero.
-Missing input: the construction of an element of `BruhatCompactSupport` from a norm profile
-on the idele class group of `ℚ`, and the identification of `positiveRealHaar` with Lebesgue
-measure in the logarithmic coordinate. -/
+At any prescribed compact character and frequency, the Mellin integral is nonzero for some
+Bruhat test. The norm section identifies the full character with the product of the compact
+character and the radial oscillation. The inverse of this character times a smooth bump
+in the log norm gives a test whose Mellin integral is the norm-one Haar mass times the
+positive integral of the bump.
+The map `τ` is a section of the idelic norm, as on p. 455; without that the statement fails
+(for the constant map every test has Mellin value zero, #6741). -/
 private theorem spectralStripMellinJet_norm_le_false_exists_mellin
-    (τ : ℝ≥0ˣ →ₜ* C𝔽(ℚ)) (ω : PontryaginDual C₁(ℚ)) (t : ℝ) :
+    (τ : ℝ≥0ˣ →ₜ* C𝔽(ℚ)) (_hτ : Function.RightInverse τ (ideleClassNorm ℚ))
+    (ω : PontryaginDual C₁(ℚ)) (t : ℝ) :
     ∃ φ : BruhatCompactSupport C𝔽(ℚ),
       (∫ r : ℝ≥0ˣ, ((r.val : ℝ) : ℂ) ^ (shift(0, t)) *
         (∫ k : C₁(ℚ), (ω k : ℂ) * φ.val (τ r * k.val)
           ∂normOneIdeleClassTamagawaMeasure ℚ) ∂positiveRealHaar) ≠ 0 := by
-  sorry
+  obtain ⟨e, he⟩ := spectralPlancherel_exists_dualEquiv ℚ τ _hτ
+  let η := e (Multiplicative.ofAdd t, ω)
+  let B : ContDiffBump (0 : ℝ) := default
+  obtain ⟨φ, hφ⟩ := exists_characterNormTest (F := ℚ) η⁻¹ (fun y ↦ (B y : ℂ))
+    (Complex.ofRealCLM.contDiff.comp B.contDiff)
+    (B.hasCompactSupport.comp_left Complex.ofReal_zero)
+  let phase (r : ℝ≥0ˣ) := Circle.exp (t * Real.log (r.val : ℝ))
+  have htest (r : ℝ≥0ˣ) (k : C₁(ℚ)) : (ω k : ℂ) * φ.val (τ r * k.val) =
+      ((phase r)⁻¹ : Circle) * (B (Real.log (r.val : ℝ)) : ℂ) := by
+    have hn : ideleClassNorm ℚ (τ r * k.val) = r := by
+      rw [map_mul, _hτ r, MonoidHom.mem_ker.mp k.property, mul_one]
+    have hk : ω k * η⁻¹ (τ r * k.val) = (phase r)⁻¹ := by
+      change ω k * (e (Multiplicative.ofAdd t, ω) (τ r * k.val))⁻¹ = _
+      rw [he, mul_inv, mul_inv_cancel_left]
+    rw [hφ, hn, ← mul_assoc, ← Circle.coe_mul, hk]
+  have hphase (r : ℝ≥0ˣ) : ((r.val : ℝ) : ℂ) ^ (shift(0, t)) = (phase r : ℂ) := by
+    have hr := NNReal.coe_pos.mpr (Units.zero_lt r)
+    dsimp only [phase]
+    rw [Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr hr.ne'),
+      ← Complex.ofReal_log hr.le, Complex.ofReal_zero, zero_add, Circle.coe_exp,
+      Complex.ofReal_mul]
+    congr 1
+    ring
+  let ν := normOneIdeleClassTamagawaMeasure ℚ
+  let : CompactSpace C₁(ℚ) := (ideleClassGroup_finiteness ℚ).2.1
+  let : ν.IsHaarMeasure := (multiplicativeTamagawaMeasures_existsUnique ℚ).exists.choose_spec.2.2.2.1
+  have hmass : ν.real univ ≠ 0 :=
+    ENNReal.toReal_ne_zero.mpr ⟨NeZero.ne _, measure_ne_top _ _⟩
+  have hlog : (∫ r : ℝ≥0ˣ, (B (Real.log (r.val : ℝ)) : ℂ) ∂positiveRealHaar) =
+      ((∫ y : ℝ, B y : ℝ) : ℂ) := by
+    simpa only [sub_zero, mul_one, Complex.cpow_zero, zero_mul, Complex.exp_zero, one_mul,
+      integral_complex_ofReal] using grh_shift_integral (fun y ↦ (B y : ℂ))
+        (Complex.continuous_ofReal.comp B.continuous) (fun _ ↦ 1) (fun _ ↦ rfl) 0 0
+  refine ⟨φ, ?_⟩
+  simp_rw [htest, integral_const, hphase, mul_smul_comm, ← mul_assoc, ← Circle.coe_mul,
+    mul_inv_cancel, Circle.coe_one, one_mul]
+  rw [integral_smul, hlog, Complex.real_smul]
+  exact mul_ne_zero (Complex.ofReal_ne_zero.mpr hmass) (Complex.ofReal_ne_zero.mpr B.integral_pos.ne')
 
 /-- Paper: Theorem 10.3.2.1, (10.3.2.10)–(11), p. 455.
 Take F = ℚ, any spectral basepoint choice, a = 1/2, α = 3, s = 2 and N = 2, and test the
@@ -1314,7 +1213,7 @@ theorem Printed.spectralStripMellinJet_norm_le_false :
   have hτ : Function.RightInverse τ (ideleClassNorm ℚ) :=
     canonicalIdeleNormSection_rightInverse ℚ
   obtain ⟨ω, t, ht, hord, hmult⟩ := spectralStripMellinJet_norm_le_false_exists_zero χ hχ
-  obtain ⟨φ, hφ⟩ := spectralStripMellinJet_norm_le_false_exists_mellin τ ω t
+  obtain ⟨φ, hφ⟩ := spectralStripMellinJet_norm_le_false_exists_mellin τ hτ ω t
   obtain ⟨C, hC, hbound⟩ :=
     h ℚ χ hχ τ hτ (1 / 2) 3 2 (by norm_num) (by norm_num) φ 2 (by norm_num)
   have hmem : (0 : ℝ) ∈ Set.Icc (-3 : ℝ) 3 := by norm_num

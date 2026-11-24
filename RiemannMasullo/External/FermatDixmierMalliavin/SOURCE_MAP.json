@@ -1,0 +1,14 @@
+{
+  "upstream": "https://github.com/anthropics/fermats-last-theorem",
+  "commit": "6e837e75355538c7f80bab5b956861e86c4eacc2",
+  "files": {
+    "OneVariable.lean": {
+      "path": "P2M/Sol/S_DixmierMalliavin_exists_contDiff_tendsto_integral_mul.lean",
+      "sha256": "8b82a465c62385265d1745e0990bcec53e2f5b327fcf5b0040e7bb237c060f77"
+    },
+    "OneParameter.lean": {
+      "path": "P2M/Sol/S_DixmierMalliavin_exists_eq_integral_mul_comp_mul_exp_smul_add.lean",
+      "sha256": "e990c2d6131c63d1f58621aa00f842e49b894c8147a65509a5a9ba1cccf19add"
+    }
+  }
+}
