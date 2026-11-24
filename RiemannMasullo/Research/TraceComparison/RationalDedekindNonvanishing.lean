@@ -36,19 +36,16 @@ theorem rational_dedekindContinuation_eq_riemannZeta (f : ℂ → ℂ)
   filter_upwards [hopen.mem_nhds (show (2 : ℂ) ∈ {z : ℂ | 1 < z.re} by norm_num)] with z hz
   exact (hag z hz).trans (dedekindZeta_rat_eq_riemannZeta hz)
 
-/-- The precise rational-field conclusion of the Cureton–Thorner continuation theorem
-gives a centered, closed band for all nontrivial Riemann zeta zeros. Their exponent
-`σ = 31/32` yields half-width `15/32`. No bound on the height of a zero occurs. -/
-theorem rational_centered_zero_band_of_dedekindContinuation (σ : ℝ)
-    (h : ∃ f : ℂ → ℂ, DifferentiableOn ℂ f ({1}ᶜ : Set ℂ) ∧
-      (∀ z : ℂ, 1 < z.re → f z = dedekindZeta ℚ z) ∧
-      ∀ z : ℂ, σ < z.re → z ≠ 1 → f z ≠ 0) (ρ : criticalStripZetaZeros) :
+/-- A right zero-free half-plane for Riemann zeta bounds both sides of the centered critical
+strip, at every height, by reflection across the critical line. Both closed boundary lines
+may still contain zeros. -/
+theorem rational_centered_zero_band_of_riemannZeta_nonvanishing (σ : ℝ)
+    (hn : ∀ z : ℂ, σ < z.re → z ≠ 1 → riemannZeta z ≠ 0) (ρ : criticalStripZetaZeros) :
     |ρ.val.re - 1/2| ≤ σ - 1/2 := by
-  obtain ⟨f, hf, hag, hn⟩ := h
   have hζ {z : ℂ} (hs : z ≠ 1) (hz : riemannZeta z = 0) : z.re ≤ σ := by
     apply le_of_not_gt
     intro hh
-    exact hn z hh hs ((rational_dedekindContinuation_eq_riemannZeta f hf hag hs).trans hz)
+    exact hn z hh hs hz
   obtain ⟨hz, hpos, hlt⟩ := mem_criticalStripZetaZeros.mp ρ.property
   have h₁ : ρ.val ≠ 1 := fun h ↦ (ne_of_lt hlt) (by rw [h]; simp)
   have h₀ : ρ.val ≠ 0 := fun h ↦ (ne_of_gt hpos) (by rw [h]; simp)
@@ -62,10 +59,26 @@ theorem rational_centered_zero_band_of_dedekindContinuation (σ : ℝ)
   simp only [Complex.sub_re, Complex.one_re] at hleft
   exact abs_le.mpr ⟨by linarith, by linarith⟩
 
+/-- The precise rational-field conclusion of the Cureton–Thorner continuation theorem
+gives a centered, closed band for all nontrivial Riemann zeta zeros. Their exponent
+`σ = 31/32` yields half-width `15/32`. No bound on the height of a zero occurs. -/
+theorem rational_centered_zero_band_of_dedekindContinuation (σ : ℝ)
+    (h : ∃ f : ℂ → ℂ, DifferentiableOn ℂ f ({1}ᶜ : Set ℂ) ∧
+      (∀ z : ℂ, 1 < z.re → f z = dedekindZeta ℚ z) ∧
+      ∀ z : ℂ, σ < z.re → z ≠ 1 → f z ≠ 0) (ρ : criticalStripZetaZeros) :
+    |ρ.val.re - 1/2| ≤ σ - 1/2 := by
+  obtain ⟨f, hf, hag, hn⟩ := h
+  apply rational_centered_zero_band_of_riemannZeta_nonvanishing σ _ ρ
+  intro z hz h1
+  rw [← rational_dedekindContinuation_eq_riemannZeta f hf hag h1]
+  exact hn z hz h1
+
 /-- The exact rational specialization of the published `31/32` Dedekind theorem
 retains the entire order of every nontrivial zeta zero in the centered strip of
 half-width `31/64 < 1/2`, for every Sobolev parameter. Its edges lie strictly
-outside the closed `15/32` band. -/
+outside the closed `15/32` band. See
+[Cureton–Thorner, Theorem 1.1](https://hexagonmath.org/2610.00200v2) and the
+[pinned Lean solution](https://github.com/AxiomMath/DedekindZetaZeroFree/blob/09afbb4ce6570c1615d58509dc197fc9f0956b7d/Solution/DedekindZetaSolution.lean#L9-L12). -/
 theorem rational_full_strip_multiplicity_of_dedekind_thirty_one_over_thirty_two
     (h : ∃ f : ℂ → ℂ, DifferentiableOn ℂ f ({1}ᶜ : Set ℂ) ∧
       (∀ z : ℂ, 1 < z.re → f z = dedekindZeta ℚ z) ∧
