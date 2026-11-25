@@ -47,3 +47,17 @@ To count, each integer floor cell in the fixed support window has \(P\)-mass \(O
 If \(\Theta\) is unattained then \(S_\sigma\downarrow0\) as \(\sigma\uparrow\Theta\), by dominated convergence starting at any fixed \(\sigma_0\in(1/2,\Theta)\). Each term from a fixed zero eventually drops out. Given any prescribed \(L>0\), take \(\sigma\) sufficiently close to \(\Theta\), followed by a sufficiently small \(\tau>0\), so \(5(S_\sigma+2\tau)/2<L\). When \(\Theta\) is attained simply keep one \(\sigma\) and the resulting \(L\). Unconditional joint negative counts follow by this exterior argument or by eventual strict negativity on RH. If cumulative positive density has liminf zero, the attained exterior case is impossible by almost periodicity; if also the stated localized power saving holds, the unattained exterior case is impossible by the arbitrary-width assertion.
 
 These arithmetic implications are classical derivations. The fixed-width compact test depends on a zero abscissa threshold and is used here to prove a consequence of any failure of RH. The separate [positive theta-pair theorem in Lean](https://github.com/mccorvie/riemann-masullo/pull/7612) applies to an explicit fixed signed-mean test without this spectral input.
+
+## What arbitrarily long runs of one sign can distinguish
+
+For either physical prefix, define \(D_\pm\) as the supremum of the fixed logarithmic lengths \(L>0\) for which there are arbitrarily large \(X\) such that **every** integer in \([X,e^L X]\) has that strict sign. Use zero if the set is empty. The same classification holds for simultaneous signs of the two compensators.
+
+| Arithmetic zero configuration | \(D_+\) | \(D_-\) |
+| --- | --- | --- |
+| RH | \(0\) | \(+\infty\) |
+| An attained exterior supremum | finite and strictly positive | finite and strictly positive |
+| An unattained exterior supremum | \(0\) | \(0\) |
+
+Indeed, on an attained exterior line the uniformly almost periodic top-line spectrum has relatively densely recurring intervals above and below fixed thresholds after normalization. For all sufficiently late such intervals the whole integer block, for both compensators, has the selected strict sign. This gives the strict lower bounds. A sufficiently large fixed-ratio window has both signs everywhere by the preceding theorem, giving the finite upper bounds. The unattained case follows by applying the same theorem to every fixed positive \(L\). The critical case follows from the eventual strict sign margin.
+
+Thus a locally perfect sign count, with zero positive indices on arbitrarily large windows of some fixed relative width, could itself occur with an attained exterior supremum. A power saving on such windows by itself excludes an unattained supremum but does not exclude that attained case.
