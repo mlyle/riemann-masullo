@@ -21,3 +21,34 @@ $$
    =2\delta V f(0).
 $$
 For large central ordinates the magnitude of this scalar is at least $\delta V |f(0)|/\gamma^2$. Hence $\|G_\alpha I P_\beta r_{\beta,\gamma}\|_\alpha\ge c/(1+\gamma^2)$ at every central ordinate, for some $c>0$ depending on the two widths and the fixed degree. For the finitely many bounded ordinates use the preceding strictly positive individual norms. The wide Riesz norm is a fixed positive constant independent of $\gamma$, so the same lower order holds for unit-normalized inputs. This is a lower bound on the first geometric factor, before applying the mixed masked convolution. It does not give a signed lower bound on the composed trace. Common central modes cancel in the fully exhausted width-subtracted spectral sum. At a finite physical cutoff they cannot be discarded by asserting that this intermediate geometric projection kills them one at a time. [Exact finite-stage signed factorization](https://github.com/mlyle/riemann-masullo/blob/e27d9d34d86b1aea62bc4fff253c02707c912e8c/research/width-restriction-signed-defect.md#finite-physical-cutoffs-admit-an-exact-bounded-cross-width-factorization)
+
+## The complete divisor on a fixed test
+
+Take $\beta=1/2$. The fixed smoothed source just constructed can be chosen with $|f^{(j)}(x)|\le C_{A,j}e^{-A|x|}$ for every $A>0$ and integer $j\ge0$. The radial average of one genuine source belongs to every exponentially weighted $L^2$ by its genuine theta estimates at every width. Compactly supported smoothing and Cauchy–Schwarz on the translated support of each derivative of the smoothing kernel give the stated pointwise bounds. Fixed translation preserves them. Write $z=b+i\gamma=\rho-1/2$ and $r_{\beta,z}(x)=e^{\bar z x}/w_\beta(x)$. In the following scalar pairing the narrow geometric input is the first argument of the bilinear jet, so the integral has $e^{zx}$. As $|b|\le\beta$, the previous distributional computation applies to $f_b(x)=e^{bx}f(x)$. Its second-derivative density on the two open half-lines varies continuously in $L^1$ as $b$ ranges over a compact interval. A finite net and Riemann–Lebesgue therefore give, uniformly in $b$,
+$$
+ \gamma^2 V\int e^{-\delta|x|} f(x)e^{(b+i\gamma)x}\,dx
+      \ \longrightarrow\ 2\delta V f(0).
+$$
+At full width, this pairing tests the actual mixed projector at every rational completed zero. Summing the magnitudes over the **entire** divisor, with multiplicities $m_\rho$, is absolutely convergent. Its tail over $|\gamma|>T$ is asymptotic to $(2\delta V|f(0)|/\pi)\log(T)/T$. Indeed $N_+(T)\sim T\log T/(2\pi)$ counts positive ordinates with multiplicity. Partial summation gives $-N_+(T)T^{-2}+2\int_T^\infty N_+(u)u^{-3}du\sim\log(T)/(2\pi T)$, and conjugation doubles this. [Hasanalizade, Shen and Wong, Theorem 1.1](https://arxiv.org/abs/2107.06506) · [Actual integrability for genuine sources](https://github.com/mccorvie/riemann-masullo/blob/72a10ffc48c00276d45acb98b24a10816b253c54/RiemannMasullo/Ch10_TraceSpectral/Sec1.lean#L1435)
+
+## Strict saving on translated genuine geometric test vectors
+
+Let $f_y(x)=f(x-y)$ for $y\ge0$, and write $\mathcal L f(w)=\int f(u)e^{wu}du$. Every $f_y$ remains in the narrow theta subspace. The scalar pairing of $f_y$ with $G_\alpha I P_\beta r_{\beta,z}$ is
+$$
+ V\int e^{-\delta |x|} f(x-y)e^{z x}dx
+ = V e^{(z-\delta)y}\mathcal L f(z-\delta)
+       +O_{A,f}\left(\frac{e^{-Ay}}{1+\gamma^2}\right) . \tag{1}
+$$
+This holds uniformly for all $|b|\le\beta$, $y\ge0$, and any fixed $A>0$. On $x\ge0$ the absolute-value factor is exactly $e^{-\delta x}$. Extend that exponential across the whole line and substitute $x=y+u$ to obtain the explicit leading term. The remaining Fourier transform has density
+$$
+ \mathbf1_{x<0}\,(e^{\delta x}-e^{-\delta x})e^{bx} f(x-y).
+$$
+It vanishes at zero. On its support $|x-y|=y+|x|$. Take the preceding pointwise derivative bounds with rate greater than $A+\beta+\delta+1$. The density, its ordinary second derivative on the negative half-line, and the magnitude $2\delta |f(-y)|$ of the derivative jump at zero have $L^1$ or scalar bounds $\ll e^{-Ay}$, uniformly in $b$. The integral bound at low frequencies and two integrations by parts at high frequencies prove (1).
+
+In particular, for **every fixed** $0<\alpha<\beta=1/2$,
+$$
+ \sum_\rho m_\rho
+   \left|V\int e^{-\delta |x|}f_y(x)e^{(\rho-1/2)x}dx\right|
+ \ \ll_f\ e^{(\beta-\delta)y}=e^{(2\alpha-\beta)y}.
+$$
+All constants may depend on the two fixed widths. Uniform integration by parts in the defining transform bounds $|\mathcal L f(b-\delta+i\gamma)|\ll_f(1+\gamma^2)^{-1}$ on the whole compact real strip. The multiplicity sum of this majorant is finite by the cited zero count. Choose $A>|\beta-\delta|+1$ for the error in (1). Consequently the absolute sum is $O(e^{-(\beta-\alpha)y})$ after division by the thin scale $e^{\alpha y}$. It can even decay before normalization when $\alpha<\beta/2$. This is a physical estimate on the genuine translated narrow geometric input with every full-width zeroth evaluation and its actual multiplicity. The unresolved mixed **trace** also involves the whole nuclear convolution and its Hilbert-space dual vectors; transferring this estimate to that trace needs quantitative control of those vectors or a separate trace argument.
