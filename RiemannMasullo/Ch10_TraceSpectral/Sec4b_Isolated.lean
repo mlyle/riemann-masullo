@@ -800,6 +800,136 @@ local notation "geometricBlock(" z ")" =>
     (⟨((f jet(z, m)).comp (Θ₀).mkQL).smulRight (Gₐ (Aφ (Sₐ(x jet(z, m))))),
       smulRight_mem_nuclearEndomorphisms _ _⟩ : nuclearEndomorphisms _))
 
+omit ha hχ he horder hb in
+private theorem spectralStripGeometricKernel_traceNorm_sum_le {W ι : Type*}
+    [NormedAddCommGroup W] [InnerProductSpace ℂ W] [CompleteSpace W]
+    (S : Finset ι) (A : ι → nuclearEndomorphisms W) :
+    traceNorm (∑ i ∈ S, A i) ≤ ∑ i ∈ S, traceNorm (A i) := by
+  let : Norm (nuclearEndomorphisms W) := ⟨traceNorm⟩
+  have hc := traceNorm_normedSpaceCore (H := W)
+  have hzero : traceNorm (0 : nuclearEndomorphisms W) = 0 := (hc.norm_eq_zero_iff 0).mpr rfl
+  exact S.le_sum_of_subadditive traceNorm hzero.le hc.toCore.norm_triangle A
+
+omit ha hχ he horder hb in
+private theorem spectralStripGeometricKernel_bddAbove_of_rankOne_rows
+    {W Z : Type*} [NormedAddCommGroup W] [InnerProductSpace ℂ W] [CompleteSpace W]
+    (N : Z → ℕ) (u : (z : Z) → Fin (N z) → StrongDual ℂ W)
+    (v : (z : Z) → Fin (N z) → W)
+    (hrows : Summable (fun z ↦ ∑ m : Fin (N z), ‖u z m‖ * ‖v z m‖)) :
+    BddAbove (range fun K : Finset Z ↦ traceNorm (∑ z ∈ K, ∑ m : Fin (N z),
+      (⟨(u z m).smulRight (v z m), smulRight_mem_nuclearEndomorphisms _ _⟩ :
+        nuclearEndomorphisms W))) := by
+  classical
+  let T (z : Z) (m : Fin (N z)) : nuclearEndomorphisms W :=
+    ⟨(u z m).smulRight (v z m), smulRight_mem_nuclearEndomorphisms _ _⟩
+  let c (z : Z) : ℝ := ∑ m : Fin (N z), ‖u z m‖ * ‖v z m‖
+  let R (z : Z) : nuclearEndomorphisms W := ∑ m : Fin (N z), T z m
+  have hc₀ (z : Z) : 0 ≤ c z := Finset.sum_nonneg fun _ _ ↦ mul_nonneg (norm_nonneg _) (norm_nonneg _)
+  have hR (z : Z) : traceNorm (R z) ≤ c z :=
+    (spectralStripGeometricKernel_traceNorm_sum_le Finset.univ (T z)).trans_eq
+      (Finset.sum_congr rfl fun m _ ↦ traceNorm_smulRight (u z m) (v z m))
+  refine ⟨∑' z, c z, ?_⟩
+  rintro _ ⟨K, rfl⟩
+  change traceNorm (∑ z ∈ K, R z) ≤ ∑' z, c z
+  calc
+    traceNorm (∑ z ∈ K, R z) ≤ ∑ z ∈ K, traceNorm (R z) := spectralStripGeometricKernel_traceNorm_sum_le K R
+    _ ≤ ∑ z ∈ K, c z := Finset.sum_le_sum fun z _ ↦ hR z
+    _ ≤ ∑' z, c z := hrows.sum_le_tsum K fun z _ ↦ hc₀ z
+
+/-- Reconstruction of Theorem 10.4.3.5(2), p. 472. Summability of the scalar costs of the actual projected rank-one rows controls every
+finite selection of strip zeros in trace norm. -/
+theorem spectralStripGeometricKernel_blocks_bddAbove_of_summable_rows
+    (hrows : Summable (fun z : zeros(F, χ, a, α) ↦ ∑ m : Fin (jetCount(z)),
+      ‖(f jet(z, m)).comp (Θ₀).mkQL‖ * ‖Gₐ (Aφ (Sₐ(x jet(z, m))))‖)) :
+    BddAbove (range fun K : Finset zeros(F, χ, a, α) ↦ traceNorm (∑ z ∈ K, geometricBlock(z))) :=
+  spectralStripGeometricKernel_bddAbove_of_rankOne_rows (fun z : zeros(F, χ, a, α) ↦ jetCount(z))
+    (fun z m ↦ (f jet(z, m)).comp (Θ₀).mkQL) (fun z m ↦ Gₐ (Aφ (Sₐ(x jet(z, m))))) hrows
+
+omit ha hχ he horder hb in
+private theorem spectralStripGeometricKernel_eq_of_coords
+    {J Q : Type*} [NormedAddCommGroup Q] [NormedSpace ℂ Q]
+    (basis : J → Q) (coords : J → StrongDual ℂ Q) (h : IsSpectralMarkushevichBasis basis coords)
+    {v w : Q} (heq : ∀ j, coords j v = coords j w) : v = w := by
+  apply (SeparatingDual.eq_iff_forall_dual_eq (R := ℂ)).mpr
+  have hall : ContinuousLinearMap.apply ℂ ℂ v = ContinuousLinearMap.apply ℂ ℂ w := by
+    apply ContinuousLinearMap.ext_on h.2.2.2
+    rintro _ ⟨j, rfl⟩
+    exact heq j
+  exact fun ℓ ↦ DFunLike.congr_fun hall ℓ
+
+local notation "mellinAt(" z ")" =>
+  (∫ g : IdeleClassGroup (𝓞 F) F, φ.val g * ideleClassNormTwist (χ (z).val.1)
+    (((z).val.2.1 : ℂ) + ((z).val.2.2 : ℂ) * Complex.I) g ∂ideleClassTamagawaMeasure F)
+
+/-- At any strip zero with a single retained jet, its quotient basis vector is an eigenvector
+of convolution. The exact geometric output subtracts the corresponding scalar times its lift.
+The multiplicities at other sites are unrestricted. -/
+theorem spectralStripGeometricKernel_output_eq_sub_of_one_jet
+    (z : zeros(F, χ, a, α)) (m : Fin (jetCount(z))) (hcount : jetCount(z) ≤ 1) :
+    Gₐ (Aφ (Sₐ(x jet(z, m)))) = Aφ (Sₐ(x jet(z, m))) - mellinAt(z) • Sₐ(x jet(z, m)) := by
+  let T := spectralConvolution (F := F) a hI hs₀ φ
+  let lift := (Θ₀).orthogonal.subtypeL.comp
+    (Θ₀).quotientEquivOrthogonal.toContinuousLinearEquiv.toContinuousLinearMap
+  have hcoeff := spectralStripConvolution_jetCoefficients a hα hs χ x f hb.1 hb.2 φ
+  have heigen : T (x jet(z, m)) = mellinAt(z) • x jet(z, m) := by
+    apply spectralStripGeometricKernel_eq_of_coords x f hb.1
+    intro j
+    let w : zeros(F, χ, a, α) :=
+      ⟨(j.val.1, j.val.2.1, j.val.2.2.1), SpectralStripJetIndex.mem_strip_order_pos hα j⟩
+    let n : Fin (jetCount(w)) := ⟨j.val.2.2.2, j.property⟩
+    change f jet(w, n) (T (x jet(z, m))) = f jet(w, n) (mellinAt(z) • x jet(z, m))
+    rw [map_smul, smul_eq_mul]
+    by_cases hw : w = z
+    · subst z
+      have hnm : n = m := Fin.ext (by have := n.isLt; have := m.isLt; omega)
+      rw [hnm, hb.1.1, mul_one]
+      exact (hcoeff.2 w m).trans (spectralConvolution_mellin_integrable φ (χ w.val.1) _).2
+    · have hne : (jet(z, m) : jets) ≠ jet(w, n) := by
+        intro heq
+        exact hw (Subtype.ext (congrArg (fun i : jets ↦ (i.val.1, i.val.2.1, i.val.2.2.1)) heq).symm)
+      rw [hb.1.2.1 _ _ hne, mul_zero]
+      exact hcoeff.1 w z hw n m
+  have hsec (v : H(F, a, hα, hs)) : (Θ₀).mkQL (lift v) = v :=
+    ((Θ₀).quotientEquivOrthogonal_symm_eq_mk _ ((Θ₀).quotientEquivOrthogonal v).property).symm.trans
+      ((Θ₀).quotientEquivOrthogonal.symm_apply_apply v)
+  have hp := DFunLike.congr_fun (spectralProjection_convolution_factor (F := F) a hα hs₀ φ)
+    (lift (x jet(z, m)))
+  change Pₐ (Aφ (lift (x jet(z, m)))) = lift (T ((Θ₀).mkQL (lift (x jet(z, m))))) at hp
+  rw [hsec, heigen, map_smul] at hp
+  exact eq_sub_of_add_eq ((congrArg (Gₐ (Aφ (lift (x jet(z, m)))) + ·) hp.symm).trans
+    ((Θ₀).starProjection_add_starProjection_orthogonal _))
+
+local notation "lineEnergy(" z ")" =>
+  ((1 / 2 : ℝ) * ∫ t : ℝ, ‖deriv (fun u : ℝ ↦ ∫ g : IdeleClassGroup (𝓞 F) F,
+    φ.val g * ideleClassNormTwist (χ (z).val.1) ((u : ℂ) * Complex.I) g
+      ∂ideleClassTamagawaMeasure F) t‖ ^ 2 * Real.exp (-2 * |t - (z).val.2.2|))
+
+/-- On the line at order two at most one jet survives. The half integral in the energy
+majorant uses the actual scalar Mellin multiplier of the test and the translated exponential
+envelope of a hyperbolic cardinal function. -/
+theorem spectralStripGeometricKernel_blocks_bddAbove_of_lineEnergy
+    (hline : α = 0) (htwo : s = 2)
+    (henergy : ∀ (z : zeros(F, χ, a, α)) (m : Fin (jetCount(z))),
+      (‖(f jet(z, m)).comp (Θ₀).mkQL‖ *
+        ‖Aφ (Sₐ(x jet(z, m))) - mellinAt(z) • Sₐ(x jet(z, m))‖) ^ 2 ≤ lineEnergy(z))
+    (hscalar : Summable (fun z : zeros(F, χ, a, α) ↦ Real.sqrt lineEnergy(z))) :
+    BddAbove (range fun K : Finset zeros(F, χ, a, α) ↦ traceNorm (∑ z ∈ K, geometricBlock(z))) := by
+  apply spectralStripGeometricKernel_blocks_bddAbove_of_summable_rows a hα hs φ ha χ eχ e x f hχ he horder hb
+  apply hscalar.of_nonneg_of_le (fun z ↦ Finset.sum_nonneg fun _ _ ↦ mul_nonneg (norm_nonneg _) (norm_nonneg _))
+  intro z
+  have hz : z.val.2.1 = -α := by linarith only [z.property.1.1, z.property.1.2, hline]
+  have hcount : jetCount(z) ≤ 1 := by
+    rw [spectralStripMultiplicity_boundary hα (Or.inl hz), spectralBoundaryMultiplicity]
+    exact (Nat.min_le_right _ _).trans (Nat.ceil_le.mpr (by norm_num [htwo]))
+  calc
+    _ ≤ ∑ _m : Fin (jetCount(z)), Real.sqrt lineEnergy(z) :=
+      Finset.sum_le_sum fun m _ ↦ by
+        rw [spectralStripGeometricKernel_output_eq_sub_of_one_jet a hα hs φ ha χ eχ e x f hχ he horder hb z m hcount]
+        exact Real.le_sqrt_of_sq_le (henergy z m)
+    _ ≤ Real.sqrt lineEnergy(z) := by
+      simp only [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+      exact mul_le_of_le_one_left (Real.sqrt_nonneg _) (by exact_mod_cast hcount)
+
 /-- Paper: Theorem 10.4.3.5(2), p. 472. For each zero `z` of the strip, let `R_z` be the
 finite-rank operator `v ↦ ∑ₘ f_{z,m}(q v) • P^geom_a(A(φ)(S_a x_{z,m}))` on the Sobolev space,
 summed over the jets kept at `z`; here `q` is the quotient map and `S_a` its isometric section.

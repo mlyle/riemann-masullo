@@ -175,4 +175,44 @@ theorem exists_indentation_divisorialKernelDifference_eq_zero :
     simp only [divisorialKernelDifference, divisorialIndicator_eq_indicator,
       indicator_of_mem (hall _), sub_self, zero_mul]
 
+variable (F) in
+/-- Paper: the sampled left-hand side of (11.3.2.1), p. 495, as used on p. 520.
+For every continuous norm section, the off-base shell sum for the normalized lift
+vanishes once the saturated base contains a fixed finite set.
+Reconstruction: Use the normalized indentation lift instead of the printed weight.
+This does not identify the sampled sum or the retained part with the arithmetic trace. -/
+theorem exists_indentation_divisorialSkewIntegral_eq_zero :
+    ∃ (b : I𝔽 → ℝ) (T : Finset (HeightOneSpectrum (𝓞 F))), IsIndentation H𝔽 Measure.count b ∧
+      ∀ S, T ⊆ S → (∀ v ∈ S, ∀ w : HeightOneSpectrum (𝓞 F),
+        w.under (𝓞 ℚ) = v.under (𝓞 ℚ) → w ∈ S) →
+      ∀ (τ : ℝ≥0ˣ →* I𝔽), Continuous τ →
+      ∀ (E : Set (ideleNorm F).ker) k
+        (K : (IdeleClassGroup (𝓞 F) F) × (IdeleClassGroup (𝓞 F) F) → ℂ),
+        (∑' ξ : Fˣ, ∫ t, ∫ g in E,
+          divisorialKernelDifference S k (diagonalIndentationLift H𝔽 Measure.count b K)
+            (τ t, IdeleGroup.unitEmbedding (𝓞 F) F ξ * g.val * τ t)
+          ∂normOneIdeleTamagawaMeasure F ∂positiveRealHaar) = 0 := by
+  obtain ⟨b, T, hb, hT⟩ := exists_indentation_divisorialKernelDifference_eq_zero F
+  refine ⟨b, T, hb, fun S hTS hS τ hτ E k K ↦ ?_⟩
+  let U := (integralIdeleInsertion F S).range
+  have hU : IsOpen (U : Set I𝔽) := (integralIdeleInsertion_isOpenEmbedding F S).isOpen_range
+  have : ConnectedSpace ℝ≥0ˣ := (Real.expOrderIso.toHomeomorph.trans
+    (Nonneg.unitsHomeomorphPos ℝ).symm).surjective.connectedSpace (by fun_prop)
+  have hpre : IsClopen (τ ⁻¹' (U : Set I𝔽)) :=
+    ⟨(U.isClosed_of_isOpen hU).preimage hτ, hU.preimage hτ⟩
+  have hmem (t : ℝ≥0ˣ) : τ t ∈ sLocalDivisorialStratum F S := by
+    rw [sLocalDivisorialStratum_eq_range_integralIdeleInsertion]
+    change t ∈ τ ⁻¹' (U : Set I𝔽)
+    rw [hpre.eq_univ ⟨1, by change τ 1 ∈ U; rw [map_one]; exact U.one_mem⟩]
+    exact mem_univ t
+  have hvanish (ξ : Fˣ) (t : ℝ≥0ˣ) (g : (ideleNorm F).ker) :
+      divisorialKernelDifference S k (diagonalIndentationLift H𝔽 Measure.count b K)
+        (τ t, IdeleGroup.unitEmbedding (𝓞 F) F ξ * g.val * τ t) = 0 := by
+    apply hT S hTS hS k K _ _ (hmem t)
+    have hp : ideleNorm F (IdeleGroup.unitEmbedding (𝓞 F) F ξ) = 1 :=
+      (ideleNorm_spec F).2 ⟨ξ, rfl⟩
+    have hg : ideleNorm F g.val = 1 := g.property
+    simp only [map_mul, hp, hg, one_mul]
+  simp only [hvanish, integral_zero, tsum_zero]
+
 end RiemannMasullo
