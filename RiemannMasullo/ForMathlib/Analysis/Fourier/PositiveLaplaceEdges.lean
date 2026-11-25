@@ -4,12 +4,17 @@ public import RiemannMasullo.ForMathlib.Analysis.Fourier.StripLaplace
 import Mathlib.Analysis.Calculus.BumpFunction.Normed
 import Mathlib.Analysis.Calculus.ContDiff.Convolution
 import Mathlib.Analysis.SpecialFunctions.Gaussian.FourierTransform
+import Mathlib.Analysis.Complex.Hadamard
+import Mathlib.Analysis.Complex.AbsMax
+import Mathlib.Analysis.Analytic.IsolatedZeros
 
-/-! # Smooth compact profiles positive on two vertical lines
+/-! # Smooth compact profiles with positive real Laplace transform on a strip
 
 A Gaussian times the autocorrelation of an even bump has strictly positive cosine transform
 at every real frequency. Dividing by a hyperbolic cosine gives one real even compact test
-whose bilateral Laplace transform has positive real part on both specified edges.
+whose bilateral Laplace transform has positive real part throughout the closed strip.
+A second difference of the numerator cancels the two real boundary moments while preserving
+strict positivity throughout the open strip.
 -/
 
 @[expose] public noncomputable section
@@ -241,5 +246,178 @@ theorem exists_compact_positive_laplace_edges :
     · rw [h]
     · rw [h, neg_mul, Real.cosh_neg]
   simpa only [H, hcosh, div_mul_cancel₀ _ (Real.cosh_pos _).ne'] using hpos t
+
+private theorem bilateralLaplace_strip_bound {H : ℝ → ℂ} (hs : Continuous H)
+    (hc : HasCompactSupport H) (B : ℝ) :
+    ∃ C : ℝ, ∀ w : ℂ, |w.re| ≤ B → ‖bilateralLaplace H w‖ ≤ C := by
+  let u := fun x : ℝ ↦ ‖H x‖ * Real.exp (B * |x|)
+  have hu : Integrable u := (hs.norm.mul (by fun_prop)).integrable_of_hasCompactSupport hc.norm.mul_right
+  refine ⟨∫ x : ℝ, u x, fun w hw ↦ (norm_integral_le_integral_norm _).trans ?_⟩
+  have hi : Integrable (fun x : ℝ ↦ H x * Complex.exp (w*x)) :=
+    (hs.mul (by fun_prop)).integrable_of_hasCompactSupport hc.mul_right
+  apply integral_mono hi.norm hu
+  intro x
+  change ‖H x * Complex.exp (w * x)‖ ≤ ‖H x‖ * Real.exp (B * |x|)
+  rw [norm_mul, Complex.norm_exp]
+  apply mul_le_mul_of_nonneg_left _ (norm_nonneg _)
+  apply Real.exp_le_exp.mpr
+  rw [show (w * x).re = w.re * x by simp]
+  exact (le_abs_self _).trans ((abs_mul _ _).le.trans (mul_le_mul_of_nonneg_right hw (abs_nonneg x)))
+
+/-- Nonnegative boundary values and one strictly positive boundary value give strict
+positivity everywhere inside the strip. -/
+theorem bilateralLaplace_re_pos_of_nonneg_edges {H : ℝ → ℂ} (hs : Continuous H)
+    (hc : HasCompactSupport H) {B : ℝ} (hB : 0 < B)
+    (hedge : ∀ w : ℂ, |w.re| = B → 0 ≤ (bilateralLaplace H w).re)
+    (hpos : ∃ z : ℂ, 0 < (bilateralLaplace H z).re)
+    (w : ℂ) (hw : |w.re| < B) : 0 < (bilateralLaplace H w).re := by
+  let L := bilateralLaplace H
+  let f := fun z : ℂ ↦ Complex.exp (-L z)
+  have dL : Differentiable ℂ L := by
+    intro z
+    let a := |z.re| + 1
+    have hcont : Continuous (fun x : ℝ ↦ Real.exp (a * |x|) • H x) :=
+      (Real.continuous_exp.comp (continuous_const.mul continuous_abs)).smul hs
+    have hcomp : HasCompactSupport (fun x : ℝ ↦ Real.exp (a * |x|) • H x) :=
+      HasCompactSupport.smul_left (f := fun x : ℝ ↦ Real.exp (a * |x|)) hc
+    exact (hasDerivAt_bilateralLaplace (hcont.memLp_of_hasCompactSupport hcomp)
+      (show |z.re| < a by dsimp [a]; linarith)).differentiableAt
+  have df : Differentiable ℂ f := Complex.differentiable_exp.comp dL.neg
+  have hn (z : ℂ) : ‖f z‖ = Real.exp (-(L z).re) := by simp [f, Complex.norm_exp]
+  have he (z : ℂ) (heq : |z.re| = B) : ‖f z‖ ≤ 1 := by
+    rw [hn, Real.exp_le_one_iff]; exact neg_nonpos.mpr (hedge z heq)
+  obtain ⟨C, hC⟩ := bilateralLaplace_strip_bound hs hc B
+  have hbound : BddAbove ((norm ∘ f) '' Complex.HadamardThreeLines.verticalClosedStrip (-B) B) := by
+    refine ⟨Real.exp C, ?_⟩
+    rintro _ ⟨z, hz, rfl⟩
+    change ‖f z‖ ≤ _
+    rw [hn, Real.exp_le_exp]
+    exact (neg_le_abs _).trans ((Complex.abs_re_le_norm _).trans (hC z (abs_le.mpr hz)))
+  have hnle (z : ℂ) (hz : |z.re| ≤ B) : ‖f z‖ ≤ 1 := by
+    have hx := Complex.HadamardThreeLines.norm_le_interp_of_mem_verticalClosedStrip'
+      (f := f) (a := 1) (b := 1) (neg_lt_self hB) (abs_le.mp hz) df.diffContOnCl hbound
+      (fun u hu ↦ he u (by change u.re = -B at hu; rw [hu, abs_neg, abs_of_pos hB]))
+      (fun u hu ↦ he u (by change u.re = B at hu; rw [hu, abs_of_pos hB]))
+    simpa using hx
+  by_contra! hne
+  have h₁ : ‖f w‖ = 1 := le_antisymm (hnle w hw.le) (by rw [hn, Real.one_le_exp_iff]; exact neg_nonneg.mpr hne)
+  have hmax : IsLocalMax (norm ∘ f) w := by
+    have hopen : IsOpen {z : ℂ | |z.re| < B} := isOpen_lt (continuous_abs.comp Complex.continuous_re) continuous_const
+    filter_upwards [hopen.mem_nhds hw] with z hz
+    change ‖f z‖ ≤ ‖f w‖
+    rw [h₁]; exact hnle z hz.le
+  have hloc := Complex.eventually_eq_of_isLocalMax_norm (Filter.Eventually.of_forall df) hmax
+  have ha : AnalyticOnNhd ℂ f univ := fun z _ ↦ df.analyticAt z
+  have hconst : f = fun _ ↦ f w := ha.eq_of_eventuallyEq analyticOnNhd_const hloc
+  obtain ⟨z, hz⟩ := hpos
+  have hb : ‖f z‖ < 1 := by rw [hn, Real.exp_lt_one_iff]; exact neg_lt_zero.mpr hz
+  rw [congrFun hconst z, h₁] at hb
+  exact (lt_irrefl _ hb)
+
+/-- Strict positivity on both edges propagates throughout the closed strip. -/
+theorem bilateralLaplace_re_pos_of_pos_on_edges {H : ℝ → ℂ} (hs : Continuous H)
+    (hc : HasCompactSupport H) {B : ℝ} (hB : 0 < B)
+    (hedge : ∀ w : ℂ, |w.re| = B → 0 < (bilateralLaplace H w).re)
+    (w : ℂ) (hw : |w.re| ≤ B) : 0 < (bilateralLaplace H w).re := by
+  rcases hw.lt_or_eq with h | h
+  · exact bilateralLaplace_re_pos_of_nonneg_edges hs hc hB (fun z hz ↦ (hedge z hz).le)
+      ⟨B, hedge B (by simp [abs_of_pos hB])⟩ w h
+  · exact hedge w h
+
+/-- One real even compact smooth test has strictly positive real Laplace transform at
+every point of a prescribed closed vertical strip, simultaneously at all widths and heights. -/
+theorem exists_compact_positive_laplace_strip {B : ℝ} (hB : 0 < B) :
+    ∃ H : ℝ → ℝ, ContDiff ℝ ∞ H ∧ HasCompactSupport H ∧ (∀ x, H (-x) = H x) ∧
+      0 < H 0 ∧ ∀ w : ℂ, |w.re| ≤ B →
+        0 < (bilateralLaplace (fun x ↦ (H x : ℂ)) w).re := by
+  obtain ⟨K, -, -, -, h₀, hK⟩ := exists_compact_positive_laplace_edges
+  obtain ⟨hs, hc, he, hp⟩ := hK B
+  refine ⟨_, hs, hc, he, by simpa using h₀, ?_⟩
+  apply bilateralLaplace_re_pos_of_pos_on_edges (Complex.continuous_ofReal.comp hs.continuous)
+    (hc.comp_left Complex.ofReal_zero) hB
+  intro w hw
+  have h := hp w.re (hw.trans (abs_of_pos hB).symm) w.im
+  rwa [Complex.re_add_im] at h
+
+private theorem cosine_second_difference (K : ℝ → ℝ) (hs : Continuous K) (hc : HasCompactSupport K)
+    (t : ℝ) :
+    (∫ x : ℝ, (2 * K x - K (x-1) - K (x+1)) * Real.cos (t*x)) =
+      (2 * (1 - Real.cos t)) * ∫ x : ℝ, K x * Real.cos (t*x) := by
+  have hi (d : ℝ) : Integrable (fun x : ℝ ↦ K (x+d) * Real.cos (t*x)) :=
+    ((hs.comp (continuous_id.add continuous_const)).mul (by fun_prop)).integrable_of_hasCompactSupport
+      ((hc.comp_homeomorph (Homeomorph.addRight d)).mul_right)
+  have hj (d : ℝ) : Integrable (fun x : ℝ ↦ K x * Real.cos (t*(x+d))) :=
+    (hs.mul (by fun_prop)).integrable_of_hasCompactSupport hc.mul_right
+  have hshift (d : ℝ) : (∫ x : ℝ, K (x+d) * Real.cos (t*x)) =
+      ∫ x : ℝ, K x * Real.cos (t*(x-d)) := by
+    have h := integral_add_right_eq_self (μ := volume) (fun x : ℝ ↦ K x * Real.cos (t*(x-d))) d
+    simpa using h
+  have hi₀ : Integrable (fun x : ℝ ↦ K x * Real.cos (t*x)) := by simpa using hi 0
+  have hm : Integrable (fun x : ℝ ↦ K (x-1) * Real.cos (t*x)) := by simpa [sub_eq_add_neg] using hi (-1)
+  have hdiff : Integrable (fun x : ℝ ↦ 2*(K x*Real.cos (t*x)) - K (x-1)*Real.cos (t*x)) :=
+    (hi₀.const_mul 2).sub hm
+  simp_rw [sub_mul, mul_assoc]
+  rw [integral_sub hdiff (hi 1), integral_sub (hi₀.const_mul 2) hm, integral_const_mul]
+  rw [show (fun x : ℝ ↦ K (x-1) * Real.cos (t*x)) = (fun x ↦ K (x+(-1)) * Real.cos (t*x)) by
+    simp only [sub_eq_add_neg], hshift (-1), hshift 1]
+  simp_rw [sub_neg_eq_add]
+  have hsum : (∫ x : ℝ, K x * Real.cos (t*(x+1))) + (∫ x : ℝ, K x * Real.cos (t*(x-1))) =
+      (2 * Real.cos t) * ∫ x : ℝ, K x * Real.cos (t*x) := by
+    rw [← integral_add (hj 1) (by simpa [sub_eq_add_neg] using hj (-1)), ← integral_const_mul]
+    apply integral_congr_ae
+    filter_upwards with x
+    rw [mul_add, mul_sub, mul_one, Real.cos_add, Real.cos_sub]
+    ring
+  linear_combination -hsum
+
+/-- A single real even smooth compact test cancels the two real polar moments and
+has strictly positive real Laplace transform at every point of the open strip between them. -/
+theorem exists_compact_polar_free_positive_laplace_strip {B : ℝ} (hB : 0 < B) :
+    ∃ H : ℝ → ℝ, ContDiff ℝ ∞ H ∧ HasCompactSupport H ∧ (∀ x, H (-x) = H x) ∧
+      bilateralLaplace (fun x ↦ (H x : ℂ)) B = 0 ∧ bilateralLaplace (fun x ↦ (H x : ℂ)) (-B) = 0 ∧
+      ∀ w : ℂ, |w.re| < B → 0 < (bilateralLaplace (fun x ↦ (H x : ℂ)) w).re := by
+  obtain ⟨K, hs, hc, he, -, hpos⟩ := exists_compact_pos_cosineTransform
+  let P := fun x : ℝ ↦ 2 * K x - K (x-1) - K (x+1)
+  let H := fun x : ℝ ↦ P x / Real.cosh (B*x)
+  have hPs : ContDiff ℝ ∞ P := ((contDiff_const.mul hs).sub
+    (hs.comp (contDiff_id.sub contDiff_const))).sub (hs.comp (contDiff_id.add contDiff_const))
+  have hPc : HasCompactSupport P := ((hc.mul_left).sub (hc.comp_homeomorph (Homeomorph.subRight 1))).sub
+    (hc.comp_homeomorph (Homeomorph.addRight 1))
+  have hHs : ContDiff ℝ ∞ H := hPs.div (by simp only [Real.cosh_eq]; fun_prop) (fun _ ↦ (Real.cosh_pos _).ne')
+  have hHc : HasCompactSupport H := by simp only [H, div_eq_mul_inv]; exact hPc.mul_right
+  have hHe (x : ℝ) : H (-x) = H x := by
+    simp only [H, P, he, mul_neg, Real.cosh_neg, show -x - 1 = -(x+1) by ring,
+      show -x + 1 = -(x-1) by ring]
+    ring
+  let L := bilateralLaplace (fun x ↦ (H x : ℂ))
+  have edge (a t : ℝ) (hab : |a| = B) :
+      (L ((a : ℂ) + t * Complex.I)).re = 2*(1-Real.cos t) * ∫ x : ℝ, K x * Real.cos (t*x) := by
+    have hcosh (x : ℝ) : Real.cosh (a*x) = Real.cosh (B*x) := by
+      rcases abs_eq_abs.mp (hab.trans (abs_of_pos hB).symm) with h | h
+      · rw [h]
+      · rw [h, neg_mul, Real.cosh_neg]
+    rw [show (L ((a : ℂ) + t * Complex.I)).re = _ from laplace_re_even hHs.continuous hHc hHe a t]
+    simpa only [H, hcosh, div_mul_cancel₀ _ (Real.cosh_pos _).ne'] using cosine_second_difference K hs.continuous hc t
+  have polar (a : ℝ) (ha : |a| = B) : L a = 0 := by
+    apply Complex.ext
+    · simpa using edge a 0 ha
+    · change (∫ x : ℝ, (H x : ℂ) * Complex.exp ((a : ℂ) * x)).im = _
+      have h : (fun x : ℝ ↦ (H x : ℂ) * Complex.exp ((a : ℂ) * x)) =
+          (fun x : ℝ ↦ ((H x * Real.exp (a*x) : ℝ) : ℂ)) := by
+        funext x; push_cast; rfl
+      rw [h, integral_complex_ofReal]; simp
+  refine ⟨H, hHs, hHc, hHe, polar B (abs_of_pos hB), by simpa using polar (-B) (by simp [abs_of_pos hB]), ?_⟩
+  apply bilateralLaplace_re_pos_of_nonneg_edges (Complex.continuous_ofReal.comp hHs.continuous)
+    (hHc.comp_left Complex.ofReal_zero) hB
+  · intro w hw
+    have h := edge w.re w.im hw
+    rw [Complex.re_add_im] at h
+    change 0 ≤ (L w).re
+    rw [h]
+    exact mul_nonneg (mul_nonneg (by norm_num) (sub_nonneg.mpr (Real.cos_le_one _))) (hpos _).le
+  · refine ⟨(B : ℂ) + Real.pi * Complex.I, ?_⟩
+    change 0 < (L _).re
+    rw [edge B Real.pi (abs_of_pos hB), Real.cos_pi]
+    exact mul_pos (by norm_num) (hpos _)
 
 end RiemannMasullo
