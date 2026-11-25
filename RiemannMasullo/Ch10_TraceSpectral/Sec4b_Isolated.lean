@@ -2,6 +2,10 @@ module
 
 public import RiemannMasullo.Ch10_TraceSpectral.Sec4b
 import RiemannMasullo.Ch10_TraceSpectral.Sec1
+import RiemannMasullo.Ch10_TraceSpectral.Sec3_LineGram
+import RiemannMasullo.Ch11_ShellStructure.Sec2a
+import Mathlib.Analysis.SpecialFunctions.JapaneseBracket
+import Mathlib.Analysis.SpecialFunctions.Trigonometric.Bounds
 
 /-! # The geometric part of the projective kernel in Theorem 10.4.3.5 -/
 
@@ -18,6 +22,241 @@ attribute [local instance] instIdeleClassMeasurableSpaceSec1 instIdeleClassBorel
   instIdeleClassT2Sec1 instIdeleClassLocallyCompactSec1 instIdeleClassSecondCountableSec1
   instIdeleClassHaarMeasureSec1
 attribute [local instance] uniformContinuousConstSMul_of_continuousConstSMul
+
+section LineSecants
+
+variable {F : Type*} [Field F] [NumberField F]
+
+local notation "C𝔽" => IdeleClassGroup (𝓞 F) F
+local notation "μ𝔽" => ideleClassTamagawaMeasure F
+local notation "lineμ(" s ")" => intervalSobolevMeasure μ𝔽 (logIdeleClassNorm F) (-0) 0 s true
+local notation "bracket(" r "," x ")" => ((1 + (x : ℝ) ^ 2) ^ ((r : ℝ) / 2) : ℝ)
+
+/-- The line's reciprocal measure has finite logarithmic moments of real order
+`r` whenever `2r+1<s`. This applies to jets even when the zero is simple. -/
+private theorem geometricLine_bracket_memLp {s r : ℝ} (hs : 2 * r + 1 < s) :
+    MemLp (fun g : C𝔽 ↦ bracket(r, logIdeleClassNorm F g)) 2 (lineμ(s)) := by
+  obtain ⟨ν, hνHaar, hpres⟩ : ∃ ν : Measure C𝔽,
+      ν.IsHaarMeasure ∧ MeasurePreserving (logIdeleClassNorm F) ν volume :=
+    ⟨_, lineGramCanonicalHaar (F := F), orbitalJet_logNorm_measurePreserving (F := F)⟩
+  let := hνHaar
+  have hlog := orbitalJet_logNorm_continuous (F := F)
+  have hcont (v : ℝ) : Continuous (fun g : C𝔽 ↦ bracket(v, logIdeleClassNorm F g)) := by
+    apply (continuous_const.add (hlog.pow 2)).rpow_const
+    intro g
+    exact Or.inl (by change (1 : ℝ) + logIdeleClassNorm F g ^ 2 ≠ 0; positivity)
+  apply (memLp_two_iff_integrable_sq_norm (hcont r).aestronglyMeasurable).mpr
+  have hν : MeasurePreserving (logIdeleClassNorm F) μ𝔽 (Measure.haarScalarFactor μ𝔽 ν • volume) := by
+    conv_lhs => rw [Measure.isMulLeftInvariant_eq_smul μ𝔽 ν]
+    exact hpres.smul_measure _
+  have hpow : Integrable (fun x : ℝ ↦ (1 + ‖x‖ ^ 2) ^ (-(s - 2 * r) / 2)) volume :=
+    integrable_rpow_neg_one_add_norm_sq (by simp; linarith)
+  have hweight : (lineμ(s)) = (μ𝔽).withDensity
+      (fun g ↦ ENNReal.ofReal (bracket(s, logIdeleClassNorm F g))⁻¹) := by
+    simp [intervalSobolevMeasure, intervalSobolevDensity]
+  have hwmeas : Measurable (fun g : C𝔽 ↦ ENNReal.ofReal (bracket(s, logIdeleClassNorm F g))⁻¹) :=
+    (hcont s).measurable.inv.ennreal_ofReal
+  rw [hweight, integrable_withDensity_iff hwmeas
+    (.of_forall fun _ ↦ ENNReal.ofReal_lt_top)]
+  apply (hν.integrable_comp_of_integrable (hpow.smul_measure_nnreal
+    (c := Measure.haarScalarFactor μ𝔽 ν))).congr
+  filter_upwards with g
+  let y := logIdeleClassNorm F g
+  let b := 1 + y ^ 2
+  have hb : 0 < b := by dsimp [b]; positivity
+  change (1 + ‖y‖ ^ 2) ^ (-(s - 2 * r) / 2) =
+    ‖b ^ (r / 2)‖ ^ 2 * (ENNReal.ofReal (b ^ (s / 2))⁻¹).toReal
+  rw [Real.norm_eq_abs, sq_abs, ENNReal.toReal_ofReal (by positivity),
+    Real.norm_of_nonneg (Real.rpow_nonneg hb.le _), ← Real.rpow_neg (by positivity),
+    ← Real.rpow_mul_natCast hb.le, ← Real.rpow_add hb]
+  congr 1
+  ring
+
+/-- The imaginary-axis exponential Taylor remainder interpolates between its
+quadratic small-argument and linear large-argument estimates. -/
+private theorem geometricLine_phase_remainder {δ : ℝ} (hδ : 0 ≤ δ) (hδ₁ : δ ≤ 1) (v : ℝ) :
+    ‖Complex.exp (Complex.I * (v : ℂ)) - 1 - Complex.I * v‖ ≤ 3 * |v| ^ (1 + δ) := by
+  let x := Complex.I * (v : ℂ)
+  have hx : ‖x‖ = |v| := by simp [x, Real.norm_eq_abs]
+  by_cases hv : |v| ≤ 1
+  · have h := Complex.norm_exp_sub_one_sub_id_le (x := x) (hx.trans_le hv)
+    rw [hx] at h
+    have hr : |v| ^ (2 : ℝ) ≤ |v| ^ (1 + δ) :=
+      Real.rpow_le_rpow_of_exponent_ge' (abs_nonneg v) hv (by positivity) (by linarith)
+    rw [Real.rpow_two] at hr
+    linarith [Real.rpow_nonneg (abs_nonneg v) (1 + δ)]
+  · have hv' : 1 ≤ |v| := le_of_lt (lt_of_not_ge hv)
+    have hr : |v| ≤ |v| ^ (1 + δ) := by
+      simpa using Real.rpow_le_rpow_of_exponent_le hv' (show (1 : ℝ) ≤ 1 + δ by linarith)
+    have hunit : ‖Complex.exp x‖ = 1 := by simp [x, Complex.norm_exp]
+    calc
+      _ ≤ ‖Complex.exp x - 1‖ + ‖x‖ := norm_sub_le ..
+      _ ≤ (‖Complex.exp x‖ + ‖(1 : ℂ)‖) + ‖x‖ := by gcongr; exact norm_sub_le ..
+      _ ≤ _ := by rw [hunit, norm_one, hx]; linarith
+
+private theorem geometricLine_abs_rpow_le_bracket (x : ℝ) {r : ℝ} (hr : 0 ≤ r) :
+    |x| ^ r ≤ bracket(r, x) := by
+  have hx : |x| ≤ Real.sqrt (1 + x ^ 2) :=
+    (Real.le_sqrt (abs_nonneg _) (by positivity)).mpr (by rw [sq_abs]; linarith)
+  calc
+    _ ≤ Real.sqrt (1 + x ^ 2) ^ r := Real.rpow_le_rpow (abs_nonneg _) hx hr
+    _ = _ := by rw [Real.sqrt_eq_rpow, ← Real.rpow_mul (by positivity)]; congr 1; ring
+
+/-- At width zero a jet is a unit-modulus character times an imaginary exponential
+and a real logarithmic power. -/
+private theorem geometricLine_jet_phase (η : PontryaginDual C𝔽) (t : ℝ) (k : ℕ) (g : C𝔽) :
+    spectralZeroJet η 0 t k g = (η g : ℂ) *
+      Complex.exp (Complex.I * ((t * logIdeleClassNorm F g : ℝ) : ℂ)) *
+      (logIdeleClassNorm F g : ℂ) ^ k := by
+  have hp : (0 : ℝ) < ((ideleClassNorm F g).val : ℝ) := NNReal.coe_pos.mpr (Units.zero_lt _)
+  change ((η g : ℂ) * (((ideleClassNorm F g).val : ℝ) : ℂ) ^ ((0 : ℂ) + (t : ℂ) * Complex.I)) * _ = _
+  rw [zero_add, Complex.cpow_def_of_ne_zero (Complex.ofReal_ne_zero.mpr hp.ne'),
+    ← Complex.ofReal_log hp.le, Complex.ofReal_mul]
+  congr 3
+  change (logIdeleClassNorm F g : ℂ) * (t * Complex.I) = _
+  ring
+
+/-- Membership of an arbitrary line jet depends only on its order and the reciprocal
+Sobolev exponent, independently of a zero's multiplicity. -/
+private theorem geometricLine_jet_memLp (η : PontryaginDual C𝔽) (t s : ℝ) (k : ℕ)
+    (hs : 2 * (k : ℝ) + 1 < s) : MemLp (spectralZeroJet η 0 t k) 2 (lineμ(s)) := by
+  have hlog := orbitalJet_logNorm_continuous (F := F)
+  have hcont : Continuous (spectralZeroJet η 0 t k) := by
+    rw [funext (geometricLine_jet_phase η t k)]
+    fun_prop
+  apply (geometricLine_bracket_memLp (F := F) hs).mono' hcont.aestronglyMeasurable
+  filter_upwards with g
+  rw [geometricLine_jet_phase, norm_mul, norm_mul, Circle.norm_coe, Complex.norm_exp,
+    Complex.mul_re, Complex.I_re, Complex.ofReal_im, mul_zero, zero_mul, sub_zero,
+    Real.exp_zero, one_mul, one_mul, norm_pow, Complex.norm_real, Real.norm_eq_abs]
+  simpa using geometricLine_abs_rpow_le_bracket (logIdeleClassNorm F g) (r := (k : ℝ)) (by positivity)
+
+private theorem geometricLine_firstJet_remainder (η : PontryaginDual C𝔽) (t u : ℝ)
+    {δ : ℝ} (hδ : 0 ≤ δ) (hδ₁ : δ ≤ 1) (g : C𝔽) :
+    ‖Complex.I * ((u - t : ℝ) : ℂ) * spectralZeroJet η 0 t 1 g -
+      (spectralZeroJet η 0 u 0 g - spectralZeroJet η 0 t 0 g)‖ ≤
+      3 * |u - t| ^ (1 + δ) * bracket(1 + δ, logIdeleClassNorm F g) := by
+  let y := logIdeleClassNorm F g
+  let e (v : ℝ) := Complex.exp (Complex.I * (v : ℂ))
+  have hsplit : e (u * y) = e (t * y) * e ((u - t) * y) := by
+    dsimp [e]
+    rw [← Complex.exp_add]
+    congr 1
+    push_cast
+    ring
+  simp only [geometricLine_jet_phase, pow_one, pow_zero, mul_one]
+  change ‖Complex.I * ((u - t : ℝ) : ℂ) * ((η g : ℂ) * e (t * y) * y) -
+    ((η g : ℂ) * e (u * y) - (η g : ℂ) * e (t * y))‖ ≤ _
+  rw [hsplit]
+  have halg : Complex.I * ((u - t : ℝ) : ℂ) * ((η g : ℂ) * e (t * y) * y) -
+      ((η g : ℂ) * (e (t * y) * e ((u - t) * y)) - (η g : ℂ) * e (t * y)) =
+      -((η g : ℂ) * e (t * y)) * (e ((u - t) * y) - 1 - Complex.I * (((u - t) * y : ℝ) : ℂ)) := by
+    push_cast
+    ring
+  rw [halg, norm_mul, norm_neg, norm_mul, Circle.norm_coe,
+    show ‖e (t * y)‖ = 1 by simp [e, Complex.norm_exp], one_mul, one_mul]
+  have hp := geometricLine_phase_remainder hδ hδ₁ ((u - t) * y)
+  rw [abs_mul, Real.mul_rpow (abs_nonneg _) (abs_nonneg _), ← mul_assoc] at hp
+  exact hp.trans (mul_le_mul_of_nonneg_left
+    (geometricLine_abs_rpow_le_bracket y (show 0 ≤ 1 + δ by linarith)) (by positivity))
+
+/-- On the zero-width line a secant of two value jets approximates the first
+logarithmic jet in the actual reciprocal Sobolev norm. The constant is uniform
+in both ordinates and the angular character. Any positive exponent below
+`(s-3)/2`, up to one, is allowed. -/
+theorem spectralZeroJet_line_secant_bound {s δ : ℝ} (hδ : 0 ≤ δ) (hδ₁ : δ ≤ 1)
+    (hs : 3 + 2 * δ < s) :
+    ∃ C : ℝ, 0 ≤ C ∧ ∀ (η : PontryaginDual C𝔽) (t u : ℝ), u ≠ t →
+      ∃ (d a b : Lp ℂ 2 (lineμ(s))),
+        (d : C𝔽 → ℂ) =ᵐ[lineμ(s)] spectralZeroJet η 0 t 1 ∧
+        (a : C𝔽 → ℂ) =ᵐ[lineμ(s)] spectralZeroJet η 0 t 0 ∧
+        (b : C𝔽 → ℂ) =ᵐ[lineμ(s)] spectralZeroJet η 0 u 0 ∧
+        ‖d - (Complex.I * ((u - t : ℝ) : ℂ))⁻¹ • (b - a)‖ ≤ C * |u - t| ^ δ := by
+  let J (g : C𝔽) := bracket(1 + δ, logIdeleClassNorm F g)
+  have hJ : MemLp J 2 (lineμ(s)) := geometricLine_bracket_memLp (by linarith)
+  let L := hJ.toLp J
+  refine ⟨3 * ‖L‖, by positivity, ?_⟩
+  intro η t u hne
+  have h₁ := geometricLine_jet_memLp η t s 1 (by push_cast; linarith)
+  have h₀t := geometricLine_jet_memLp η t s 0 (by push_cast; linarith)
+  have h₀u := geometricLine_jet_memLp η u s 0 (by push_cast; linarith)
+  let d := h₁.toLp _
+  let a := h₀t.toLp _
+  let b := h₀u.toLp _
+  refine ⟨d, a, b, h₁.coeFn_toLp, h₀t.coeFn_toLp, h₀u.coeFn_toLp, ?_⟩
+  let q := Complex.I * ((u - t : ℝ) : ℂ)
+  have hq : ‖q‖ = |u - t| := by simp only [q, norm_mul, Complex.norm_I, one_mul, Complex.norm_real, Real.norm_eq_abs]
+  have hdif : 0 < |u - t| := abs_pos.mpr (sub_ne_zero.mpr hne)
+  have hq₀ : q ≠ 0 := fun hz ↦ hdif.ne' (by rw [← hq, hz, norm_zero])
+  have hau : ‖q • d - (b - a)‖ ≤ (3 * |u - t| ^ (1 + δ)) * ‖L‖ := by
+    apply Lp.norm_le_mul_norm_of_ae_le_mul
+    filter_upwards [Lp.coeFn_sub (q • d) (b - a), Lp.coeFn_smul q d, Lp.coeFn_sub b a,
+      h₁.coeFn_toLp, h₀t.coeFn_toLp, h₀u.coeFn_toLp, hJ.coeFn_toLp] with g hsub hsm hba hd ha hb hj
+    change (q • d - (b - a)) g = (q • d) g - (b - a) g at hsub
+    change (q • d) g = q * d g at hsm
+    change (b - a) g = b g - a g at hba
+    change L g = J g at hj
+    change d g = _ at hd
+    change a g = _ at ha
+    change b g = _ at hb
+    rw [hsub, hsm, hba, hd, ha, hb, hj, Real.norm_of_nonneg (show 0 ≤ J g by dsimp [J]; positivity)]
+    exact geometricLine_firstJet_remainder η t u hδ hδ₁ g
+  change ‖d - q⁻¹ • (b - a)‖ ≤ _
+  apply le_of_mul_le_mul_left ?_ hdif
+  rw [← hq, ← norm_smul q, smul_sub, smul_inv_smul₀ hq₀, hq]
+  rw [Real.rpow_add hdif, Real.rpow_one] at hau
+  linarith
+
+/-- For any two retained value jets of the same angular character on the zero-width
+strip, the first moment at the first node lies within `C |u-t|^δ` of the span of the
+actual retained jets. This supplies the secant vector needed by the singleton
+geometric block estimate in Theorem 10.4.3.5(2), p. 472. -/
+theorem spectralStrip_firstJet_near_retained_span_on_line
+    (χ : PontryaginDual (ideleClassNorm F).ker → PontryaginDual C𝔽) (a : ℝ)
+    {s δ : ℝ} (hδ : 0 ≤ δ) (hδ₁ : δ ≤ 1) (hs : 3 + 2 * δ < s) :
+    let U (j : SpectralStripJetIndex χ a 0 s) :=
+      (spectralStripJet_memLp χ (le_refl 0) (by linarith : 0 ≤ s) j).toLp
+        (spectralZeroJet (χ j.val.1) j.val.2.1 j.val.2.2.1 j.val.2.2.2)
+    ∃ C : ℝ, 0 ≤ C ∧ ∀ (ω : PontryaginDual (ideleClassNorm F).ker) (t u : ℝ)
+      (j k : SpectralStripJetIndex χ a 0 s),
+      j.val = (ω, 0, t, 0) → k.val = (ω, 0, u, 0) → u ≠ t →
+      ∃ d v : Lp ℂ 2 (lineμ(s)),
+        (d : C𝔽 → ℂ) =ᵐ[μ𝔽] spectralZeroJet (χ ω) 0 t 1 ∧
+        v ∈ Submodule.span ℂ (range U) ∧ ‖d - v‖ ≤ C * |u - t| ^ δ := by
+  intro U
+  obtain ⟨C, hC, hclose⟩ := spectralZeroJet_line_secant_bound (F := F) hδ hδ₁ hs
+  refine ⟨C, hC, ?_⟩
+  intro ω t u j k hj hk hne
+  obtain ⟨d, w, w', hd, hw, hw', hdist⟩ := hclose (χ ω) t u hne
+  have hU (i : SpectralStripJetIndex χ a 0 s) :
+      (U i : C𝔽 → ℂ) =ᵐ[lineμ(s)]
+        spectralZeroJet (χ i.val.1) i.val.2.1 i.val.2.2.1 i.val.2.2.2 :=
+    MemLp.coeFn_toLp _
+  have hspan (i : SpectralStripJetIndex χ a 0 s) : U i ∈ Submodule.span ℂ (range U) :=
+    Submodule.subset_span (mem_range_self i)
+  have heq : U j = w := by
+    apply Lp.ext
+    exact (hU j).trans (by simpa only [hj] using hw.symm)
+  have heq' : U k = w' := by
+    apply Lp.ext
+    exact (hU k).trans (by simpa only [hk] using hw'.symm)
+  have hac : μ𝔽 ≪ lineμ(s) := by
+    rw [show lineμ(s) = (μ𝔽).withDensity
+      (fun g ↦ ENNReal.ofReal (bracket(s, logIdeleClassNorm F g))⁻¹) by
+        simp [intervalSobolevMeasure, intervalSobolevDensity]]
+    have hlog := orbitalJet_logNorm_continuous (F := F)
+    have hcont : Continuous (fun g : C𝔽 ↦ bracket(s, logIdeleClassNorm F g)) :=
+      (continuous_const.add (hlog.pow 2)).rpow_const fun g ↦
+        Or.inl (by change (1 : ℝ) + logIdeleClassNorm F g ^ 2 ≠ 0; positivity)
+    apply withDensity_absolutelyContinuous' (hcont.measurable.inv.ennreal_ofReal.aemeasurable)
+    filter_upwards with g
+    change ENNReal.ofReal (bracket(s, logIdeleClassNorm F g))⁻¹ ≠ 0
+    positivity
+  refine ⟨d, (Complex.I * ((u - t : ℝ) : ℂ))⁻¹ • (U k - U j), hac.ae_le hd,
+    Submodule.smul_mem _ _ (Submodule.sub_mem _ (hspan k) (hspan j)), ?_⟩
+  simpa only [heq, heq'] using hdist
+
+end LineSecants
 
 /-- Applying a bounded map to every output of convergent projective rectangles gives a Cauchy net. -/
 private theorem cauchy_rectangles_map_output {Z J E V : Type*}
