@@ -1,4 +1,4 @@
-// Exact first-prime Riesz enclosures for Re chi, chi modulo 5 with chi(2)=i.
+// Exact first-prime Riesz enclosures for the quartic character modulo 5, chi(2)=i.
 // Input is the rational-series table from quartic-mod-five-log-table.py.
 #include <algorithm>
 #include <array>
@@ -17,7 +17,8 @@ static std::string dec(I v) {
 }
 static U fourth(U j) { return j*j*j*j; }
 int main(int argc, char** argv) {
-  if (argc != 2) return 2;
+  const bool complex_rows=argc==3 && std::string(argv[2])=="--complex";
+  if (argc!=2 && !complex_rows) return 2;
   U J=std::stoul(argv[1]);
   if (J<1 || J>256) return 2;
   constexpr U bins=4096, scale=U(1)<<30, block=U(1)<<18;
@@ -34,15 +35,29 @@ int main(int argc, char** argv) {
     }
     if (prime) primes.push_back(p);
   }
-  I sumLo=0,sumHi=0,weightedLo=0,weightedHi=0;
+  struct Moments {
+    I low=0, high=0, weightedLow=0, weightedHigh=0;
+    void add(U p,I l,I h) {
+      low+=l; high+=h; weightedLow+=p*l; weightedHigh+=p*h;
+    }
+    void print(U x) const {
+      std::cout<<" "<<dec(x*low-weightedLow)<<" "<<dec(x*high-weightedHigh);
+    }
+  };
+  Moments real,imag;
   U j=1,total=0;
   auto report=[&](U until) {
     while (j<=J && fourth(j)<=until) {
       U x=fourth(j);
-      std::cout<<j<<" "<<dec(x*sumLo-weightedLo)<<" "<<dec(x*sumHi-weightedHi)<<"\n";
+      std::cout<<j;
+      real.print(x);
+      if (complex_rows) imag.print(x);
+      std::cout<<"\n";
       ++j;
     }
   };
+  report(2);
+  if (complex_rows && cutoff>=2) imag.add(2,lo[bins],hi[bins]);
   for (U a=3;a<=cutoff;a+=2*block) {
     U b=std::min(cutoff,a+2*block-2);
     std::vector<uint8_t> sieve((b-a)/2+1,1);
@@ -57,15 +72,16 @@ int main(int argc, char** argv) {
       U p=a+2*k;
       report(p);
       ++total;
-      if (p%5!=1 && p%5!=4) continue;
+      const U residue=p%5;
+      if (residue==0 || (!complex_rows && residue!=1 && residue!=4)) continue;
       U e=63-__builtin_clzll(p), base=U(1)<<e;
       U m=p*bins/base, i=m-bins, r=p*bins-base*m;
       // p = 2^e (1+i/bins)(1+u), u = r/(base*m) <= 1/bins.
       U lin=r*scale/(base*m);
       I l=I(e*lo[bins]+lo[i]+lin)-I(scale/(2*bins*bins));
       I h=I(e*hi[bins]+hi[i]+lin+1);
-      if (p%5==4) { I t=l; l=-h; h=-t; }
-      sumLo+=l; sumHi+=h; weightedLo+=p*l; weightedHi+=p*h;
+      if (residue==3 || residue==4) { I t=l; l=-h; h=-t; }
+      (residue==1 || residue==4 ? real : imag).add(p,l,h);
     }
   }
   report(cutoff);

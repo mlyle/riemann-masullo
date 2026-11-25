@@ -52,3 +52,29 @@ python3 quartic-mod-five-check.py grid-256.txt --audit-initial 32
 python3 quartic-mod-five-smoothed.py --bits 128
 python3 quartic-mod-five-smoothed.py --bits 192
 ```
+
+## Full complex norm, with a different phase at each sample
+
+For the same quartic character define the genuinely complex sum $R(x)=\sum_p\chi(p)(x-p)_+\log p$. Then
+$$\sum_{j\le J}|R(j^4)|<J^7\qquad (1\le J\le8{,}000{,}000).$$
+This controls every choice of complex projection separately at every sample and hence the original signed deficit. The upper constants are 0.103 for $J\le256$, 0.490482 for $256\le J\le100{,}000$ and 0.930294 for $100{,}000\le J\le8{,}000{,}000$. No zero conjecture enters these bounds.
+
+For the direct sieve, the imaginary coefficients are $+1,-1$ in residues 2 and 3, including $\chi(2)=i$. Enclose each coordinate with the same exact integers used above. The largest corner norm of the resulting rectangle is an upper bound on the norm. The script rounds its square root upwards by integer arithmetic before summing. It compares the real columns to the older certificate and independently re-enumerates both components with high-precision logarithms for $j\le32$.
+
+In the analytic range choose a unit complex number $z_j$ such that $-\Re(z_j R(j^4))=|R(j^4)|$. The earlier lower estimate for the smoothed real part holds with this phase on the entire complex explicit formula. Direct interval evaluation gives $|a_0|<1$ and $|a_1|<1$ for the complex residues (use the conjugate logarithmic derivative from the functional equation). Hence the affine bound stays $4y+8$, including $y<1$. Proper powers are bounded absolutely as before. In the error from returning to the true prime weights, the four projections of $z_j\chi(p)$ have values $\pm\cos\theta_j,\pm\sin\theta_j$. Only the positive projections cost anything. Their total weight over the four reduced residue classes is at most $\sqrt2$. This use of positivity applies to the prime contribution to the interpolation error.
+
+On a range $N\le J\le J_*$ choose $v=c^2/J^2$. The preceding table applies to the base, proper powers and affine terms with $v_0=c^2/N^2$, and to the high term with exponent $v_0-c^2 H^2/(2J_*^2)$. For $N=256$, $J_*=100{,}000$, $c=0.6$ use the elementary curvature estimate from the table, multiplied by $\sqrt2$, with the quadratic displacement terms scaled by $c^2$ and the linear ones by $c$. The script includes the corresponding powers of $c/N$ in the mixed moments.
+
+For $N=100{,}000$, $J_*=8{,}000{,}000$, take $c=3.45$ and first remove $j\le m=5000$ with normalized cost $(m/N)^7$ by the preceding range. For $x=j^4$ in the remaining samples and $d=|xY-x|$, bound the triangular contribution in one positive class by integrating its count up to distance $t$ on the appropriate side of $x$. At $t<x^\alpha$, $\alpha=2/3$, the count is at most $t$ since $x$ is integral and composite. For $t\ge x^\alpha$, Brun–Titchmarsh gives at most $2t/[4\log(t/5)]$. In the integral the endpoints at exact integer distances are irrelevant. Both sides reduce to integer intervals of length $\lfloor t\rfloor$, and $u/\log(u/5)$ is increasing for $u>5e$. Thus the total ramp weight in one class is at most $(\log x+|\log Y|)(x^{2\alpha}/2+d^2/[4(\alpha\log x-\log5)])$. With $x_0=m^4$ the total normalized cost across all positive projections is at most
+$$\sqrt2\left[\frac{4\log N+0.001}{2}P(8\alpha)N^{8\alpha-6}
++\frac{(1.0001+3\sqrt{v_0}/\log x_0)c^2P(8)}
+ {4(\alpha-\log5/\log x_0)}\right].$$
+Here $\mathbb E|\log Y|<0.001$. The first term uses that $(4\log J+0.001)J^{8\alpha-6}$ decreases on this range. The final interval includes the removed prefix, every zero of the same character with both signs of the ordinate, all prime powers, and the per-sample projection. Its normalized upper endpoint is below 0.930294. [Montgomery and Vaughan, Theorem 2, equation (1.10)](https://personal.science.psu.edu/rcv4/personal/Publications/large_sieve.pdf#page=3) · [Physical prime-curvature inequality in Lean](https://github.com/mccorvie/riemann-masullo/pull/7653)
+
+Use the earlier compiler and table commands, then run the following. The supplied complex data record the prime sums before taking norms.
+
+```sh
+./samples 256 --complex < logs.txt > complex-grid-256.txt
+python3 quartic-mod-five-norm.py --bits 128 --audit-initial 32
+python3 quartic-mod-five-norm.py --bits 192 --audit-initial 32
+```
