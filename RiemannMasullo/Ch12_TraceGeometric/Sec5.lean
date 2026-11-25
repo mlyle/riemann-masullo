@@ -10,7 +10,13 @@ import all RiemannMasullo.Ch02_AdelicTheta.Sec2b
 import all RiemannMasullo.Ch03_IdelicZeta.Sec2
 import all RiemannMasullo.Ch09_HardySobolev.Sec3
 import RiemannMasullo.ForMathlib.Analysis.Complex.ExpSumUniqueness
+public import RiemannMasullo.ForMathlib.Analysis.Fourier.StripLaplace
 import Mathlib.Analysis.Calculus.BumpFunction.Normed
+import Mathlib.Analysis.Analytic.IsolatedZeros
+import Mathlib.Analysis.Complex.CauchyIntegral
+import Mathlib.Analysis.Real.Cardinality
+import Mathlib.Topology.Compactness.Lindelof
+import Mathlib.MeasureTheory.Function.LpSpace.Indicator
 
 /-! # Trace formula: the Main Theorem
 
@@ -1387,6 +1393,156 @@ theorem isEmpty_exteriorZeros_of_norm_le (τ : ℝ≥0ˣ →ₜ* C𝔽)
     exact ⟨c, hcα, fun y ↦ C * Real.exp (c * |y|),
       fun σ hσ ↦ integrable_mul_exp_mul_abs_mul_exp_neg_mul_abs C hσ, hC⟩
 
+open Complex Filter in
+set_option maxHeartbeats 800000 in
+private theorem laplace_zeros_countable {H : ℝ → ℂ} (hH : Continuous H)
+    (hc : HasCompactSupport H) (hi : (∫ x, H x) ≠ 0) :
+    {w | bilateralLaplace H w = 0}.Countable := by
+  have hd : Differentiable ℂ (bilateralLaplace H) := by
+    intro w
+    let a := |w.re| + 1
+    have hw : |w.re| < a := by dsimp [a]; linarith
+    have hcont : Continuous (fun x : ℝ ↦ Real.exp (a * |x|) • H x) :=
+      (Real.continuous_exp.comp (continuous_const.mul continuous_abs)).smul hH
+    have hcomp : HasCompactSupport (fun x : ℝ ↦ Real.exp (a * |x|) • H x) :=
+      HasCompactSupport.smul_left (f := fun x : ℝ ↦ Real.exp (a * |x|)) hc
+    exact (hasDerivAt_bilateralLaplace (hcont.memLp_of_hasCompactSupport hcomp) hw).differentiableAt
+  have ha : AnalyticOnNhd ℂ (bilateralLaplace H) univ := fun w _ ↦ hd.analyticAt w
+  rcases ha.eqOn_zero_or_eventually_ne_zero_of_preconnected isPreconnected_univ with h | h
+  · exact (hi (by simpa [bilateralLaplace] using h (mem_univ (0 : ℂ)))).elim
+  · have hh : {w | bilateralLaplace H w = 0}ᶜ ∈ codiscrete ℂ := h
+    exact (isLindelof_iff_lindelofSpace.mpr inferInstance).countable_of_isDiscrete
+      (compl_mem_codiscrete_iff.mp hh).2
+
+/-- Some arbitrarily small real exponential modulation gives a profile whose bilateral Laplace
+transform has no common zeros with that of the input profile. -/
+theorem exists_laplace_profile_pair {H : ℝ → ℂ} (hH : Continuous H)
+    (hc : HasCompactSupport H) (hi : (∫ x, H x) ≠ 0) {a b : ℝ} (hab : a < b) :
+    ∃ l ∈ Ioo a b, ∀ w : ℂ, bilateralLaplace H w ≠ 0 ∨
+      bilateralLaplace (fun x : ℝ ↦ H x * Complex.exp ((l : ℂ) * x)) w ≠ 0 := by
+  let Z := {z | bilateralLaplace H z = 0}
+  let B := (fun p : ℂ × ℂ ↦ (p.2 - p.1).re) '' (Z ×ˢ Z)
+  have hZ : Z.Countable := laplace_zeros_countable hH hc hi
+  have hB : B.Countable := (hZ.prod hZ).image _
+  have hsub : ¬ Ioo a b ⊆ B := fun h ↦ hab.not_ge (Cardinal.Real.Ioo_countable_iff.mp (hB.mono h))
+  obtain ⟨l, hl, hgood⟩ := Set.not_subset.mp hsub
+  refine ⟨l, hl, fun w ↦ or_iff_not_imp_left.mpr fun h ↦ ?_⟩
+  rw [not_ne_iff] at h
+  have hmod : bilateralLaplace (fun x : ℝ ↦ H x * Complex.exp ((l : ℂ) * x)) w =
+      bilateralLaplace H (w + l) := by
+    unfold bilateralLaplace
+    apply integral_congr_ae
+    filter_upwards with x
+    rw [add_mul, Complex.exp_add]
+    ring
+  rw [hmod]
+  intro hw
+  exact hgood ⟨(w, w+l), ⟨h, hw⟩, by simp⟩
+
+/-- A single pair of smooth compact profiles detects every complex exponent. -/
+theorem exists_two_fixed_laplace_profiles :
+    ∃ H : Bool → ℝ → ℂ, (∀ j, ContDiff ℝ (∞) (H j)) ∧
+      (∀ j, HasCompactSupport (H j)) ∧ (∀ j x, 1 ≤ |x| → H j x = 0) ∧
+      ∀ w : ℂ, ∃ j, bilateralLaplace (H j) w ≠ 0 := by
+  let β : ContDiffBump (0 : ℝ) := ⟨1 / 2, 1, by norm_num, by norm_num⟩
+  let B := fun x : ℝ ↦ (β x : ℂ)
+  have hs : ContDiff ℝ (∞) B := Complex.ofRealCLM.contDiff.comp β.contDiff
+  have hk : HasCompactSupport B := β.hasCompactSupport.comp_left Complex.ofReal_zero
+  have hi : (∫ x, B x) ≠ 0 := by
+    rw [show (∫ x, B x) = ((∫ x, β x : ℝ) : ℂ) from integral_complex_ofReal]
+    exact Complex.ofReal_ne_zero.mpr β.integral_pos.ne'
+  obtain ⟨l, _, hpair⟩ := exists_laplace_profile_pair hs.continuous hk hi (a := 0) (b := 1) zero_lt_one
+  let P := fun x : ℝ ↦ B x * Complex.exp ((l : ℂ) * x)
+  let H := fun j : Bool ↦ if j then P else B
+  have hsP : ContDiff ℝ (∞) P := hs.mul (Complex.contDiff_exp.comp
+    (contDiff_const.mul Complex.ofRealCLM.contDiff))
+  have hkP : HasCompactSupport P := hk.mul_right
+  refine ⟨H, ?_, ?_, ?_, ?_⟩
+  · intro j; cases j <;> assumption
+  · intro j; cases j <;> assumption
+  · intro j x hx
+    have he : β x = 0 := β.zero_of_le_dist (by simpa [β, Real.dist_eq] using hx)
+    cases j <;> simp [H, P, B, he]
+  · intro w
+    rcases hpair w with h | h
+    · exact ⟨false, h⟩
+    · exact ⟨true, h⟩
+
+private theorem pair_shift_laplace (H : ℝ → ℂ) (d : ℝ) (w : ℂ) :
+    bilateralLaplace (fun x ↦ H (x - d)) w = Complex.exp (w * d) * bilateralLaplace H w := by
+  unfold bilateralLaplace
+  calc ∫ x : ℝ, H (x - d) * Complex.exp (w * x)
+      = ∫ x : ℝ, H (x - d) * Complex.exp (w * (((x - d : ℝ) : ℂ) + d)) := by
+        congr 1; funext x; push_cast; ring_nf
+    _ = ∫ x : ℝ, H x * Complex.exp (w * (x + d)) :=
+        integral_sub_right_eq_self (μ := volume) (fun x : ℝ ↦ H x * Complex.exp (w * (x + d))) d
+    _ = _ := by
+        rw [← integral_const_mul]; congr 1; funext x; rw [mul_add, Complex.exp_add]; ring
+
+private theorem integrable_exp_weight_translate {D : ℝ → ℝ} {σ : ℝ}
+    (hD : Integrable (fun y ↦ D y * Real.exp (-σ * |y|))) (d : ℝ) :
+    Integrable (fun y ↦ D (y+d) * Real.exp (-σ * |y|)) := by
+  have htr : Integrable (fun y ↦ D (y+d) * Real.exp (-σ * |y+d|)) := by
+    exact (measurePreserving_add_right (volume : Measure ℝ) d).integrable_comp_of_integrable
+      (g := fun x : ℝ ↦ D x * Real.exp (-σ * |x|)) hD
+  let m := fun y : ℝ ↦ Real.exp (σ * (|y+d| - |y|))
+  have hm : Continuous m := by dsimp [m]; fun_prop
+  have hb (y : ℝ) : ‖m y‖ ≤ Real.exp (|σ| * |d|) := by
+    rw [Real.norm_eq_abs, abs_of_pos (Real.exp_pos _)]
+    apply Real.exp_le_exp.mpr
+    have ht := abs_abs_sub_abs_le_abs_sub (y+d) y
+    rw [add_sub_cancel_left] at ht
+    exact (le_abs_self _).trans ((abs_mul _ _).le.trans
+      (mul_le_mul_of_nonneg_left ht (abs_nonneg σ)))
+  apply (htr.mul_bdd hm.aestronglyMeasurable (Eventually.of_forall hb)).congr
+  filter_upwards with y
+  dsimp [m]
+  rw [mul_assoc, ← Real.exp_add]
+  congr 2
+  ring
+
+/-- Two fixed compact log profiles suffice when their bilateral Laplace transforms have no common zero. -/
+theorem isEmpty_exteriorZeros_of_pair_integrable (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (hτ : RightInverse τ (ideleClassNorm F)) (α : ℝ) (H : Bool → ℝ → ℂ)
+    (hs : ∀ j, ContDiff ℝ (∞) (H j)) (hk : ∀ j, HasCompactSupport (H j))
+    (hv : ∀ j x, 1 ≤ |x| → H j x = 0)
+    (hpair : ∀ w : ℂ, ∃ j, bilateralLaplace (H j) w ≠ 0)
+    (hT : ∀ (ψ : PontryaginDual C𝔽) (j : Bool),
+      ∃ c < α, ∃ D : ℝ → ℝ, (∀ σ, c < σ → Integrable (fun y ↦ D y * Real.exp (-σ * |y|))) ∧
+        ∀ (y : ℝ) (φ : BruhatCompactSupport C𝔽),
+        (∀ x, φ.val x = (ψ x : ℂ) * H j (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ) - y)) →
+        (∀ g : C₁, φ.val g = 0) →
+        ∃ S : ℂ, HasSum (fun z : exteriorZeros(τ, α) ↦ zeroTerm(φ, z)) S ∧
+          ‖S‖ ≤ D y) :
+    IsEmpty exteriorZeros(τ, α) := by
+  constructor
+  intro z
+  obtain ⟨j, hj⟩ := hpair (z.val.2 - 1 / 2)
+  obtain ⟨c, hc, D, hDi, hC⟩ := hT z.val.1.val⁻¹ j
+  obtain ⟨e, he, hew⟩ : ∃ e : ℝ, (e = 1 ∨ e = -1) ∧
+      e * (z.val.2.re - 1 / 2) = |z.val.2.re - 1 / 2| := by
+    rcases le_or_gt 0 (z.val.2.re - 1 / 2) with h | h
+    · exact ⟨1, Or.inl rfl, by rw [one_mul, abs_of_nonneg h]⟩
+    · exact ⟨-1, Or.inr rfl, by rw [neg_one_mul, abs_of_neg h]⟩
+  let d := e
+  let G := fun x : ℝ ↦ H j (x - d)
+  have hGs : ContDiff ℝ (∞) G := (hs j).comp (contDiff_id.sub contDiff_const)
+  have hGk : HasCompactSupport G := (hk j).comp_homeomorph (Homeomorph.subRight d)
+  have hGv (u : ℝ) (hu : 0 ≤ u) : G (-(e * u)) = 0 := by
+    apply hv
+    dsimp [d]; rcases he with rfl | rfl <;> simp only [one_mul, neg_one_mul, neg_neg]
+    · rw [abs_of_nonpos (by linarith : -u - 1 ≤ 0)]; linarith
+    · rw [abs_of_nonneg (by linarith : 0 ≤ u - -1)]; linarith
+  have hcancel := exteriorZeros_coeff_eq_zero_of_integrable τ hτ α z.val.1.val z.val.1.property
+    he G hGs hGk hGv (fun y ↦ D (y + d))
+    (fun σ hσ ↦ integrable_exp_weight_translate (hDi σ hσ) d) ?_ z rfl
+      (by rw [hew]; exact hc.trans_le z.property.2)
+  · change bilateralLaplace G _ = 0 at hcancel
+    rw [pair_shift_laplace] at hcancel
+    exact (mul_ne_zero (Complex.exp_ne_zero _) hj) hcancel
+  · intro y φ hφ hvan
+    exact hC (y + d) φ (fun x ↦ by rw [hφ]; simp only [G, sub_add_eq_sub_sub]) hvan
+
 end NormTests
 
 end ExteriorZerosGRH
@@ -1945,6 +2101,44 @@ theorem traceFormula_exteriorZeros_of_stripTrace_norm_le (τ : ℝ≥0ˣ →ₜ*
       obtain ⟨c, hcβ, C, hC⟩ := hdefect hβ ψ H hH hHc
       exact ⟨c, hcβ, fun y ↦ C * Real.exp (c * |y|),
         fun σ hσ ↦ integrable_mul_exp_mul_abs_mul_exp_neg_mul_abs C hσ, hC⟩) φ hα
+
+open scoped ContDiff in
+/-- Growth control for translates of two fixed radial profiles implies exterior-zero cancellation. -/
+theorem traceFormula_exteriorZeros_of_pair_stripTrace_integrable (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (hτ : RightInverse τ (ideleClassNorm F))
+    (H : Bool → ℝ → ℂ) (hs : ∀ j, ContDiff ℝ (∞) (H j))
+    (hk : ∀ j, HasCompactSupport (H j)) (hv : ∀ j x, 1 ≤ |x| → H j x = 0)
+    (hpair : ∀ w : ℂ, ∃ j, bilateralLaplace (H j) w ≠ 0)
+    (hK : ∀ {β : ℝ} (hβ : 0 < β) (ψ : PontryaginDual C𝔽) (j : Bool)
+      (y : ℝ) (φ : BruhatCompactSupport C𝔽),
+      (∀ x, φ.val x = (ψ x : ℂ) * H j (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ) - y)) →
+      (∀ g : C₁, φ.val g = 0) → stripTensorExists(hβ.le, three, φ))
+    (hdefect : ∀ {β : ℝ} (hβ : 0 < β) (ψ : PontryaginDual C𝔽) (j : Bool),
+      ∃ c < β, ∃ D : ℝ → ℝ, (∀ σ, c < σ → Integrable (fun y ↦ D y * Real.exp (-σ * |y|))) ∧
+        ∀ (y : ℝ) (φ : BruhatCompactSupport C𝔽),
+          (∀ x, φ.val x = (ψ x : ℂ) * H j (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ) - y)) →
+          (∀ g : C₁, φ.val g = 0) →
+          ∀ (a : archTest) (b : finiteTest), archRestricts(φ, a) → finiteRestricts(φ, b) →
+          ∀ T : nuclearEndomorphisms stripQuot(hβ.le, three),
+            T.val = stripConv(hβ.le, three, φ) →
+            ‖hilbertTrace T - localTerms(φ, a, b)‖ ≤ D y)
+    (φ : BruhatCompactSupport C𝔽) {α : ℝ} (hα : 0 < α) :
+    HasSum (fun z : exteriorZeros(τ, α) ↦ zeroTerm(φ, z)) 0 := by
+  obtain ⟨χ, -, -, hlift⟩ := exteriorZeros_basepoint τ hτ
+  obtain ⟨β, hβ, hβα, hedge⟩ := exteriorZeros_exists_width χ hα
+  have hedge' : ∀ ψ : PontryaginDual C𝔽, (∀ t, ψ (τ t) = 1) →
+      ∀ z : ℂ, 0 < ord(ψ, z) → |z.re - 1 / 2| ≠ β := fun ψ hψ z hz ↦
+    hedge (ψ.comp restriction) z (by rw [hlift ψ hψ]; exact (exteriorZeros_ord_pos_iff _ _).mp hz)
+  have hE := isEmpty_exteriorZeros_of_pair_integrable τ hτ β H hs hk hv hpair fun ψ j ↦ by
+    obtain ⟨c, hcβ, D, hDi, hC⟩ := hdefect hβ ψ j
+    refine ⟨c, hcβ, D, hDi, fun y φ' hφ' hvan ↦ ?_⟩
+    obtain ⟨a, b, ha, hb, hsum⟩ := exteriorZeros_hasSum_sub_of_width τ hτ hβ three hedge' φ'
+      ⟨_, spectralStripConvolution_nuclear_of_projectiveKernel hβ.le three φ' (hK hβ ψ j y φ' hφ' hvan)⟩
+      rfl
+    exact ⟨_, hsum, by rw [norm_sub_rev]; exact hC y φ' hφ' hvan a b ha hb _ rfl⟩
+  have : IsEmpty exteriorZeros(τ, α) :=
+    ⟨fun z ↦ hE.false ⟨z.val, z.property.1, hβα.trans z.property.2⟩⟩
+  exact hasSum_empty
 
 end GlobalDiagonal
 
