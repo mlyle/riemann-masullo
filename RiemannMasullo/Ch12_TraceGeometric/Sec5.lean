@@ -10,6 +10,7 @@ import all RiemannMasullo.Ch02_AdelicTheta.Sec2b
 import all RiemannMasullo.Ch03_IdelicZeta.Sec2
 import all RiemannMasullo.Ch09_HardySobolev.Sec3
 import RiemannMasullo.ForMathlib.Analysis.Complex.ExpSumUniqueness
+public import RiemannMasullo.ForMathlib.Analysis.Fourier.Fabius
 import Mathlib.Analysis.Calculus.BumpFunction.Normed
 
 /-! # Trace formula: the Main Theorem
@@ -2046,6 +2047,331 @@ theorem traceFormula_exteriorZeros_of_stripTrace_norm_le (τ : ℝ≥0ˣ →ₜ*
       obtain ⟨c, hcβ, C, hC⟩ := hdefect hβ ψ H hH hHc hHv
       exact ⟨c, hcβ, fun y ↦ C * Real.exp (c * y),
         fun σ hσ ↦ integrableOn_mul_exp_mul_mul_exp_neg_mul C hσ, hC⟩) φ hα
+
+/-- A fixed radial trace test. It is the translate by three of the Fabius density
+after applying the differential operator `(D² − 1/4)D`. -/
+def exteriorTraceProfile (x : ℝ) : ℂ :=
+  deriv (deriv (deriv fabiusProfile)) (x - 3) - 1 / 4 * deriv fabiusProfile (x - 3)
+
+private theorem traceProfile_shift_laplace (H : ℝ → ℂ) (d : ℝ) (w : ℂ) :
+    bilateralLaplace (fun x ↦ H (x - d)) w = Complex.exp (w * d) * bilateralLaplace H w := by
+  unfold bilateralLaplace
+  calc ∫ x : ℝ, H (x - d) * Complex.exp (w * x)
+      = ∫ x : ℝ, H (x - d) * Complex.exp (w * (((x - d : ℝ) : ℂ) + d)) := by
+        congr 1; funext x; push_cast; ring_nf
+    _ = ∫ x : ℝ, H x * Complex.exp (w * (x + d)) :=
+        integral_sub_right_eq_self (μ := volume) (fun x : ℝ ↦ H x * Complex.exp (w * (x + d))) d
+    _ = _ := by
+        rw [← integral_const_mul]; congr 1; funext x; rw [mul_add, Complex.exp_add]; ring
+
+open scoped ContDiff in
+/-- The exact bilateral Laplace multiplier of the fixed trace test. -/
+theorem bilateralLaplace_exteriorTraceProfile (w : ℂ) :
+    bilateralLaplace exteriorTraceProfile w =
+      Complex.exp (w * 3) * (w ^ 2 - 1 / 4) * (-(w * bilateralLaplace fabiusProfile w)) := by
+  obtain ⟨hs, hc, -⟩ := fabiusProfile_properties
+  let g := deriv fabiusProfile
+  have hg : ContDiff ℝ (∞) g := (contDiff_infty_iff_deriv.mp hs).2
+  let H := fun x ↦ deriv (deriv g) x - 1 / 4 * g x
+  change bilateralLaplace (fun x ↦ H (x - 3)) w = _
+  rw [traceProfile_shift_laplace]
+  have he : bilateralLaplace H w = (w ^ 2 - 1 / 4) * bilateralLaplace g w :=
+    integral_polarFilter_mul_cexp g hg hc.deriv w
+  have hd : bilateralLaplace g w = -(w * bilateralLaplace fabiusProfile w) :=
+    integral_deriv_mul_cexp_mul fabiusProfile hs hc w
+  rw [he, hd]
+  push_cast
+  ring
+
+open scoped ContDiff in
+/-- This profile is smooth, is supported in log norms in `[2,4]`, kills both poles and the
+origin, and detects every centered exponent in the open right half of the critical strip. -/
+theorem exteriorTraceProfile_properties :
+    ContDiff ℝ (∞) exteriorTraceProfile ∧ HasCompactSupport exteriorTraceProfile ∧
+    tsupport exteriorTraceProfile ⊆ Icc 2 4 ∧
+    (∀ w ∈ ({-1 / 2, 0, 1 / 2} : Finset ℂ), bilateralLaplace exteriorTraceProfile w = 0) ∧
+    ∀ w : ℂ, 0 < w.re → w.re < 1 / 2 → bilateralLaplace exteriorTraceProfile w ≠ 0 := by
+  obtain ⟨hs, hc, hsup, -⟩ := fabiusProfile_properties
+  let g := deriv fabiusProfile
+  have hg : ContDiff ℝ (∞) g := (contDiff_infty_iff_deriv.mp hs).2
+  let H := fun x ↦ deriv (deriv g) x - 1 / 4 * g x
+  have hH : ContDiff ℝ (∞) H :=
+    (contDiff_infty_iff_deriv.mp (contDiff_infty_iff_deriv.mp hg).2).2.sub (contDiff_const.mul hg)
+  have ht : tsupport exteriorTraceProfile ⊆ Icc 2 4 := by
+    apply closure_minimal _ isClosed_Icc
+    intro x hx
+    by_contra ho
+    have hoff : x - 3 ∉ tsupport fabiusProfile := by
+      intro h
+      obtain ⟨hl, hr⟩ := hsup h
+      exact ho ⟨by linarith, by linarith⟩
+    have hd : deriv fabiusProfile (x - 3) = 0 := deriv_of_notMem_tsupport hoff
+    have h3 : deriv (deriv (deriv fabiusProfile)) (x - 3) = 0 :=
+      deriv_of_notMem_tsupport fun h ↦ hoff (tsupport_deriv_subset (tsupport_deriv_subset h))
+    exact hx (by simp [exteriorTraceProfile, h3, hd])
+  refine ⟨hH.comp (contDiff_id.sub contDiff_const),
+    isCompact_Icc.of_isClosed_subset (isClosed_tsupport _) ht, ht, ?_, ?_⟩
+  · intro w hw
+    simp only [Finset.mem_insert, Finset.mem_singleton] at hw
+    rcases hw with rfl | rfl | rfl <;> rw [bilateralLaplace_exteriorTraceProfile] <;> norm_num
+  · intro w h₀ h₁
+    have hn (a : ℝ) (ha : w.re ≠ a) : w ≠ (a : ℂ) := fun h ↦ ha (by simpa using congrArg Complex.re h)
+    have hm : w ^ 2 - 1 / 4 ≠ 0 := by
+      rw [show w ^ 2 - 1 / 4 = (w - (1 / 2 : ℝ)) * (w - (-1 / 2 : ℝ)) by push_cast; ring]
+      exact mul_ne_zero (sub_ne_zero.mpr (hn _ (by linarith))) (sub_ne_zero.mpr (hn _ (by linarith)))
+    rw [bilateralLaplace_exteriorTraceProfile]
+    exact mul_ne_zero (mul_ne_zero (Complex.exp_ne_zero _) hm) (neg_ne_zero.mpr
+      (mul_ne_zero (by simpa using hn 0 h₀.ne') (bilateralLaplace_fabiusProfile_ne_zero h₀.ne')))
+
+private theorem integrableOn_weight_of_le {D : ℝ → ℝ} {c σ : ℝ} (h : c ≤ σ)
+    (hD : IntegrableOn (fun y ↦ D y * Real.exp (-c * y)) (Ioi 0)) :
+    IntegrableOn (fun y ↦ D y * Real.exp (-σ * y)) (Ioi 0) := by
+  have hbound : ∀ᵐ y ∂volume.restrict (Ioi (0 : ℝ)), ‖Real.exp ((c - σ) * y)‖ ≤ 1 := by
+    filter_upwards [ae_restrict_mem measurableSet_Ioi] with y hy
+    rw [Real.norm_eq_abs, abs_of_pos (Real.exp_pos _), Real.exp_le_one_iff]
+    exact mul_nonpos_of_nonpos_of_nonneg (sub_nonpos.mpr h) (le_of_lt hy)
+  apply (hD.mul_bdd (by fun_prop) hbound).congr
+  filter_upwards with y
+  rw [mul_assoc, ← Real.exp_add]
+  congr 2
+  ring
+
+set_option maxHeartbeats 1500000 in
+/-- For Theorem 12.5.1.1 (pp. 519–520), the same explicit radial profile works for every
+number field and every norm section. A weighted bound for the signed trace difference on
+its nonnegative translates, at sufficiently small strip widths, implies exterior cancellation. -/
+theorem traceFormula_exteriorZeros_of_exteriorTraceProfile (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (hτ : RightInverse τ (ideleClassNorm F)) :
+    (∀ ψ : PontryaginDual C𝔽, (∀ t, ψ (τ t) = 1) → ∀ ε : ℝ, 0 < ε →
+          ∃ η > (0 : ℝ), ∀ {β : ℝ} (hβ : 0 < β), β ≤ η →
+            ∃ D : ℝ → ℝ, IntegrableOn (fun y ↦ D y * Real.exp (-ε * y)) (Ioi 0) ∧
+              ∀ y : ℝ, 0 ≤ y → ∀ φ : BruhatCompactSupport C𝔽,
+                (∀ x, φ.val x = (ψ x : ℂ) *
+                  exteriorTraceProfile (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ) - y)) →
+                M(φ, twist(1, 1 / 2)) = 0 → M(φ, twist(1, -1 / 2)) = 0 →
+                ∃ T : nuclearEndomorphisms stripQuot(hβ.le, three),
+                  T.val = stripConv(hβ.le, three, φ) ∧
+                  ∀ (a : archTest) (b : finiteTest), archRestricts(φ, a) → finiteRestricts(φ, b) →
+                    ‖hilbertTrace T - localTerms(φ, a, b)‖ ≤ D y) →
+        ∀ {α : ℝ}, 0 < α → ∀ φ : BruhatCompactSupport C𝔽,
+          HasSum (fun z : exteriorZeros(τ, α) ↦ zeroTerm(φ, z)) 0 := by
+  classical
+  intro htrace α hα φ
+  suffices IsEmpty exteriorZeros(τ, α) from hasSum_empty
+  by_contra hne
+  obtain ⟨z⟩ := not_isEmpty_iff.mp hne
+  obtain ⟨z₀, hz₀⟩ : ∃ z₀ : exteriorZeros(τ, α), 1 / 2 ≤ z₀.val.2.re := by
+    rcases le_or_gt (1 / 2) z.val.2.re with h | h
+    · exact ⟨z, h⟩
+    · have habs : |(1 - z.val.2).re - 1 / 2| = |z.val.2.re - 1 / 2| := by
+        rw [Complex.sub_re, Complex.one_re, show 1 - z.val.2.re - 1 / 2 = -(z.val.2.re - 1 / 2) by
+          ring, abs_neg]
+      refine ⟨⟨(⟨z.val.1.val⁻¹, fun t ↦ ?_⟩, 1 - z.val.2),
+        (exteriorZeros_ord_reflection z.val.1.val z.val.2).symm ▸ z.property.1,
+        habs.symm ▸ z.property.2⟩, ?_⟩
+      · change (z.val.1.val (τ t))⁻¹ = 1
+        rw [z.val.1.property t, inv_one]
+      · change 1 / 2 ≤ (1 - z.val.2).re
+        rw [Complex.sub_re, Complex.one_re]
+        linarith
+  let ψ := z₀.val.1.val
+  have hd : α ≤ z₀.val.2.re - 1 / 2 := by
+    simpa only [abs_of_nonneg (sub_nonneg.mpr hz₀)] using z₀.property.2
+  have hψinv (t) : ψ⁻¹ (τ t) = 1 := by
+    change (ψ (τ t))⁻¹ = 1
+    rw [z₀.val.1.property t, inv_one]
+  obtain ⟨η, hη, hηT⟩ := htrace ψ⁻¹ hψinv (α / 2) (by positivity)
+  obtain ⟨χ, -, -, hlift⟩ := exteriorZeros_basepoint τ hτ
+  obtain ⟨β, hβ, hβαη, hedge⟩ := exteriorZeros_exists_width χ (lt_min hα hη)
+  have hedge' : ∀ ξ : PontryaginDual C𝔽, (∀ t, ξ (τ t) = 1) →
+      ∀ u : ℂ, 0 < ord(ξ, u) → |u.re - 1 / 2| ≠ β := fun ξ hξ u hu ↦
+    hedge (ξ.comp restriction) u (by rw [hlift ξ hξ]; exact (exteriorZeros_ord_pos_iff _ _).mp hu)
+  let zβ : exteriorZeros(τ, β) := ⟨z₀.val, z₀.property.1, (hβαη.trans (min_le_left _ _)).trans z₀.property.2⟩
+  obtain ⟨D, hDi, hT⟩ := hηT hβ (hβαη.trans (min_le_right _ _))
+  obtain ⟨hs, hc, -, hp, hdetect⟩ := exteriorTraceProfile_properties
+  have hp₁ := hp (1 / 2) (by simp)
+  have hp₂ := hp (-1 / 2) (by simp)
+  have hz := exteriorZeros_coeff_eq_zero_of_integrable τ hτ β ψ z₀.val.1.property exteriorTraceProfile hs hc
+    hp₁ hp₂ D (fun σ hσ ↦ integrableOn_weight_of_le hσ.le hDi) ?_ zβ rfl (by dsimp [zβ]; linarith)
+  · have hstrip : |z₀.val.2.re - 1 / 2| < 1 / 2 := lt_of_not_ge fun h ↦
+      (exteriorZeros_isEmpty_of_half_le τ (le_refl (1 / 2 : ℝ))).false
+        ⟨z₀.val, z₀.property.1, h⟩
+    apply hdetect _ _ _ hz
+    · rw [Complex.sub_re]
+      norm_num
+      linarith
+    · rw [Complex.sub_re]
+      norm_num
+      linarith [(abs_lt.mp hstrip).2]
+  · intro y hy φ' hφ' hp₁' hp₂'
+    obtain ⟨T, hTval, hlocal⟩ := hT y hy φ' hφ' hp₁' hp₂'
+    obtain ⟨a, b, ha, hb, hsum⟩ :=
+      exteriorZeros_hasSum_sub_of_width τ hτ hβ three hedge' φ' T hTval
+    exact ⟨_, hsum, by rw [norm_sub_rev]; exact hlocal a b ha hb⟩
+
+/-- The full divisor sum is the local side of the explicit formula, also when indexed by
+the exterior of the empty open strip of width zero. -/
+private theorem exteriorTraceProfile_full_local (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (hτ : RightInverse τ (ideleClassNorm F)) (φ : BruhatCompactSupport C𝔽) :
+    ∃ (a : archTest) (b : finiteTest), archRestricts(φ, a) ∧ finiteRestricts(φ, b) ∧
+      HasSum (fun z : exteriorZeros(τ, 0) ↦ zeroTerm(φ, z)) (localTerms(φ, a, b)) := by
+  obtain ⟨a, b, ha, hb, -, hall⟩ := traceFormula_of_half_le τ hτ φ (le_refl (1 / 2 : ℝ))
+  refine ⟨a, b, ha, hb, exteriorZeros_hasSum_of_iff
+    (fun p : {χ : PontryaginDual C𝔽 // ∀ t : ℝ≥0ˣ, χ (τ t) = 1} × ℂ ↦
+      ((ord(p.1.val, p.2) : ℤ) : ℂ) * M(φ, twist(p.1.val, p.2 - 1 / 2)))
+    {p | 0 < ord(p.1.val, p.2) ∧ |p.2.re - 1 / 2| < 1 / 2}
+    {p | 0 < ord(p.1.val, p.2) ∧ 0 ≤ |p.2.re - 1 / 2|} ?_ hall⟩
+  intro p
+  exact ⟨fun h ↦ ⟨h.1, abs_nonneg _⟩, fun h ↦ ⟨h.1, lt_of_not_ge fun hn ↦
+    (exteriorZeros_isEmpty_of_half_le τ (le_refl (1 / 2 : ℝ))).false ⟨p, h.1, hn⟩⟩⟩
+
+set_option maxHeartbeats 1500000 in
+/-- For Theorem 12.5.1.1, pp. 519–520, subexponential weighted integrability of the actual
+signed local terms on one fixed family of translates suffices. The only analytic input
+assumed here is the majorant on the local side of Theorem B.4.4.7, p. 623. -/
+theorem traceFormula_exteriorZeros_of_exteriorTraceProfile_local (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (hτ : RightInverse τ (ideleClassNorm F))
+    (hlocal : ∀ ψ : PontryaginDual C𝔽, (∀ t, ψ (τ t) = 1) → ∀ ε : ℝ, 0 < ε →
+      ∃ D : ℝ → ℝ, IntegrableOn (fun y ↦ D y * Real.exp (-ε * y)) (Ioi 0) ∧
+        ∀ y : ℝ, 0 ≤ y → ∀ φ : BruhatCompactSupport C𝔽,
+          (∀ x, φ.val x = (ψ x : ℂ) *
+            exteriorTraceProfile (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ) - y)) →
+          ∀ (a : archTest) (b : finiteTest), archRestricts(φ, a) → finiteRestricts(φ, b) →
+            ‖localTerms(φ, a, b)‖ ≤ D y)
+    {α : ℝ} (hα : 0 < α) (φ : BruhatCompactSupport C𝔽) :
+    HasSum (fun z : exteriorZeros(τ, α) ↦ zeroTerm(φ, z)) 0 := by
+  classical
+  suffices IsEmpty exteriorZeros(τ, α) from hasSum_empty
+  by_contra hne
+  obtain ⟨z⟩ := not_isEmpty_iff.mp hne
+  obtain ⟨z₀, hz₀⟩ : ∃ z₀ : exteriorZeros(τ, α), 1 / 2 ≤ z₀.val.2.re := by
+    rcases le_or_gt (1 / 2) z.val.2.re with h | h
+    · exact ⟨z, h⟩
+    · have habs : |(1 - z.val.2).re - 1 / 2| = |z.val.2.re - 1 / 2| := by
+        rw [Complex.sub_re, Complex.one_re, show 1 - z.val.2.re - 1 / 2 = -(z.val.2.re - 1 / 2) by
+          ring, abs_neg]
+      refine ⟨⟨(⟨z.val.1.val⁻¹, fun t ↦ ?_⟩, 1 - z.val.2),
+        (exteriorZeros_ord_reflection z.val.1.val z.val.2).symm ▸ z.property.1,
+        habs.symm ▸ z.property.2⟩, ?_⟩
+      · change (z.val.1.val (τ t))⁻¹ = 1
+        rw [z.val.1.property t, inv_one]
+      · change 1 / 2 ≤ (1 - z.val.2).re
+        rw [Complex.sub_re, Complex.one_re]
+        linarith
+  let ψ := z₀.val.1.val
+  have hd : α ≤ z₀.val.2.re - 1 / 2 := by
+    simpa only [abs_of_nonneg (sub_nonneg.mpr hz₀)] using z₀.property.2
+  have hψinv (t) : ψ⁻¹ (τ t) = 1 := by
+    change (ψ (τ t))⁻¹ = 1
+    rw [z₀.val.1.property t, inv_one]
+  obtain ⟨D, hDi, hbound⟩ := hlocal ψ⁻¹ hψinv (α / 2) (by positivity)
+  obtain ⟨hs, hc, -, hp, hdetect⟩ := exteriorTraceProfile_properties
+  let zfull : exteriorZeros(τ, 0) := ⟨z₀.val, z₀.property.1, abs_nonneg _⟩
+  have hz := exteriorZeros_coeff_eq_zero_of_integrable τ hτ 0 ψ z₀.val.1.property
+    exteriorTraceProfile hs hc (hp _ (by simp)) (hp _ (by simp)) D
+    (fun σ hσ ↦ integrableOn_weight_of_le hσ.le hDi) ?_ zfull rfl (by dsimp [zfull]; linarith)
+  · have hstrip : |z₀.val.2.re - 1 / 2| < 1 / 2 := lt_of_not_ge fun h ↦
+      (exteriorZeros_isEmpty_of_half_le τ (le_refl (1 / 2 : ℝ))).false
+        ⟨z₀.val, z₀.property.1, h⟩
+    apply hdetect _ _ _ hz
+    · simp only [Complex.sub_re]; norm_num; linarith
+    · simp only [Complex.sub_re]; norm_num; linarith [(abs_lt.mp hstrip).2]
+  · intro y hy f hf _ _
+    obtain ⟨a, b, ha, hb, hsum⟩ := exteriorTraceProfile_full_local τ hτ f
+    exact ⟨_, hsum, hbound y hy f hf a b ha hb⟩
+
+open scoped ContDiff in
+set_option maxHeartbeats 1500000 in
+/-- When every exterior sum in Theorem 12.5.1.1 vanishes, each normalized character admits
+a constant bounding the actual local terms of all translates of the fixed test. -/
+theorem exteriorTraceProfile_local_bounded_of_exteriorZeros (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (hτ : RightInverse τ (ideleClassNorm F))
+    (hzero : ∀ {α : ℝ}, 0 < α → ∀ φ : BruhatCompactSupport C𝔽, (∀ g : C₁, φ.val g = 0) →
+      HasSum (fun z : exteriorZeros(τ, α) ↦ zeroTerm(φ, z)) 0)
+    (ψ : PontryaginDual C𝔽) (hψ : ∀ t, ψ (τ t) = 1) :
+    ∃ C : ℝ, ∀ y : ℝ, ∀ φ : BruhatCompactSupport C𝔽,
+      (∀ x, φ.val x = (ψ x : ℂ) *
+        exteriorTraceProfile (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ) - y)) →
+      ∀ (a : archTest) (b : finiteTest), archRestricts(φ, a) → finiteRestricts(φ, b) →
+        ‖localTerms(φ, a, b)‖ ≤ C := by
+  classical
+  obtain ⟨hs, hc, -⟩ := exteriorTraceProfile_properties
+  obtain ⟨f, hf⟩ := exists_characterNormTest (F := F) ψ _ hs hc
+  let Z := exteriorZeros(τ, 0)
+  refine ⟨∑' z : Z, ‖zeroTerm(f, z)‖, ?_⟩
+  intro y φ hφ a b ha hb
+  obtain ⟨a', b', ha', hb', hall⟩ := exteriorTraceProfile_full_local τ hτ φ
+  rw [exteriorZeros_localTerms_congr φ ha hb ha' hb', ← hall.tsum_eq]
+  refine (norm_tsum_le_tsum_norm hall.summable.norm).trans_eq (tsum_congr fun z ↦ ?_)
+  let χ := z.val.1.val
+  let w := z.val.2 - 1 / 2
+  have hcenter : w.re = 0 := by
+    by_contra hn
+    have hp : 0 < |z.val.2.re - 1 / 2| := abs_pos.mpr (by simpa [w, Complex.sub_re] using hn)
+    exact ((hasSum_exteriorZeros_iff_isEmpty τ hτ _).mp (hzero hp)).false
+      ⟨z.val, z.property.1, le_refl _⟩
+  let H := exteriorTraceProfile
+  have hsy : ContDiff ℝ (∞) (fun x ↦ H (x - y)) := hs.comp (contDiff_id.sub contDiff_const)
+  have hcy : HasCompactSupport (fun x ↦ H (x - y)) := hc.comp_homeomorph (Homeomorph.subRight y)
+  rw [characterNormTest_mellin _ hsy hcy ψ φ hφ, characterNormTest_mellin _ hs hc ψ f hf]
+  by_cases hω : ∀ u : C₁, (χ * ψ) u.val = 1
+  · have hψinv (t) : ψ⁻¹ (τ t) = 1 := by change (ψ (τ t))⁻¹ = 1; rw [hψ, inv_one]
+    have heq : χ = ψ⁻¹ := grh_character_eq τ hτ z.val.1.property hψinv (by simpa using hω)
+    have hone : χ * ψ = 1 := by rw [heq, inv_mul_cancel]
+    have hm (u) : ((χ * ψ) (QuotientGroup.mk (canonicalIdeleNormSection F u) : C𝔽) : ℂ) = 1 := by rw [hone]; rfl
+    have hy := grh_shift_integral H hs.continuous _ hm y w
+    have hz := grh_shift_integral H hs.continuous _ hm 0 w
+    simp only [sub_zero, Complex.ofReal_zero, mul_zero, Complex.exp_zero, one_mul] at hz
+    rw [hy, hz]
+    have hn : ‖Complex.exp (w * y)‖ = 1 := by simp [Complex.norm_exp, Complex.mul_re, hcenter]
+    simp only [norm_mul, hn, one_mul]
+  · change ¬ ∀ u : C₁, (z.val.1.val * ψ) u.val = 1 at hω
+    simp only [ite_eq_right hω, zero_mul, mul_zero]
+
+/-- Theorem 12.5.1.1, pp. 519–520, for all positive strip widths is equivalent to
+subexponential weighted integrability of the signed local terms of one explicit fixed
+profile. Only the character twist and translation vary. -/
+theorem traceFormula_exteriorZeros_iff_exteriorTraceProfile_local (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (hτ : RightInverse τ (ideleClassNorm F)) :
+    (∀ {α : ℝ}, 0 < α → ∀ φ : BruhatCompactSupport C𝔽, (∀ g : C₁, φ.val g = 0) →
+      HasSum (fun z : exteriorZeros(τ, α) ↦ zeroTerm(φ, z)) 0) ↔
+    ∀ ψ : PontryaginDual C𝔽, (∀ t, ψ (τ t) = 1) → ∀ ε : ℝ, 0 < ε →
+      ∃ D : ℝ → ℝ, IntegrableOn (fun y ↦ D y * Real.exp (-ε * y)) (Ioi 0) ∧
+        ∀ y : ℝ, 0 ≤ y → ∀ φ : BruhatCompactSupport C𝔽,
+          (∀ x, φ.val x = (ψ x : ℂ) *
+            exteriorTraceProfile (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ) - y)) →
+          ∀ (a : archTest) (b : finiteTest), archRestricts(φ, a) → finiteRestricts(φ, b) →
+            ‖localTerms(φ, a, b)‖ ≤ D y := by
+  constructor
+  · intro h ψ hψ ε hε
+    obtain ⟨C, hC⟩ := exteriorTraceProfile_local_bounded_of_exteriorZeros τ hτ h ψ hψ
+    exact ⟨fun _ ↦ C, (integrableOn_exp_mul_Ioi (neg_neg_of_pos hε) 0).const_mul C,
+      fun y _ ↦ hC y⟩
+  · intro h α hα φ _
+    exact traceFormula_exteriorZeros_of_exteriorTraceProfile_local τ hτ h hα φ
+
+open scoped ContDiff in
+/-- The three prescribed moments vanish for every permitted twist, independently of the
+choice of global Bruhat test representing the translate. -/
+theorem exteriorTraceProfile_mellin_zero (τ : ℝ≥0ˣ →ₜ* C𝔽) (hτ : RightInverse τ (ideleClassNorm F))
+    (ψ : PontryaginDual C𝔽) (hψ : ∀ t, ψ (τ t) = 1) (y : ℝ) (φ : BruhatCompactSupport C𝔽)
+    (hφ : ∀ x, φ.val x = (ψ x : ℂ) *
+      exteriorTraceProfile (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ) - y))
+    {w : ℂ} (hw : w ∈ ({-1 / 2, 0, 1 / 2} : Finset ℂ)) : M(φ, twist(1, w)) = 0 := by
+  classical
+  obtain ⟨hs, hc, -, hp, -⟩ := exteriorTraceProfile_properties
+  have hsy : ContDiff ℝ (∞) (fun x ↦ exteriorTraceProfile (x - y)) := hs.comp (contDiff_id.sub contDiff_const)
+  have hcy : HasCompactSupport (fun x ↦ exteriorTraceProfile (x - y)) := hc.comp_homeomorph (Homeomorph.subRight y)
+  rw [characterNormTest_mellin _ hsy hcy ψ φ hφ]
+  by_cases hω : ∀ u : C₁, ((1 : PontryaginDual C𝔽) * ψ) u.val = 1
+  · have heq : ψ = 1 := grh_character_eq τ hτ hψ (fun _ ↦ PontryaginDual.one_apply _) (by simpa using hω)
+    have hone : (1 : PontryaginDual C𝔽) * ψ = 1 := by rw [heq, one_mul]
+    rw [ite_eq_left hω]
+    beta_reduce
+    rw [grh_shift_integral exteriorTraceProfile hs.continuous _ (fun t ↦ by rw [hone]; rfl) y]
+    change _ * (_ * bilateralLaplace exteriorTraceProfile w) = 0
+    rw [hp w hw, mul_zero, mul_zero]
+  · rw [ite_eq_right hω, zero_mul]
 
 end GlobalDiagonal
 
