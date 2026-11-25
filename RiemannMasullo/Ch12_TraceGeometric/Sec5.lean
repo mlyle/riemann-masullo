@@ -1587,6 +1587,128 @@ private theorem exteriorZeros_basepoint (τ : ℝ≥0ˣ →ₜ* C𝔽) (hτ : Ri
     change ψ (r x : C𝔽) = ψ x
     rw [hr, map_div, hψ, div_one]
 
+private theorem mellin_norm_translate (φ₀ φ : BruhatCompactSupport C𝔽)
+    (g : C𝔽) (u : ℂ) (hu : ‖u‖ = 1) (hφ : ∀ x, φ.val (g * x) = u * φ₀.val x)
+    (χ : PontryaginDual C𝔽) (w : ℂ) :
+    ‖M(φ, twist(χ, w))‖ = Real.exp (w.re * Real.log ((ideleClassNorm F g : ℝ≥0) : ℝ)) *
+      ‖M(φ₀, twist(χ, w))‖ := by
+  let c := ideleClassNormTwist χ w
+  have h : M(φ, c) = u * c g * M(φ₀, c) := by
+    simp only [modulatedFourierMellin, relativeVerticalStrip, preimage_univ, indicator_univ]
+    rw [← integral_mul_left_eq_self (μ := μ𝔽) (fun x ↦ φ.val x * c x) g, ← integral_const_mul]
+    apply integral_congr_ae
+    filter_upwards with x
+    rw [hφ, map_mul]
+    ring
+  rw [h, norm_mul, norm_mul, hu, one_mul]
+  congr 1
+  change ‖(χ g : ℂ) * (((ideleClassNorm F g : ℝ≥0) : ℝ) : ℂ) ^ w‖ = _
+  have hg : 0 < ((ideleClassNorm F g : ℝ≥0) : ℝ) := NNReal.coe_pos.mpr (Units.zero_lt _)
+  rw [norm_mul, Circle.norm_coe, one_mul, Complex.norm_cpow_eq_rpow_re_of_pos hg,
+    Real.rpow_def_of_pos hg, mul_comm]
+
+/-- Corollary of Theorem 10.3.1.1, p. 448. The trace on a closed strip grows at most as exp(β y) under
+positive log-norm translation. The constant is the absolutely convergent
+sum of the norms of the surviving zero jets at translation zero, including
+the actual truncated multiplicities on both edges. -/
+theorem spectralStripTrace_norm_le_of_translate (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
+    (hχ : IsSpectralBasepointChoice χ) {β s : ℝ} (hβ : 0 ≤ β) (hs : 1 < s)
+    (φ₀ : BruhatCompactSupport C𝔽) (T₀ : nuclearEndomorphisms stripQuot(hβ, hs))
+    (hT₀ : T₀.val = stripConv(hβ, hs, φ₀)) :
+    ∃ C : ℝ, 0 ≤ C ∧ ∀ (y : ℝ) (g : C𝔽), 0 ≤ y →
+      Real.log ((ideleClassNorm F g : ℝ≥0) : ℝ) = y →
+      ∀ (φ : BruhatCompactSupport C𝔽) (u : ℂ), ‖u‖ = 1 →
+        (∀ x, φ.val (g * x) = u * φ₀.val x) →
+        ∀ T : nuclearEndomorphisms stripQuot(hβ, hs), T.val = stripConv(hβ, hs, φ) →
+          ‖hilbertTrace T‖ ≤ C * Real.exp (β * y) := by
+  let shift (a t : ℝ) := (a : ℂ) + (t : ℂ) * Complex.I
+  let Z := {z : PontryaginDual C₁ × ℝ × ℝ // z.2.1 ∈ Icc (-β) β ∧
+    0 < order(χ z.1, shift (1 / 2 + z.2.1) z.2.2)}
+  let row (f : BruhatCompactSupport C𝔽) (z : Z) :=
+    ((spectralStripMultiplicity β s z.val.2.1
+      (order(χ z.val.1, shift (1 / 2 + z.val.2.1) z.val.2.2)).untop₀.toNat : ℕ) : ℂ) *
+        M(f, twist(χ z.val.1, shift z.val.2.1 z.val.2.2))
+  obtain ⟨h₀, -⟩ := spectralStripConvolution_trace (F := F) (1 / 2) χ hχ hβ hs φ₀ T₀ hT₀
+  change Summable (fun z : Z ↦ ‖row φ₀ z‖) at h₀
+  refine ⟨∑' z, ‖row φ₀ z‖, tsum_nonneg (fun _ ↦ norm_nonneg _), ?_⟩
+  intro y g hy hg φ u hu hφ T hT
+  obtain ⟨h₁, hT'⟩ := spectralStripConvolution_trace (F := F) (1 / 2) χ hχ hβ hs φ T hT
+  change Summable (fun z : Z ↦ ‖row φ z‖) at h₁
+  change HasSum (row φ) (hilbertTrace T) at hT'
+  have hd (z : Z) : ‖row φ z‖ ≤ ‖row φ₀ z‖ * Real.exp (β * y) := by
+    dsimp only [row]
+    rw [norm_mul, norm_mul, mellin_norm_translate φ₀ φ g u hu hφ, hg]
+    have hr : (shift z.val.2.1 z.val.2.2).re = z.val.2.1 := by simp [shift]
+    rw [hr]
+    calc
+      _ = (_ * ‖M(φ₀, twist(χ z.val.1, shift z.val.2.1 z.val.2.2))‖) *
+        Real.exp (z.val.2.1 * y) := by ring
+      _ ≤ _ := mul_le_mul_of_nonneg_left (Real.exp_le_exp.mpr
+        (mul_le_mul_of_nonneg_right z.property.1.2 hy)) (by positivity)
+  rw [← hT'.tsum_eq, ← tsum_mul_right]
+  exact (norm_tsum_le_tsum_norm h₁).trans (h₁.tsum_le_tsum hd (h₀.mul_right _))
+
+open scoped ContDiff in
+/-- A translated-test comparison for Theorem 12.5.1.1, pp. 519–520. For a fixed profile,
+fix a sequence of positive strip widths. If for each rate ε > 0 the translated trace defect
+has an ε-weighted integrable majorant at some listed width below ε, the local terms have an
+ε-weighted integrable majorant at every positive rate. The widths may meet completed zeros. -/
+theorem localTerms_integrableMajorant_of_cofinal_stripTrace (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (hτ : RightInverse τ (ideleClassNorm F)) (ψ : PontryaginDual C𝔽) (H : ℝ → ℂ)
+    (hH : ContDiff ℝ (∞) H) (hHc : HasCompactSupport H) (hHv : ∀ x ≤ 0, H x = 0)
+    (β : ℕ → ℝ) (hβ : ∀ n, 0 < β n)
+    (hK : ∀ n (φ : BruhatCompactSupport C𝔽), (∀ g : C₁, φ.val g = 0) →
+      stripTensorExists((hβ n).le, three, φ))
+    (hcmp : ∀ ε : ℝ, 0 < ε → ∃ n, β n < ε ∧ ∃ D : ℝ → ℝ,
+      IntegrableOn (fun y ↦ D y * Real.exp (-ε * y)) (Ioi (0 : ℝ)) ∧
+      ∀ y : ℝ, 0 ≤ y → ∀ φ : BruhatCompactSupport C𝔽,
+        (∀ x, φ.val x = (ψ x : ℂ) * H (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ) - y)) →
+        M(φ, twist(1, 1 / 2)) = 0 → M(φ, twist(1, -1 / 2)) = 0 →
+        ∀ (a : archTest) (b : finiteTest), archRestricts(φ, a) → finiteRestricts(φ, b) →
+        ∀ T : nuclearEndomorphisms stripQuot((hβ n).le, three),
+          T.val = stripConv((hβ n).le, three, φ) →
+          ‖hilbertTrace T - localTerms(φ, a, b)‖ ≤ D y)
+    (ε : ℝ) (hε : 0 < ε) :
+    ∃ D : ℝ → ℝ, IntegrableOn (fun y ↦ D y * Real.exp (-ε * y)) (Ioi (0 : ℝ)) ∧
+      ∀ y : ℝ, 0 ≤ y → ∀ φ : BruhatCompactSupport C𝔽,
+        (∀ x, φ.val x = (ψ x : ℂ) * H (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ) - y)) →
+        M(φ, twist(1, 1 / 2)) = 0 → M(φ, twist(1, -1 / 2)) = 0 →
+        ∀ (a : archTest) (b : finiteTest), archRestricts(φ, a) → finiteRestricts(φ, b) →
+          ‖localTerms(φ, a, b)‖ ≤ D y := by
+  obtain ⟨n, hn, D, hD, hcomp⟩ := hcmp ε hε
+  obtain ⟨χ, hχ, -, -⟩ := exteriorZeros_basepoint τ hτ
+  obtain ⟨φ₀, hφ₀⟩ := exists_characterNormTest (F := F) ψ H hH hHc
+  have hv₀ (g : C₁) : φ₀.val g = 0 := by
+    rw [hφ₀, MonoidHom.mem_ker.mp g.property, Units.val_one, NNReal.coe_one, Real.log_one,
+      hHv 0 le_rfl, mul_zero]
+  let T₀ : nuclearEndomorphisms stripQuot((hβ n).le, three) :=
+    ⟨_, spectralStripConvolution_nuclear_of_projectiveKernel (hβ n).le three φ₀ (hK n φ₀ hv₀)⟩
+  obtain ⟨C, -, htrace⟩ := spectralStripTrace_norm_le_of_translate χ hχ (hβ n).le three φ₀ T₀ rfl
+  refine ⟨fun y ↦ D y + C * Real.exp (β n * y), ?_, ?_⟩
+  · have h₁ : IntegrableOn (fun y ↦ C * Real.exp ((β n - ε) * y)) (Ioi (0 : ℝ)) :=
+      (integrableOn_exp_mul_Ioi (sub_neg.mpr hn) 0).const_mul C
+    refine (hD.add h₁).congr_fun (fun y _ ↦ ?_) measurableSet_Ioi
+    change D y * _ + C * Real.exp ((β n - ε) * y) = (_ + _) * _
+    rw [add_mul, mul_assoc, ← Real.exp_add, ← add_mul]
+    simp [sub_eq_add_neg]
+  intro y hy φ hφ hp₁ hp₂ a b ha hb
+  let g := τ (grhExp y)
+  have hg : Real.log ((ideleClassNorm F g : ℝ≥0) : ℝ) = y := by
+    rw [show ideleClassNorm F g = grhExp y from hτ _, grhExp_val, Real.log_exp]
+  have hshift (x : C𝔽) : φ.val (g * x) = (ψ g : ℂ) * φ₀.val x := by
+    rw [hφ, hφ₀, map_mul, Circle.coe_mul, map_mul, Units.val_mul, NNReal.coe_mul,
+      Real.log_mul (nnrealUnits_coe_pos _).ne' (nnrealUnits_coe_pos _).ne', hg,
+      add_sub_cancel_left, mul_assoc]
+  have hv (x : C₁) : φ.val x = 0 := by
+    rw [hφ, MonoidHom.mem_ker.mp x.property, Units.val_one, NNReal.coe_one, Real.log_one,
+      zero_sub, hHv _ (neg_nonpos.mpr hy), mul_zero]
+  let T : nuclearEndomorphisms stripQuot((hβ n).le, three) :=
+    ⟨_, spectralStripConvolution_nuclear_of_projectiveKernel (hβ n).le three φ (hK n φ hv)⟩
+  have hd := hcomp y hy φ hφ hp₁ hp₂ a b ha hb T rfl
+  rw [norm_sub_rev] at hd
+  exact (norm_le_norm_sub_add _ (hilbertTrace T)).trans
+    (add_le_add hd (htrace y g hy hg φ _ (Circle.norm_coe _) hshift T rfl))
+
 /-- The order of a continued completed Hecke L-function is finite everywhere. -/
 private theorem exteriorZeros_order_ne_top (χ : PontryaginDual C𝔽) (z : ℂ) : order(χ, z) ≠ ⊤ := by
   obtain ⟨hL, heq⟩ := continuedCompletedHeckeL_spec χ
