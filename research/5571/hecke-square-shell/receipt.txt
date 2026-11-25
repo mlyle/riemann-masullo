@@ -1,0 +1,13 @@
+44fd355a232d8d233d0c7fa26aa4586fedb7b7a9
+Build completed successfully (9123 jobs).
+Build completed successfully (21240 jobs).
+lint: ok
+RiemannMasullo.heckeLogDerivCoefficient_composite_sub_primeSquares_le: 60 project declarations, 0 descendants with sorryAx
+RiemannMasullo.heckeCompositeShell_sub_primeSquares_exp_bound: 65 project declarations, 0 descendants with sorryAx
+70f438aace22ec5ee7bcfe6002447424aa7f1058
+Build completed successfully (10095 jobs).
+.agent/Combination.lean:71:33: warning: `if_neg` has been deprecated: Use `ite_eq_right` instead
+
+Hint: Replace the deprecated name:
+  i̵f̵_̵n̵e̵g̵i̲t̲e̲_̲e̲q̲_̲r̲i̲g̲h̲t̲
+'RiemannMasullo.squareCorrected_localTerms_exp_bound' depends on axioms: [propext, choice, Quot.sound]
