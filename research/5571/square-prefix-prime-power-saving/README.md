@@ -92,3 +92,31 @@ Using PNT only as an absolute pointwise bound on \(E\) before integration would 
 The power saving is signed. If an exterior zero exists, write \(b_*=\sup_\rho\Re\rho-1/2>0\). Both positive and negative \(H\)-masses have exact exponential rate \(b_*\) in \(\log Y\) at every large center, by the [isolated-term kernels](../square-prefix-theta-annihilator/README.md#isolating-one-exterior-zero-and-forcing-both-signs-in-the-same-window). Indeed each fixed complex selector there decays like \(\exp(-c e^{2|v|/5})\), so the lower bound on the new \(H\) dominates its absolute value globally up to a constant. The isolated correlation gives the lower rate for total variation; the signed bound above splits it between the parts. The ordinary absolute Riesz envelope gives the matching upper rate. Thus a positive-part saving for this observable would need information beyond the signed cancellation just proved.
 
 These are classical paper derivations. [PR 7612](https://github.com/mccorvie/riemann-masullo/pull/7612) certifies the original theta-pair positivity through \(t^2\le2\). The refined-envelope bound through \(t^2\le8\), the explicit formula manipulations and the physical power-saving statements on this page have not been formalized.
+
+## The exact signed correction measured on primes
+
+One can isolate the entire logarithmic uncertainty on the literal samples. Let \(k=\lfloor\sqrt{Ye^v}\rfloor\) in the weight below (take zero for \(k<1\)), and define a second physical measurement
+\[
+ S_H(Y)=\int H(v)k^{-2}
+    \sum_{p\le k^2}\log(p)\,w(\log p)\big(\tfrac12-\{\sqrt p\}\big)\,dv .
+\]
+The saw here has exactly the indicated sign: for every prime \(p\), its square root is nonintegral, so \(\lceil\sqrt p\rceil-\sqrt p-1/2=1/2-\{\sqrt p\}\). The continuous mean's centered saw costs \(O(k)\) before division, by its bounded primitive in the variable \(\sqrt x\) and partial summation. In the square-cell expansion one can therefore **retain** the prime sum instead of appealing to Zhai, with all remaining floor errors bounded by \(O(k^{-1}\log(2k))\) after normalization. The other terms have the same cellwise cancellation and shifted spectral annihilation proved above. Hence for either compensator,
+\[
+ \int H(v)F(\log Y+v)dv + S_H(Y)
+ = \int H(v)B(Ye^v)/(Ye^v)\,dv + O_H(Y^{-1/2}\log(2Y)).
+\]
+In particular the sum of these two independently defined first-prime measurements lies strictly between \(-1-\tfrac32mY^{-1/6}\) and \(-1-\tfrac9{10}mY^{-1/6}\) for all sufficiently large \(Y\), using the slack in the cube coefficient. Thus to erase the negative cube drift in the literal prefix average, the centered prime saw must itself be **negative** with magnitude at least \((9/10)mY^{-1/6}\) there. The available \(O_H(Y^{-1/6}\log^{11/2}(2Y))\) discrepancy estimate allows that sign and magnitude.
+
+## A prime-cube lower bound requiring only Chebyshev, before any smoothing
+
+The cube effect has an elementary positive lower bound on the actual prime numbers, uniformly even before taking the moving average. Write \(U=X^{1/3}\), and choose \(B=\exp((3\pi/2+2\pi n)/3)\) the largest such number with \(B\le U/2\). Then \(B>e^{-2\pi/3}U/2\); on \(Be^{-\pi/3}\le p\le B\) one has \(w(3\log p)\ge1\). Also \(U^{3/2}-p^{3/2}\ge(1-2^{-3/2})U^{3/2}\). The elementary Chebyshev inequalities \(\vartheta(x)\le x\log4,\ \vartheta(x)\ge(x-1)\log2-\log(x+2)-2\sqrt{x}\log x\) show
+\[
+ \vartheta(B)-\vartheta(Be^{-\pi/3})
+ \ge B\log2(1-2e^{-\pi/3})-o(B).
+\]
+All errors are uniform as \(U\to\infty\). Consequently
+\[
+ \liminf_{X\to\infty} C_3(X)/X^{5/6}
+ \ge c_0=\tfrac12 e^{-2\pi/3}(1-2^{-3/2})\log2\,(1-2e^{-\pi/3})>0.
+\]
+This uses only Chebyshev bounds and fixed-phase positivity. The stronger explicit cube-coefficient interval for the continuous prime probe uses the ordinary PNT. This elementary inequality is an independent candidate for formalization directly on the finite prime sum, without depending on the positive-filter PR. [Mathlib's native Chebyshev bounds](https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/Chebyshev.html).
