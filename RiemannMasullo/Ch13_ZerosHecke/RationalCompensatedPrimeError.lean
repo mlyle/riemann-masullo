@@ -42,8 +42,17 @@ private def fourShift (f : ℂ → ℂ) (z : ℂ) : ℂ :=
 
 /-- The four shifts of the negative logarithmic derivative of zeta after
 removing its pole at one, in the normalization of the cosine weight. -/
-def rationalCompensatedZetaLogDeriv (z : ℂ) : ℂ :=
-  fourShift (fun w ↦ -logDeriv riemannZeta w - 1 / (w - 1)) z
+@[expose] def rationalCompensatedZetaLogDeriv (z : ℂ) : ℂ :=
+  let F := fun w : ℂ ↦ -logDeriv riemannZeta w - 1 / (w - 1)
+  2 * F z - (F (z + Complex.I) + F (z - Complex.I) +
+    F (z + (Real.sqrt 2 : ℂ) * Complex.I) + F (z - (Real.sqrt 2 : ℂ) * Complex.I)) / 2
+
+/-- The Euler half-plane expression with each shift and its scalar coefficient visible. -/
+theorem rationalCompensatedZetaLogDeriv_apply (z : ℂ) :
+    rationalCompensatedZetaLogDeriv z =
+      let F := fun w : ℂ ↦ -logDeriv riemannZeta w - 1 / (w - 1)
+      2 * F z - (F (z + Complex.I) + F (z - Complex.I) +
+        F (z + (Real.sqrt 2 : ℂ) * Complex.I) + F (z - (Real.sqrt 2 : ℂ) * Complex.I)) / 2 := rfl
 
 private def mangoldtError (n : ℕ) : ℂ :=
   ((vonMangoldt n - 1) * rationalPrimeCosineWeight (Real.log n) : ℝ)
