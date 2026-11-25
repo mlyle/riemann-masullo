@@ -9,3 +9,5 @@ python spectral-interpolation-rational-deficit-smoothed.py --precision 192
 ```
 
 The [finite density certificate](spectral-interpolation-rational-deficit-density.md), the [sample mean-square estimates](spectral-interpolation-mod4-deficit-large-sieve.md) and the [initial modulo-four calculations](spectral-interpolation-mod4-deficit.md) give the preceding bounds and their primary sources. They include initial prime samples, proper prime powers, archimedean residues, verified heights and zero counts. The calculations establish a finite interval. The estimate at arbitrarily large cutoffs is open.
+
+[Unconditional consecutive shallow and deep samples for the genuine character modulo four](spectral-interpolation-mod4-shallow-runs.md) gives the full kernel calculation, two outward-rounded zero receipts and the independent limitation of a local curvature argument.
