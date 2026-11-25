@@ -1,0 +1,4 @@
+python-flint 0.9.0 precision 128 grid 64
+half-square certified points 8321
+minimum certified |zeta| lower bound [0.00035303874178796234557760089448231271173 +/- 4.01e-42]
+endpoint drift constant [2.7796354270736898669825754625322069481 +/- 2.44e-38]
