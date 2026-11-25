@@ -1,0 +1,9 @@
+FLINT 0.9.0 precision 100 per spline piece panels 4096
+Hardy Z at signed bracket endpoints [-9.05578699559152273255e-7 +/- 4.36e-28] [6.80742130209490189754e-7 +/- 4.28e-28]
+V prototype [3.9 +/- 0.0517] smooth error [7.0166046878862327846922613624e-14 +/- 6.33e-43] actual full V [3.9 +/- 0.0517]
+F at the line zero [1.72 +/- 3.89e-3] remaining mass [0.41 +/- 9.40e-3]
+V endpoints [3.8483831146342071732325525221 +/- 1.56e-30] [3.8601086893514820402307481703 +/- 5.10e-30]
+F endpoints [1.7220294580268458217098527394 +/- 3.79e-29] [1.7238873178387805806188993894 +/- 2.94e-29]
+U endpoints [0.40060847894391308616993274803 +/- 5.91e-31] [0.41604977331052332263586368675 +/- 1.13e-31]
+window [4,19]; each zero has mass > 1119/5000; conjugate-pair margin > 69/2500
+window [5,18]; each zero has mass > 539/1250; conjugate-pair margin > 553/1250
