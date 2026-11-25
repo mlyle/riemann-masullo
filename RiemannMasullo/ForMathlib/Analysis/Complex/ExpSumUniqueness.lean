@@ -123,6 +123,8 @@ private theorem expSum_resolvent_differentiableOn {ι : Type*} (w b : ι → ℂ
     · exact expSum_norm_div_le (by linarith) (expSum_aux_dist (Metric.mem_ball.1 hx) (hfar i))
   exact (hd.differentiableAt (Metric.ball_mem_nhds z (by linarith))).differentiableWithinAt
 
+attribute [local instance 3000] SeminormedAddCommGroup.toPseudoMetricSpace
+  NormedAddCommGroup.toSeminormedAddCommGroup in
 /-- Uniqueness of coefficients of an exponential sum on a half-line. Let the frequencies `w i`
 be distinct, have no accumulation point in `ℂ`, and satisfy `Re (w i) ≤ 1/2`. If the
 coefficients `b` are summable and `∑ i, b i * exp (w i * y) = 0` for every `y ≥ 0`, then every
