@@ -1,0 +1,3 @@
+dyadic exponents 8537/6000 8701/6000 591/400 1469/1000
+flat lambda-square: all quartic prime-log coefficients as quadratic divisor-log polynomials, X=1..210, R=16, K=4: PASS
+literal coprime cutoff P=210, every cofactor 1..2000: PASS
