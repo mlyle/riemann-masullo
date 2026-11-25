@@ -104,3 +104,17 @@ Set \(T_\alpha(u)=16\alpha(\log u+1)/(u(1-\sqrt2/u)^2)\). For any \(G>H\) and \(
  R>X^\delta T_\alpha(H)+\sqrt X\,T_\alpha(G)
 \]
 forces an ordinary zeta zero with \(H<|\gamma|\le G\) and \(\beta>1/2+\delta\). Indeed, in the absence of such a zero the normalized powers on the intermediate band all have modulus at most \(X^\delta\). The global bound \(\beta\le1\) pays for the part beyond \(G\). The same inverse-square count and shifted denominator bounds used above give the two displayed terms. If there is no upper cutoff, \(R>X^\delta T_\alpha(H)\) suffices to force an ordinate above \(H\). No discrepancy meeting either strict test has been certified here.
+
+## A million consecutive large square-prefix cutoffs
+
+For every integer \(10^7\le K\le 11\cdot10^6\), both versions of the actual signed square-prefix sum satisfy \(A(K)<-0.0843K^2\) unconditionally. This uses the actual prime counts through \(K^2\) by partial summation with an explicit uniform error.
+
+Write \(X=K^2\), \(I(X)=\int_1^Xw(\log t)dt\), and \(D=1+\sqrt2\). In the exact identity for \(A(K)-B_{1/2}(X)\), \(-q\le1/2\) bounds the atomic term from above by \((E(X)+I(X))/2\), since all its prime weights are nonnegative. On writing \(u=\sqrt t\), the continuous sawtooth is \(1/2-\{u\}\) almost everywhere, with a primitive zero at each integer and bounded by \(1/8\). The derivative of \(2u\,w(2\log u)\) has absolute value at most \(8+4D\). Hence
+\[
+ A(K)\le B_{1/2}(X)+E(X)+I(X)/2+(8+4D)(K-1)/8.
+\]
+For the discrete compensator there is an extra cost of at most \(KD\log X\), by bounding the integral of the absolute density derivative over all unit cells at each cutoff. Johnston's finite theta bound and partial summation give
+\[
+ |E(X)|\le 598D+(4+2D)\sqrt X\log^2 X/(8\pi).
+\]
+For the integral below 599 the verifier checks \(0\le\theta(t)\le2t\) by integer trial division; the weight vanishes at 1. For the main density, positivity allows the integration to start at 0, giving \(I(X)/X\le 2-\Re\sum_{t=1,\sqrt2}X^{it}/(1+it)\). Over the 1,000 covering intervals of length 1,000 in \(K\), this last expression is at most 0.961450. Combining the three error bounds with \(B_{1/2}(X)/X<-0.5651\) on the enclosing interval gives margins greater than 0.084334 (integral compensator) and 0.084326 (discrete compensator). [Johnston, Theorem 3.2 and Corollary 3.3](https://arxiv.org/pdf/2109.02249) · [Verifier](square-prefix-band.py) · [128-bit receipt](square-prefix-band-128.txt) · [192-bit receipt](square-prefix-band-192.txt).

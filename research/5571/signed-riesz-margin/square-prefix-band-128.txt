@@ -1,0 +1,7 @@
+python-flint 0.9.0 precision 128
+inclusive integer endpoints 10000000 11000000 enclosing cells 1000
+uniform normalized density upper bound [0.96144949878683411137458847406378481537 +/- 1.04e-39]
+normalized first-prime error bound [4.062981216030025397668447754918304342e-5 +/- 4.78e-42]
+continuous saw contribution [2.2071067811865475244008443621048490393e-7 +/- 5.24e-45] discrete extra cost [7.828524849777238990453689180514179236e-6 +/- 3.54e-43]
+integral-mean strict negativity margin [0.08433440008374452540397663840612219879 +/- 4.66e-39]
+discrete-mean strict negativity margin [0.08432657155889474816498618471694168461 +/- 4.57e-39]
