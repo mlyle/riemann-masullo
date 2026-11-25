@@ -94,3 +94,13 @@ The analytic derivations on this page are classical. Arb verifies the displayed 
 
 
 Replay each verifier with `uv run --no-project --with python-flint==0.9.0 python SCRIPT.py --precision 192`, replacing SCRIPT with `conditional-margin`, `finite-riesz` or `finite-square-prefix`.
+
+## Locating an exterior zero from a finite discrepancy
+
+For \(X>1\), add the exactly computable nonnegative composite prime powers to \(B_\alpha(X)\). Divide by \(X^{1/2+\alpha}\), subtract the terms other than the nontrivial-zero sum of the exact formula (the integral over \([0,1]\), the two kernel residues and the trivial-zero series), and subtract the full signed contribution from ordinary zeta zeros with \(|\gamma|\le H=3\cdot10^{12}\). Write \(R\) for the absolute value of the result. It is exactly the absolute value of the high-zero tail. A certified lower bound on \(R\) suffices below. The low zeros can alternatively be handled at once by subtracting their absolute upper bound \(4\alpha Z/(1-\sqrt2/14)^2\) from the absolute value prior to the low-zero subtraction.
+
+Set \(T_\alpha(u)=16\alpha(\log u+1)/(u(1-\sqrt2/u)^2)\). For any \(G>H\) and \(0\le\delta<1/2\), the strict inequality
+\[
+ R>X^\delta T_\alpha(H)+\sqrt X\,T_\alpha(G)
+\]
+forces an ordinary zeta zero with \(H<|\gamma|\le G\) and \(\beta>1/2+\delta\). Indeed, in the absence of such a zero the normalized powers on the intermediate band all have modulus at most \(X^\delta\). The global bound \(\beta\le1\) pays for the part beyond \(G\). The same inverse-square count and shifted denominator bounds used above give the two displayed terms. If there is no upper cutoff, \(R>X^\delta T_\alpha(H)\) suffices to force an ordinate above \(H\). No discrepancy meeting either strict test has been certified here.
