@@ -22,7 +22,7 @@ $$
  =-\frac{(L'/L)(s,\chi)+(L'/L)(s,\overline\chi)}{2s(s+1)}
    -\frac{\delta}{2(s-1)}.
 $$
-The real arithmetic part averages the two analytic logarithmic derivatives. It is important to conjugate the argument as well when obtaining the second derivative from the first. The scalar computation is $\int_q^\infty (x-q)x^{-s-2}dx=q^{-s}/(s(s+1))$. Absolute convergence justifies exchange with the ideal sum. The principal pole at one cancels. Normalization excludes a nontrivial pure norm character with a shifted pole.
+The real arithmetic part averages the two analytic logarithmic derivatives. It is important to conjugate the argument as well when expressing the logarithmic derivative for the conjugate character in terms of the one for the original character. The scalar computation is $\int_q^\infty (x-q)x^{-s-2}dx=q^{-s}/(s(s+1))$. Absolute convergence justifies exchange with the ideal sum. The principal pole at one cancels. Normalization excludes a nontrivial pure norm character with a shifted pole.
 
 The formalization checks both Mellin identities, the exact forward difference, affine interpolation, grouping by rational norm and the uniform estimate
 $$|\Re R_\chi(x)-P_\chi(x)|\le C[F:\mathbb Q]x\sqrt{x}.$$
