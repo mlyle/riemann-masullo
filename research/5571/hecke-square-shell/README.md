@@ -24,7 +24,7 @@ Assume in addition that ψ has finite order. Regard ψ⁻¹ as a finite-order Ga
 
 $$\nu(W)=|G|^{-1}\sum_{g\in G}\operatorname{tr} W(g^2).$$
 
-Artin induction of the Euler product gives $\Lambda_{\psi^{-1}}(p^2)=(\log p)\operatorname{tr} W(g_p^2)$ at each unramified p. Indeed, expand the logarithmic derivative of $\det(1-W(g_p)p^{-s})^{-1}$ at the second power. Equivalently a Frobenius cycle of length one contributes its Euler value squared and a cycle of length two contributes twice its Euler value. A finite set of exceptional primes eventually leaves the translated square window. [Emerton, *Reciprocity and L-functions*, §4 on Artin L-functions](https://math.uchicago.edu/~emerton/pdffiles/reciprocity.pdf)
+Artin induction of the Euler product gives $\Lambda_{\psi^{-1}}(p^2)=(\log p)\operatorname{tr} W(g_p^2)$ at each unramified p. Indeed, expand the logarithmic derivative of $\det(1-W(g_p)p^{-s})^{-1}$ at the second power. Equivalently a Frobenius cycle of length one contributes its Euler value squared and a cycle of length two contributes twice its Euler value. A finite set of exceptional primes eventually leaves the translated square window. [Emerton, *Reciprocity and L-functions*, formulas (39)–(41)](https://math.uchicago.edu/~emerton/pdffiles/reciprocity.pdf)
 
 Put $X=e^{y/2}$. For each conjugacy class C, Chebotarev and partial summation give $\sum_{p\le z,\,g_p\in C}\log p=(|C|/|G|)z+o(z)$. On the fixed compact interval $[e^{u/2},e^{v/2}]$, this implies convergence of the measures $X^{-1}\sum_{g_p\in C}(\log p)\delta_{p/X}$ against continuous tests to $(|C|/|G|)dt$. One can first check subintervals by subtracting the endpoint sums and then use uniform step approximations. Testing with $H(2\log t)/t$ and summing the classes gives
 

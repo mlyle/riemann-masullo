@@ -68,7 +68,7 @@ theorem squareCorrected_localTerms_exp_bound (τ : ℝ≥0ˣ →ₜ* G) (hτ : R
       apply Real.exp_le_exp.mpr
       simp
       linarith
-    · rw [firstPrimePolarMoment, if_neg h, norm_zero]
+    · rw [firstPrimePolarMoment, ite_eq_right h, norm_zero]
       positivity
   calc
     _ = ‖firstPrimePolarMoment ψ H y (-1/2) - S -
