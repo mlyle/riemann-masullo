@@ -13,7 +13,7 @@ For the continuous Riesz sum over the **same first primes**, set \(m=\widehat H(
  < \int H(v)\frac{B(Ye^v)}{Ye^v}\,dv
  < -1-\tfrac9{10}mY^{-1/6}.
 \]
-This second inequality gives the sign and the order of the first surviving correction. No zero-free hypothesis is used. The physical square-rounding estimate below is presently too large to recover that sign for \(A\) or \(A_d\).
+This second inequality gives the sign and the order of the first surviving correction. No zero-free hypothesis is used. The stronger square-root discrepancy estimate proved in the final section gives these same strict inequalities for both physical prefixes.
 
 ## Exact positive weight and its cost
 
@@ -119,4 +119,46 @@ All errors are uniform as \(U\to\infty\). Consequently
  \liminf_{X\to\infty} C_3(X)/X^{5/6}
  \ge c_0=\tfrac12 e^{-2\pi/3}(1-2^{-3/2})\log2\,(1-2e^{-\pi/3})>0.
 \]
-This uses only Chebyshev bounds and fixed-phase positivity. The stronger explicit cube-coefficient interval for the continuous prime probe uses the ordinary PNT. This elementary inequality is an independent candidate for formalization directly on the finite prime sum, without depending on the positive-filter PR. [Mathlib's native Chebyshev bounds](https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/Chebyshev.html).
+This uses only Chebyshev bounds and fixed-phase positivity. The stronger explicit cube-coefficient interval for the continuous prime probe uses the ordinary PNT. The finite-sum lower bound and the rational coefficient \(1/200<c_0\) are now verified in [upstream PR 7622](https://github.com/mccorvie/riemann-masullo/pull/7622). The module and full build, lint, 14,842 unchanged declaration signatures, five standard-only axiom checks, a separate consumer of the literal finite-sum inequality and the [hosted Verdict](https://github.com/mccorvie/riemann-masullo/actions/runs/45554589041/job/139003466634) all passed. [Mathlib's native Chebyshev bounds](https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/Chebyshev.html).
+
+
+## The physical prime saw is smaller than the cube correction
+
+For either literal square prefix and every fixed \(\varepsilon>0\), the stronger unconditional signed estimate is
+\[
+ \int_{\mathbb R}H(v)F(\log Y+v)\,dv
+ =-1-\int_{\{Ye^v\ge1\}}H(v)\frac{C_3(Ye^v)}{Ye^v}\,dv
+       +O_{H,\varepsilon}(Y^{-1/5+\varepsilon}).
+\]
+Thus the physical observable itself satisfies the strict bounds
+\[
+ -1-\tfrac32 mY^{-1/6}
+ <\int H(v)F(\log Y+v)\,dv
+ <-1-\tfrac9{10}mY^{-1/6}
+\]
+for every sufficiently large \(Y\), with the *same* fixed \(H\) and \(m=\widehat H(-1/6)>0\). The saving on the centered prime saw has a positive exponent margin of \(1/30\) over the cube. This is a signed average across indices. The separate positive and negative variation estimates in this note continue to apply.
+
+**Prime discrepancy input.** For \(N\ge2\), \(N/2\le U\le N\) and \(H_0=\lfloor N^{1/5}/4\rfloor\), write \(V_h=\sum_{N/2<p\le U}e(h\sqrt p)\), \(e(x)=e^{2\pi i x}\). The proof of Gritsenko’s Theorem 2 gives, uniformly,
+\[
+ \sum_{h=1}^{H_0}\frac{|V_h|}{h}\ll_\varepsilon N^{4/5+\varepsilon}.
+\]
+His stated theorem counts primes in the intervals \([(2n)^2,(2n+1)^2)\). The estimate above uses the freedom in the Fourier coefficients *in its proof*. Here are the details of that specialization. [Gritsenko, *A problem of I. M. Vinogradov*, Mat. Zametki 39 (1986), 625–640, Theorems 1–2](https://www.mathnet.ru/eng/mzm5085) · [original proof, pp. 625–640](https://www.mathnet.ru/links/e16b4615972e1d7f547a3d59d47633f0/mzm5085.pdf).
+
+1. The phase in equations (3)–(13) is \(e^{\pi i m\sqrt n}\). Take \(\Delta=N^{-1/5}\) as in the proof of Theorem 2. Given the \(V_h\), set \(c(2h)=\overline{V_h}/(2\pi h|V_h|)\) when \(V_h\ne0\), and set all remaining coefficients to zero. The support satisfies \(m\le N^{1/5}/2\), inside \(\Delta^{-1}\log N\) for sufficiently large \(N\). The coefficients obey (4), \(|c(m)|\le1/(\pi m)\). The infinite tail in (7) is empty. Therefore the sum with these coefficients is exactly \((2\pi)^{-1}\sum |V_h|/h\).
+2. Equations (8)–(13) reduce to logarithmically many blocks \(M<m\le M_1\le 2M\), with a variable upper endpoint \(N_1\in[N/2,N]\) for the prime-power sum. The nonstationary and endpoint errors use absolute values of \(c(m)\). For the stationary part, (37) retains a Dirichlet polynomial in \(m\) with these coefficients. The completion of the variable \(m\)-interval can be written as the sum over additive twists with weights \(O((1+\min(a,P-a))^{-1})\). Sum over zeros before taking the maximum over twists, which costs \(O(\log P)\) and gives one common twist. The twist in (38) preserves the coefficient magnitudes. For the \(k\)-th power in (39)–(44), the coefficient at \(r\) is bounded by \(\tau_k(r)/r\) for **every** such twist. The separated-zero large sieve and the Ingham and Huxley density estimates in (48)–(52) therefore give the same \(N^{4/5+\varepsilon}\) bound for these finitely supported coefficients. The proof treats small and large \(M\) and every partial block. Its inner prime-power bounds are uniform in \(N_1\), so partial summation removing \(\log p\) on \((N/2,U]\) has the same bound. The cost of removing proper prime powers in (8) is \(O(\sqrt N\log^2 N)\). No phase information about \(V_h\) is needed in these estimates.
+3. The Erdős–Turán inequality for the points \(\{\sqrt p\}\) gives an unnormalized star discrepancy over the block bounded by a constant times \(\#\{N/2<p\le U\}/(H_0+1)+\sum |V_h|/h\). Both terms are \(O_\varepsilon(N^{4/5+\varepsilon})\). Summing dyadic blocks proves, for all \(x\ge2\),
+\[
+ \sup_{0\le a\le1}\left|\sum_{p\le x}
+       \left(\mathbf 1_{\{\sqrt p\}<a}-a\right)\right|
+       \ll_\varepsilon x^{4/5+\varepsilon}.
+\]
+Strict or weak endpoints within the integral below give identical results.
+
+**Signed application.** Integrating the discrepancy in \(a\) gives exactly \(\sum_{p\le x}(1/2-\{\sqrt p\})\). With \(g(x)=\log(x)w(\log x)\), we have \(|g(x)|\le4\log x\) and \(|g'(x)|\le[4+(1+\sqrt2)\log x]/x\). Partial summation, starting with a slightly smaller value of \(\varepsilon\), proves
+\[
+ \left|\sum_{p\le x}\log(p)w(\log p)\big(\tfrac12-\{\sqrt p\}\big)\right|
+      \ll_\varepsilon x^{4/5+\varepsilon}.
+\]
+For \(k=\lfloor\sqrt{Ye^v}\rfloor\ge1\), one has \(k\ge\sqrt{Ye^v}/2\). The preceding estimate divided by \(k^2\), together with the exponential moments of \(H\), gives \(S_H(Y)=O_{H,\varepsilon}(Y^{-1/5+\varepsilon})\). The exact signed square-cell formula above transfers this to both physical compensators. All the other exposed terms after subtracting the actual cubes are \(O_H(Y^{-1/4}\log(2Y)+Y^{-1/2}\log(2Y))\). For the stated numerical interval, use the two Fourier-amplitude bounds for the main cube coefficient above and take \(\varepsilon<1/30\). Even Chebyshev’s prime-cube lower bound alone gives a strictly negative correction once this saw estimate is in place, with a smaller coefficient.
+
+The discrepancy specialization and its application here are classical paper proofs. The finite prime-cube lower bound in PR 7622 is machine checked.
