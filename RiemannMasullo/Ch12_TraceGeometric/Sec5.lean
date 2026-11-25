@@ -10,6 +10,7 @@ import all RiemannMasullo.Ch02_AdelicTheta.Sec2b
 import all RiemannMasullo.Ch03_IdelicZeta.Sec2
 import all RiemannMasullo.Ch09_HardySobolev.Sec3
 import RiemannMasullo.ForMathlib.Analysis.Complex.ExpSumUniqueness
+public import RiemannMasullo.ForMathlib.Analysis.Fourier.CompactLaplaceProfiles
 import Mathlib.Analysis.Calculus.BumpFunction.Normed
 
 /-! # Trace formula: the Main Theorem
@@ -1610,11 +1611,8 @@ private theorem exteriorZeros_ord_pos_iff (χ : PontryaginDual C𝔽) (z : ℂ) 
   rw [← hk, WithTop.untop₀_coe]
   exact_mod_cast Iff.rfl
 
-/-- The lifted characters and their zeros are countable, so some width in (0, α] has no zero on
-either edge of its strip. -/
-private theorem exteriorZeros_exists_width (χ : PontryaginDual C₁ → PontryaginDual C𝔽) {α : ℝ}
-    (hα : 0 < α) :
-    ∃ β, 0 < β ∧ β ≤ α ∧ ∀ ω (z : ℂ), 0 < order(χ ω, z) → |z.re - 1 / 2| ≠ β := by
+private theorem exteriorZeros_countable_values (χ : PontryaginDual C₁ → PontryaginDual C𝔽)
+    (f : ℂ → ℝ) : (⋃ ω, f '' {z | 0 < order(χ ω, z)}).Countable := by
   have hK := IsModulation.isCompact_ker (m := m𝔽) hm𝔽
   let : CompactSpace C₁ := isCompact_iff_compactSpace.mp hK
   let : LocallyCompactSpace C₁ := hK.isClosed.locallyCompactSpace
@@ -1636,8 +1634,15 @@ private theorem exteriorZeros_exists_width (χ : PontryaginDual C₁ → Pontrya
     let : DiscreteTopology (zeros ω) := isDiscrete_iff_discreteTopology.mp
       (compl_mem_codiscrete_iff.mp hd).2
     exact Set.countable_coe_iff.mp countable_of_Lindelof_of_discrete
-  let S := ⋃ ω, (fun z : ℂ ↦ |z.re - 1 / 2|) '' zeros ω
-  have hS : S.Countable := countable_iUnion fun ω ↦ (hc ω).image _
+  exact countable_iUnion fun ω ↦ (hc ω).image f
+
+/-- The lifted characters and their zeros are countable, so some width in (0, α] has no zero on
+either edge of its strip. -/
+private theorem exteriorZeros_exists_width (χ : PontryaginDual C₁ → PontryaginDual C𝔽) {α : ℝ}
+    (hα : 0 < α) :
+    ∃ β, 0 < β ∧ β ≤ α ∧ ∀ ω (z : ℂ), 0 < order(χ ω, z) → |z.re - 1 / 2| ≠ β := by
+  let S := ⋃ ω, (fun z : ℂ ↦ |z.re - 1 / 2|) '' {z | 0 < order(χ ω, z)}
+  have hS : S.Countable := exteriorZeros_countable_values χ _
   obtain ⟨β, hβI, hβS⟩ : (Ioo 0 α \ S).Nonempty := by
     apply MeasureTheory.nonempty_of_measure_ne_zero (μ := MeasureTheory.volume)
     rw [MeasureTheory.measure_sdiff_null (hS.measure_zero _)]
@@ -2046,6 +2051,117 @@ theorem traceFormula_exteriorZeros_of_stripTrace_norm_le (τ : ℝ≥0ˣ →ₜ*
       obtain ⟨c, hcβ, C, hC⟩ := hdefect hβ ψ H hH hHc hHv
       exact ⟨c, hcβ, fun y ↦ C * Real.exp (c * y),
         fun σ hσ ↦ integrableOn_mul_exp_mul_mul_exp_neg_mul C hσ, hC⟩) φ hα
+
+open scoped ContDiff in
+/-- For a fixed field and norm section, one smooth profile works simultaneously on every vertical
+line containing a centered zero of a normalized character. On those lines its transform vanishes
+exactly at the finitely many prescribed points. -/
+theorem exists_profile_on_centered_Hecke_zero_lines (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (hτ : RightInverse τ (ideleClassNorm F)) {a b : ℝ} (hab : a < b) (s : Finset ℂ) :
+    ∃ H : ℝ → ℂ, ContDiff ℝ (∞) H ∧ HasCompactSupport H ∧ tsupport H ⊆ Ioo a b ∧
+      (∀ w ∈ s, bilateralLaplace H w = 0) ∧
+      ∀ ψ : PontryaginDual C𝔽, (∀ t, ψ (τ t) = 1) → ∀ z : ℂ, 0 < ord(ψ, z) →
+        ∀ w : ℂ, w.re = z.re - 1 / 2 → (bilateralLaplace H w = 0 ↔ w ∈ s) := by
+  obtain ⟨χ, -, -, hlift⟩ := exteriorZeros_basepoint τ hτ
+  let S := ⋃ ξ, (fun z : ℂ ↦ z.re - 1 / 2) '' {z | 0 < order(χ ξ, z)}
+  have hS : S.Countable := exteriorZeros_countable_values χ _
+  obtain ⟨H, hs, hc, hsub, hp, hH⟩ := exists_bilateralLaplace_profile_on_countable_lines hab S hS s
+  refine ⟨H, hs, hc, hsub, hp, fun ψ hψ z hz w hw ↦ hH w ?_⟩
+  apply mem_iUnion.mpr
+  refine ⟨ψ.comp restriction, z, ?_, hw.symm⟩
+  change 0 < order(χ (ψ.comp restriction), z)
+  rw [hlift ψ hψ]
+  exact (exteriorZeros_ord_pos_iff _ _).mp hz
+
+private theorem integrableOn_weight_of_le {D : ℝ → ℝ} {c σ : ℝ} (h : c ≤ σ)
+    (hD : IntegrableOn (fun y ↦ D y * Real.exp (-c * y)) (Ioi 0)) :
+    IntegrableOn (fun y ↦ D y * Real.exp (-σ * y)) (Ioi 0) := by
+  have hbound : ∀ᵐ y ∂volume.restrict (Ioi (0 : ℝ)), ‖Real.exp ((c - σ) * y)‖ ≤ 1 := by
+    filter_upwards [ae_restrict_mem measurableSet_Ioi] with y hy
+    rw [Real.norm_eq_abs, abs_of_pos (Real.exp_pos _), Real.exp_le_one_iff]
+    exact mul_nonpos_of_nonpos_of_nonneg (sub_nonpos.mpr h) (le_of_lt hy)
+  apply (hD.mul_bdd (by fun_prop) hbound).congr
+  filter_upwards with y
+  rw [mul_assoc, ← Real.exp_add]
+  congr 2
+  ring
+
+set_option maxHeartbeats 1500000 in
+
+open scoped ContDiff in
+/-- A single profile above norm one suffices for the exterior-zero criterion for a fixed field
+and section. For each character and each target exponential weight the trace bound is needed
+at sufficiently small strip widths, with no prescribed relation between the width and weight. -/
+theorem exists_profile_traceFormula_exteriorZeros_of_integrable (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (hτ : RightInverse τ (ideleClassNorm F)) :
+    ∃ H : ℝ → ℂ, ContDiff ℝ (∞) H ∧ HasCompactSupport H ∧ tsupport H ⊆ Ioo 1 2 ∧
+      (∀ w ∈ ({-1 / 2, 0, 1 / 2} : Finset ℂ), bilateralLaplace H w = 0) ∧
+      ((∀ ψ : PontryaginDual C𝔽, (∀ t, ψ (τ t) = 1) → ∀ ε : ℝ, 0 < ε →
+          ∃ η > (0 : ℝ), ∀ {β : ℝ} (hβ : 0 < β), β ≤ η →
+            ∃ D : ℝ → ℝ, IntegrableOn (fun y ↦ D y * Real.exp (-ε * y)) (Ioi 0) ∧
+              ∀ y : ℝ, 0 ≤ y → ∀ φ : BruhatCompactSupport C𝔽,
+                (∀ x, φ.val x = (ψ x : ℂ) *
+                  H (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ) - y)) →
+                M(φ, twist(1, 1 / 2)) = 0 → M(φ, twist(1, -1 / 2)) = 0 →
+                ∃ T : nuclearEndomorphisms stripQuot(hβ.le, three),
+                  T.val = stripConv(hβ.le, three, φ) ∧
+                  ∀ (a : archTest) (b : finiteTest), archRestricts(φ, a) → finiteRestricts(φ, b) →
+                    ‖hilbertTrace T - localTerms(φ, a, b)‖ ≤ D y) →
+        ∀ {α : ℝ}, 0 < α → ∀ φ : BruhatCompactSupport C𝔽,
+          HasSum (fun z : exteriorZeros(τ, α) ↦ zeroTerm(φ, z)) 0) := by
+  classical
+  let s : Finset ℂ := {-1 / 2, 0, 1 / 2}
+  obtain ⟨H, hs, hc, hsup, hp, hdet⟩ := exists_profile_on_centered_Hecke_zero_lines (F := F)
+    (a := 1) (b := 2) τ hτ (by norm_num) s
+  refine ⟨H, hs, hc, hsup, hp, fun htrace α hα φ ↦ ?_⟩
+  suffices IsEmpty exteriorZeros(τ, α) from hasSum_empty
+  by_contra hne
+  obtain ⟨z⟩ := not_isEmpty_iff.mp hne
+  obtain ⟨z₀, hz₀⟩ : ∃ z₀ : exteriorZeros(τ, α), 1 / 2 ≤ z₀.val.2.re := by
+    rcases le_or_gt (1 / 2) z.val.2.re with h | h
+    · exact ⟨z, h⟩
+    · have habs : |(1 - z.val.2).re - 1 / 2| = |z.val.2.re - 1 / 2| := by
+        rw [Complex.sub_re, Complex.one_re, show 1 - z.val.2.re - 1 / 2 = -(z.val.2.re - 1 / 2) by
+          ring, abs_neg]
+      refine ⟨⟨(⟨z.val.1.val⁻¹, fun t ↦ ?_⟩, 1 - z.val.2),
+        (exteriorZeros_ord_reflection z.val.1.val z.val.2).symm ▸ z.property.1,
+        habs.symm ▸ z.property.2⟩, ?_⟩
+      · change (z.val.1.val (τ t))⁻¹ = 1
+        rw [z.val.1.property t, inv_one]
+      · change 1 / 2 ≤ (1 - z.val.2).re
+        rw [Complex.sub_re, Complex.one_re]
+        linarith
+  let ψ := z₀.val.1.val
+  have hd : α ≤ z₀.val.2.re - 1 / 2 := by
+    simpa only [abs_of_nonneg (sub_nonneg.mpr hz₀)] using z₀.property.2
+  have hψinv (t) : ψ⁻¹ (τ t) = 1 := by
+    change (ψ (τ t))⁻¹ = 1
+    rw [z₀.val.1.property t, inv_one]
+  obtain ⟨η, hη, hηT⟩ := htrace ψ⁻¹ hψinv (α / 2) (by positivity)
+  obtain ⟨χ, -, -, hlift⟩ := exteriorZeros_basepoint τ hτ
+  obtain ⟨β, hβ, hβαη, hedge⟩ := exteriorZeros_exists_width χ (lt_min hα hη)
+  have hedge' : ∀ ξ : PontryaginDual C𝔽, (∀ t, ξ (τ t) = 1) →
+      ∀ u : ℂ, 0 < ord(ξ, u) → |u.re - 1 / 2| ≠ β := fun ξ hξ u hu ↦
+    hedge (ξ.comp restriction) u (by rw [hlift ξ hξ]; exact (exteriorZeros_ord_pos_iff _ _).mp hu)
+  let zβ : exteriorZeros(τ, β) := ⟨z₀.val, z₀.property.1, (hβαη.trans (min_le_left _ _)).trans z₀.property.2⟩
+  obtain ⟨D, hDi, hT⟩ := hηT hβ (hβαη.trans (min_le_right _ _))
+  have hp₁ := hp (1 / 2) (by simp [s])
+  have hp₂ := hp (-1 / 2) (by simp [s])
+  have hz := exteriorZeros_coeff_eq_zero_of_integrable τ hτ β ψ z₀.val.1.property H hs hc
+    hp₁ hp₂ D (fun σ hσ ↦ integrableOn_weight_of_le hσ.le hDi) ?_ zβ rfl (by dsimp [zβ]; linarith)
+  · have hmem := (hdet ψ z₀.val.1.property _ z₀.property.1 (z₀.val.2 - 1 / 2)
+        (by simp only [Complex.sub_re]; norm_num)).1 hz
+    have hstrip : |z₀.val.2.re - 1 / 2| < 1 / 2 := lt_of_not_ge fun h ↦
+      (exteriorZeros_isEmpty_of_half_le τ (le_refl (1 / 2 : ℝ))).false
+        ⟨z₀.val, z₀.property.1, h⟩
+    simp only [s, Finset.mem_insert, Finset.mem_singleton] at hmem
+    rcases hmem with hz | hz | hz <;> have hh := congrArg Complex.re hz <;>
+      norm_num [Complex.sub_re] at hh <;> linarith [(abs_lt.mp hstrip).2]
+  · intro y hy φ' hφ' hp₁' hp₂'
+    obtain ⟨T, hTval, hlocal⟩ := hT y hy φ' hφ' hp₁' hp₂'
+    obtain ⟨a, b, ha, hb, hsum⟩ :=
+      exteriorZeros_hasSum_sub_of_width τ hτ hβ three hedge' φ' T hTval
+    exact ⟨_, hsum, by rw [norm_sub_rev]; exact hlocal a b ha hb⟩
 
 end GlobalDiagonal
 
