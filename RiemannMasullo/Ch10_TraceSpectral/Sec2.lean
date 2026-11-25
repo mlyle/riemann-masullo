@@ -8677,6 +8677,72 @@ private theorem spectralStripJet_recenter (ψ : PontryaginDual C𝔽) (t : ℝ) 
       | coe n => simp only [← WithTop.coe_zero, ← WithTop.coe_max, WithTop.untop₀_coe]; omega
     exact (hclip _).symm.trans ((congrArg (fun x : WithTop ℤ ↦ x.untop₀.toNat) he).trans (hclip _))
 
+/-- Paper: Proposition 10.2.2.2, pp. 446–447. Finiteness of the multiple real zeros
+for every choice of basepoints is equivalent to a finite cover of all the multiple zeros
+in the open right half of the critical strip. There are finitely many exceptional
+norm-one characters and finitely many real parts. At any height, a multiple zero of
+any unitary Hecke character either belongs to an exceptional component or has one of
+these real parts. The same two finite sets work for every choice of basepoints.
+Reconstruction: This characterizes the real-segment part of the strip margin. -/
+theorem spectralStripJet_multiple_real_zeros_finite_iff_finite_cover :
+    (∀ (χ : PontryaginDual C₁ → PontryaginDual C𝔽), IsSpectralBasepointChoice χ →
+      {σ : ℝ | σ ∈ Ioo (1 / 2 : ℝ) 1 ∧ ∃ ω : PontryaginDual C₁,
+        1 < multiplicity(χ ω, (σ : ℂ))}.Finite) ↔
+    ∃ (E : Finset (PontryaginDual C₁)) (S : Finset ℝ), ∀ (ψ : PontryaginDual C𝔽) (σ t : ℝ),
+      σ ∈ Ioo (1 / 2 : ℝ) 1 → 1 < multiplicity(ψ, shift(σ, t)) →
+        ψ.comp restriction ∈ E ∨ σ ∈ S := by
+  classical
+  constructor
+  · intro hreal
+    by_contra! hcover
+    -- Greedily take zeros in fresh components and at fresh real parts, moving each to height zero.
+    let component (p : PontryaginDual C𝔽 × ℝ) := p.1.comp restriction
+    let P (p : PontryaginDual C𝔽 × ℝ) :=
+      p.2 ∈ Ioo (1 / 2 : ℝ) 1 ∧ 1 < multiplicity(p.1, (p.2 : ℂ))
+    let r (p q : PontryaginDual C𝔽 × ℝ) := component p ≠ component q ∧ p.2 ≠ q.2
+    have : Std.Symm r := ⟨fun _ _ h ↦ ⟨h.1.symm, h.2.symm⟩⟩
+    obtain ⟨p, hp, hpair⟩ := exists_seq_of_forall_finset_exists' P r (fun K _ ↦ by
+      obtain ⟨ψ, σ, t, hσ, hm, hψ, hs⟩ := hcover (K.image component) (K.image Prod.snd)
+      obtain ⟨θ, hθ, hmove⟩ := spectralStripJet_recenter ψ t
+      have hmθ : 1 < multiplicity(θ, (σ : ℂ)) := by rwa [hmove]
+      refine ⟨(θ, σ), ⟨hσ, hmθ⟩, fun q hq ↦ ⟨?_, ?_⟩⟩
+      · exact fun he ↦ hψ (Finset.mem_image.mpr ⟨q, hq, he.trans hθ⟩)
+      · exact fun he ↦ hs (Finset.mem_image.mpr ⟨q, hq, he⟩))
+    have hcomp : Injective (fun n ↦ component (p n)) :=
+      injective_iff_pairwise_ne.mpr fun _ _ h ↦ (hpair h).1
+    have hparts : Injective (fun n ↦ (p n).2) :=
+      injective_iff_pairwise_ne.mpr fun _ _ h ↦ (hpair h).2
+    -- The components are distinct, so the selected characters extend to one choice of basepoints.
+    obtain ⟨χ₀, hχ₀⟩ := exists_spectralBasepointChoice F
+    let χ := extend (fun n ↦ component (p n)) (fun n ↦ (p n).1) χ₀
+    have hmatch (n : ℕ) : χ (component (p n)) = (p n).1 := hcomp.extend_apply _ _ n
+    have hχ : IsSpectralBasepointChoice χ := by
+      intro ω
+      by_cases h : ∃ n, component (p n) = ω
+      · obtain ⟨n, rfl⟩ := h
+        rw [hmatch]
+      · exact (congrArg (fun ψ : PontryaginDual C𝔽 ↦ ψ.comp restriction)
+          (extend_apply' _ χ₀ ω h)).trans (hχ₀ ω)
+    apply infinite_range_of_injective hparts
+    apply (hreal χ hχ).subset
+    rintro _ ⟨n, rfl⟩
+    refine ⟨(hp n).1, component (p n), ?_⟩
+    rw [hmatch]
+    exact (hp n).2
+  · rintro ⟨E, S, hcover⟩ χ hχ
+    let Z (ω : PontryaginDual C₁) :=
+      {σ : ℝ | σ ∈ Ioo (1 / 2 : ℝ) 1 ∧ 1 < multiplicity(χ ω, (σ : ℂ))}
+    have hZ (ω : PontryaginDual C₁) : (Z ω).Finite := by
+      apply (spectralStripJet_multiple_zero_lines_finite_on_compact (χ ω) 0).subset
+      rintro σ ⟨hσ, hm⟩
+      exact ⟨⟨hσ.1.le, hσ.2.le⟩, 0, by simp, by simpa using hm⟩
+    apply (S.finite_toSet.union (E.finite_toSet.biUnion fun ω _ ↦ hZ ω)).subset
+    rintro σ ⟨hσ, ω, hm⟩
+    rcases hcover (χ ω) σ 0 hσ (by simpa using hm) with hω | hs
+    · rw [hχ ω] at hω
+      exact Or.inr (mem_iUnion₂.mpr ⟨ω, hω, hσ, hm⟩)
+    · exact Or.inl hs
+
 /-- Reflect a multiple zero into the opposite half of the strip by the completed functional
 equation. Reflection negates the ordinate and replaces the character by its inverse. -/
 private theorem spectralStripJet_multiple_zero_reflect (ψ : PontryaginDual C𝔽) (σ t : ℝ) :
