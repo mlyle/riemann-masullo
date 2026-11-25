@@ -2495,6 +2495,48 @@ theorem exteriorTraceProfile_mellin_zero (τ : ℝ≥0ˣ →ₜ* C𝔽) (hτ : R
     rw [hp w hw, mul_zero, mul_zero]
   · rw [ite_eq_right hω, zero_mul]
 
+set_option maxHeartbeats 800000 in
+/-- Assuming the projective kernel witnesses at one predetermined sequence of widths with
+infimum zero, all-width exterior cancellation is equivalent to a translated trace defect
+comparison on the single polar-free profile. Boundary zeros are allowed at every chosen width. -/
+theorem traceFormula_exteriorZeros_iff_exteriorTraceProfile_cofinal_stripTrace
+    (τ : ℝ≥0ˣ →ₜ* C𝔽) (hτ : RightInverse τ (ideleClassNorm F))
+    (β : ℕ → ℝ) (hβ : ∀ n, 0 < β n) (hsmall : ∀ ε, 0 < ε → ∃ n, β n < ε)
+    (hK : ∀ n (φ : BruhatCompactSupport C𝔽), (∀ g : C₁, φ.val g = 0) →
+      stripTensorExists((hβ n).le, three, φ)) :
+    (∀ {α : ℝ}, 0 < α → ∀ φ : BruhatCompactSupport C𝔽, (∀ g : C₁, φ.val g = 0) →
+      HasSum (fun z : exteriorZeros(τ, α) ↦ zeroTerm(φ, z)) 0) ↔
+    ∀ ψ : PontryaginDual C𝔽, (∀ t, ψ (τ t) = 1) → ∀ ε : ℝ, 0 < ε →
+      ∃ n, β n < ε ∧ ∃ D : ℝ → ℝ,
+        IntegrableOn (fun y ↦ D y * Real.exp (-ε * y)) (Ioi (0 : ℝ)) ∧
+        ∀ y : ℝ, 0 ≤ y → ∀ φ : BruhatCompactSupport C𝔽,
+          (∀ x, φ.val x = (ψ x : ℂ) *
+            exteriorTraceProfile (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ) - y)) →
+          ∀ (a : archTest) (b : finiteTest), archRestricts(φ, a) → finiteRestricts(φ, b) →
+          ∀ T : nuclearEndomorphisms stripQuot((hβ n).le, three),
+            T.val = stripConv((hβ n).le, three, φ) →
+            ‖hilbertTrace T - localTerms(φ, a, b)‖ ≤ D y := by
+  constructor
+  · intro h ψ hψ ε hε
+    obtain ⟨n, hn⟩ := hsmall ε hε
+    refine ⟨n, hn, fun _ ↦ 0, by simp, ?_⟩
+    intro y hy φ hφ a b ha hb T hT
+    rw [spectralStripTrace_eq_localTerms_of_exteriorZeros τ hτ (hβ n) three
+      (h (hβ n)) φ a b ha hb T hT, sub_self, norm_zero]
+  · intro h
+    apply (traceFormula_exteriorZeros_iff_exteriorTraceProfile_local τ hτ).mpr
+    intro ψ hψ ε hε
+    obtain ⟨hs, hc, hsup, -, -⟩ := exteriorTraceProfile_properties
+    have hv (x : ℝ) (hx : x ≤ 0) : exteriorTraceProfile x = 0 :=
+      image_eq_zero_of_notMem_tsupport fun hx' ↦ by linarith [(hsup hx').1]
+    obtain ⟨D, hD, hbound⟩ := localTerms_integrableMajorant_of_cofinal_stripTrace τ hτ ψ
+      exteriorTraceProfile hs hc hv β hβ hK (fun σ hσ ↦ by
+        obtain ⟨n, hn, D, hD, hcomp⟩ := h ψ hψ σ hσ
+        exact ⟨n, hn, D, hD, fun y hy φ hφ _ _ ↦ hcomp y hy φ hφ⟩) ε hε
+    exact ⟨D, hD, fun y hy φ hφ ↦ hbound y hy φ hφ
+      (exteriorTraceProfile_mellin_zero τ hτ ψ hψ y φ hφ (by simp))
+      (exteriorTraceProfile_mellin_zero τ hτ ψ hψ y φ hφ (by simp))⟩
+
 end GlobalDiagonal
 
 end RiemannMasullo
