@@ -3,6 +3,8 @@ module
 public import RiemannMasullo.AppB_AnalyticNT.Sec6
 public import Mathlib.Analysis.SpecialFunctions.ImproperIntegrals
 import Mathlib.MeasureTheory.Integral.DominatedConvergence
+import Mathlib.NumberTheory.LSeries.WeakPNT
+import Mathlib.Analysis.SpecialFunctions.Integrals.Basic
 
 /-!
 # The first Riesz mean of the Hecke logarithmic derivative
@@ -286,6 +288,117 @@ theorem heckeFirstRieszMean_sub_prime_le :
   convert hC F χ x b x hb' using 2
   congr 1 <;> apply Finset.sum_congr rfl <;> intro n hn
   all_goals first | rw [hb n hn] | rw [hb n (Finset.mem_filter.mp hn).1]
+
+open Filter Topology in
+private theorem riesz_rat_prime_power_sqrt :
+    Tendsto (fun x : ℝ ↦ (Chebyshev.psi x - Chebyshev.theta x) / Real.sqrt x) atTop (𝓝 1) := by
+  have small (r : ℝ) (hr : 0 < r) (hr' : r < 1 / 2) :
+      Tendsto (fun x : ℝ ↦ Chebyshev.psi (x ^ r) / Real.sqrt x) atTop (𝓝 0) := by
+    have h := (Chebyshev.tendsto_psi_div_atTop.comp (tendsto_rpow_atTop hr)).mul
+      (tendsto_rpow_neg_atTop (sub_pos.mpr hr'))
+    rw [mul_zero] at h
+    refine h.congr' ?_
+    filter_upwards [eventually_gt_atTop (0 : ℝ)] with x hx
+    simp only [Function.comp_apply, neg_sub, Real.sqrt_eq_rpow, Real.rpow_sub hx]
+    field_simp [ne_of_gt (Real.rpow_pos_of_pos hx r)]
+  have hmain : Tendsto (fun x : ℝ ↦ Chebyshev.psi (x ^ (2 : ℝ)⁻¹) / Real.sqrt x) atTop (𝓝 1) := by
+    simpa only [Real.sqrt_eq_rpow, one_div, Function.comp_def] using
+      Chebyshev.tendsto_psi_div_atTop.comp (tendsto_rpow_atTop (by norm_num : 0 < (2 : ℝ)⁻¹))
+  have hup := (hmain.add (small (3 : ℝ)⁻¹ (by norm_num) (by norm_num))).add
+    (small (5 : ℝ)⁻¹ (by norm_num) (by norm_num))
+  simp only [add_zero] at hup
+  apply tendsto_of_tendsto_of_tendsto_of_le_of_le' hmain hup
+  · filter_upwards [eventually_ge_atTop (0 : ℝ)] with x hx
+    apply div_le_div_of_nonneg_right _ (Real.sqrt_nonneg _)
+    linarith [Chebyshev.psi_sub_theta_ge_psi_add_psi_add_psi hx,
+      Chebyshev.psi_nonneg (x ^ (3 : ℝ)⁻¹), Chebyshev.psi_nonneg (x ^ (7 : ℝ)⁻¹)]
+  · filter_upwards with x
+    simp only [← add_div]
+    exact div_le_div_of_nonneg_right (Chebyshev.psi_sub_theta_le_psi_add_psi_add_psi x)
+      (Real.sqrt_nonneg x)
+
+open Filter Topology in
+private theorem riesz_rat_prime_power_integral :
+    Tendsto (fun x : ℝ ↦ (∫ t in (0 : ℝ)..x, Chebyshev.psi t - Chebyshev.theta t) /
+      (x * Real.sqrt x)) atTop (𝓝 (2 / 3 : ℝ)) := by
+  let g : ℝ → ℝ := fun t ↦ Chebyshev.psi t - Chebyshev.theta t
+  have hg : Measurable g := Chebyshev.psi_mono.measurable.sub Chebyshev.theta_mono.measurable
+  obtain ⟨C, hC⟩ := Chebyshev.psi_sub_theta_le_mul_sqrt
+  have hs : Tendsto (fun x : ℝ ↦ ∫ u in (0 : ℝ)..1, g (x * u) / Real.sqrt x)
+      atTop (𝓝 (∫ u in (0 : ℝ)..1, Real.sqrt u)) := by
+    apply intervalIntegral.tendsto_integral_filter_of_dominated_convergence (fun u ↦ C * Real.sqrt u)
+    · exact .of_forall fun x ↦ ((hg.comp (measurable_const.mul measurable_id)).div_const _).aestronglyMeasurable
+    · filter_upwards [eventually_gt_atTop (0 : ℝ)] with x hx
+      exact .of_forall fun u hu ↦ by
+        rw [Set.uIoc_of_le zero_le_one] at hu
+        have hpos := Real.sqrt_pos.2 hx
+        have hu0 : 0 ≤ g (x * u) := sub_nonneg.mpr (Chebyshev.theta_le_psi _)
+        rw [Real.norm_eq_abs, abs_of_nonneg (div_nonneg hu0 hpos.le), div_le_iff₀ hpos]
+        calc g (x * u) ≤ C * Real.sqrt (x * u) := hC _
+             _ = C * Real.sqrt u * Real.sqrt x := by rw [Real.sqrt_mul hx.le]; ring
+    · exact (continuous_const.mul Real.continuous_sqrt).intervalIntegrable ..
+    · exact .of_forall fun u hu ↦ by
+        rw [Set.uIoc_of_le zero_le_one] at hu
+        have ht := (riesz_rat_prime_power_sqrt.comp (tendsto_id.atTop_mul_const hu.1)).mul_const (Real.sqrt u)
+        rw [one_mul] at ht
+        refine ht.congr' ?_
+        filter_upwards [eventually_gt_atTop (0 : ℝ)] with x hx
+        simp only [Function.comp_apply, id_eq, Real.sqrt_mul hx.le]
+        change g (x * u) / (Real.sqrt x * Real.sqrt u) * Real.sqrt u = _
+        field_simp [(Real.sqrt_pos.2 hx).ne', (Real.sqrt_pos.2 hu.1).ne']
+  have he : (∫ u in (0 : ℝ)..1, Real.sqrt u) = 2 / 3 := by
+    simp only [Real.sqrt_eq_rpow]
+    rw [integral_rpow (Or.inl (by norm_num))]
+    norm_num
+  rw [he] at hs
+  refine hs.congr' ?_
+  filter_upwards [eventually_gt_atTop (0 : ℝ)] with x hx
+  rw [intervalIntegral.integral_div, intervalIntegral.integral_comp_mul_left g hx.ne']
+  simp only [mul_zero, mul_one, smul_eq_mul]
+  dsimp [g]
+  ring
+
+private theorem riesz_rat_nonprime_sum_eq_integral {x : ℝ} (hx : 0 ≤ x) :
+    (∑ n ∈ Finset.Ioc 0 ⌊x⌋₊ with ¬n.Prime, ArithmeticFunction.vonMangoldt n * (x - n)) =
+      ∫ t in (0 : ℝ)..x, Chebyshev.psi t - Chebyshev.theta t := by
+  let a (n : ℕ) : ℝ := if n.Prime then 0 else ArithmeticFunction.vonMangoldt n
+  have hA (t : ℝ) : ∑ n ∈ Finset.Icc 0 ⌊t⌋₊, a n = Chebyshev.psi t - Chebyshev.theta t := by
+    rw [Finset.Icc_eq_cons_Ioc (Nat.zero_le _), Finset.sum_cons, Chebyshev.psi_sub_theta_eq_sum_not_prime,
+      Finset.sum_filter]
+    simp [a]
+  have hd (t : ℝ) : HasDerivAt (fun s : ℝ ↦ x - s) (-1) t := by
+    exact (hasDerivAt_id' t).const_sub x
+  have hv : deriv (fun s : ℝ ↦ x - s) = fun _ ↦ -1 := funext fun t ↦ (hd t).deriv
+  have hab := sum_mul_eq_sub_sub_integral_mul a (f := fun t : ℝ ↦ x - t) (a := (0 : ℝ))
+    le_rfl hx (fun t _ ↦ (hd t).differentiableAt) (by rw [hv]; exact continuous_const.integrableOn_Icc)
+  simp only [Nat.floor_zero, sub_self, zero_mul, Finset.Icc_self, Finset.sum_singleton,
+    show a 0 = 0 by simp [a], mul_zero, sub_zero, hv, neg_one_mul, hA, integral_neg, zero_sub, neg_neg] at hab
+  rw [intervalIntegral.integral_of_le hx, ← hab, Finset.sum_filter]
+  apply Finset.sum_congr rfl
+  intro n hn
+  by_cases hp : n.Prime <;> simp [a, hp, mul_comm]
+
+open Filter Topology in
+/-- For the trivial rational character the contribution removed by retaining only primes in the
+first Riesz mean is asymptotic to two thirds of `x * sqrt x`. The prime number theorem and the
+Costa–Pereira inequalities give this limit unconditionally. -/
+theorem heckeFirstRieszMean_rat_sub_prime_tendsto :
+    Tendsto (fun x : ℝ ↦ ((heckeFirstRieszMean (F := ℚ) 1 x).re -
+      ∑ p ∈ Finset.Ioc 0 ⌊x⌋₊ with p.Prime, Real.log p * (x - p)) /
+      (x * Real.sqrt x)) atTop (𝓝 (2 / 3 : ℝ)) := by
+  refine riesz_rat_prime_power_integral.congr' ?_
+  filter_upwards [eventually_ge_atTop (0 : ℝ)] with x hx
+  rw [← riesz_rat_nonprime_sum_eq_integral hx, heckeFirstRieszMean_eq_norm_sum _ hx]
+  simp only [heckeLogDerivCoefficient_trivial_rat, ← Complex.ofReal_mul, Complex.re_sum,
+    Complex.ofReal_re]
+  congr 1
+  rw [eq_sub_iff_add_eq]
+  conv_rhs => rw [← Finset.sum_filter_add_sum_filter_not (Finset.Ioc 0 ⌊x⌋₊) Nat.Prime]
+  rw [add_comm]
+  congr 1
+  apply Finset.sum_congr rfl
+  intro p hp
+  rw [ArithmeticFunction.vonMangoldt_apply_prime (Finset.mem_filter.mp hp).2]
 
 /-- The discrete derivative of the Riesz mean is exactly the unsmoothed Hecke sum.
 A rational-norm atom at `n` is included in this forward difference. -/
