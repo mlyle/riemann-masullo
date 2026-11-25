@@ -1,0 +1,5 @@
+'RiemannMasullo.SquareSamples.zero_free_of_square_integral' depends on axioms: [propext, Classical.choice, Quot.sound]
+'RiemannMasullo.SquareSamples.zero_free_of_square_discrete' depends on axioms: [propext, Classical.choice, Quot.sound]
+'RiemannMasullo.SquareSamples.interpolation' depends on axioms: [propext, Classical.choice, Quot.sound]
+'RiemannMasullo.SquareSamples.first_prime_integral' depends on axioms: [propext, Classical.choice, Quot.sound]
+'RiemannMasullo.SquareSamples.first_prime_discrete' depends on axioms: [propext, Classical.choice, Quot.sound]
