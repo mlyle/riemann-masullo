@@ -118,3 +118,25 @@ For the discrete compensator there is an extra cost of at most \(KD\log X\), by 
  |E(X)|\le 598D+(4+2D)\sqrt X\log^2 X/(8\pi).
 \]
 For the integral below 599 the verifier checks \(0\le\theta(t)\le2t\) by integer trial division; the weight vanishes at 1. For the main density, positivity allows the integration to start at 0, giving \(I(X)/X\le 2-\Re\sum_{t=1,\sqrt2}X^{it}/(1+it)\). Over the 1,000 covering intervals of length 1,000 in \(K\), this last expression is at most 0.961450. Combining the three error bounds with \(B_{1/2}(X)/X<-0.5651\) on the enclosing interval gives margins greater than 0.084334 (integral compensator) and 0.084326 (discrete compensator). [Johnston, Theorem 3.2 and Corollary 3.3](https://arxiv.org/pdf/2109.02249) · [Verifier](square-prefix-band.py) · [128-bit receipt](square-prefix-band-128.txt) · [192-bit receipt](square-prefix-band-192.txt).
+
+## Unconditional recurring excursions of the square prefix
+
+For both compensators, the physical signed square prefix satisfies
+\[
+ \liminf_{K\to\infty} A(K)/K^2<-1.25236,\qquad
+ \limsup_{K\to\infty} A(K)/K^2>-0.74764.
+\]
+The continuous integral \(B_1(X)/X^{3/2}\) has liminf below \(-1.73991\) and limsup above \(-0.92676\). Both statements concern recurring cutoffs and require no eventual-sign assumption.
+
+First consider any \(\alpha\in\{1/2,1\}\). If \(B_\alpha(X)/X^{\alpha+1/2}\) is bounded on either side eventually, choose a constant \(C\) such that \(C X^{\alpha+1/2}\pm B_\alpha(X)\ge0\) on a tail, with the sign chosen for that side. Its Mellin transform is regular on the real ray \(s>\alpha+1/2\) by the same exact identity as in the sign converse. Landau and the rational zero detector imply RH. Thus if RH fails, this normalized mean has infinite positive limsup and infinite negative liminf. The unconditional square-prefix discrepancy and within-cell estimates above carry this conclusion to both versions of \(A(K)/K^2\). More explicitly, setting \(K=\lfloor\sqrt X\rfloor\) changes \(B_{1/2}(X)\) by \(o(X)\) and \(K^2/X\to 1\).
+
+In the remaining case all zeros are critical. Put \(y=\log X\). The preceding exact formula, divided by \(X^{\alpha+1/2}\), becomes the sum of a constant \(-D_\alpha\), the two rotating terms
+\[
+ \Re\sum_{t=1,\sqrt2} d_t e^{ity},\qquad
+ d_t=\frac{\alpha}{(1+2it)(1/2+\alpha+it)},
+\]
+an absolutely and uniformly convergent trigonometric series supported on the frequencies \(\gamma+t\) for \(t\in S\), and a remainder tending to zero. The signs in the two displayed rotating terms come from subtracting the prime squares.
+
+Define \(F_m(u)=|\sum_{j=0}^m e^{iju}|^2/(m+1)\). For any two phases, \(P(y)=F_m(y-\phi_1)F_m(\sqrt2 y-\phi_2)\ge0\) has mean one, by irrationality of \(\sqrt2\). The coefficients at each of the two first harmonics have modulus \(m/(m+1)\). If the finite frequency set \(\{j+k\sqrt2: |j|,|k|\le m\}\) misses the shifted zero frequencies, then all true-zero terms have zero mean against \(P\). Absolute uniform convergence permits taking the mean termwise. Choose the phases to make both square terms contribute with the same requested sign so the weighted mean is exactly \(-D_\alpha\pm m V_\alpha/(m+1)\). Positivity and unit mean put each weighted mean between the ordinary liminf and limsup. The \(o(1)\) remainder is harmless because \(P\) is bounded for fixed \(m\). The unconditional square-cell comparison then yields the asserted prefix bounds.
+
+An analytic choice \(m=5\) already gives the same inequalities with \(5V_\alpha/6\), since \(5(1+\sqrt2)+\sqrt2<14\). For \(m=128\), possible collisions require a positive zeta ordinate below 310.434 to have the form \(j+k\sqrt2\) with arbitrary integer \(j\) and \(|k|\le129\). Conjugation handles negative ordinates. The verifier encloses all 144 positive ordinates to that height by index, including the following ordinate above 311 as the completeness check. It proves that in every test the distance to the nearest integer exceeds \(0.00002006\). The resulting two-sided constants include the printed margins. [FLINT's indexed zero enclosure](https://flintlib.org/doc/acb_dirichlet/zeta-zeros.html) · [Verifier](prefix-excursions.py) · [128-bit receipt](prefix-excursions-128.txt) · [192-bit receipt](prefix-excursions-192.txt).
