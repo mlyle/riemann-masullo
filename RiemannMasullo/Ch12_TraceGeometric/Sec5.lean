@@ -1452,6 +1452,129 @@ private theorem exteriorZeros_localTerms_congr (φ : BruhatCompactSupport C𝔽)
   have h2 : b = b' := funext fun v ↦ Subtype.ext (funext fun u ↦ (hb v u).trans (hb' v u).symm)
   rw [h1, h2]
 
+local notation "characterZeros(" ψ ")" => {s : ℂ // 0 < ord(ψ, s)}
+local notation "translatedCoeff(" χ ", " H ", " z ")" =>
+  ((ord(χ, (z : ℂ)) : ℤ) : ℂ) *
+    (classVolume * ∫ x : ℝ, H x * Complex.exp (((z : ℂ) - 1 / 2) * x))
+
+open scoped ContDiff in
+/-- Theorem B.4.4.7, p. 623, on all real translates of a compact radial profile.
+After twisting by a normalized character, only zeros of its inverse contribute.
+Their coefficients are independent of the translation parameter. -/
+theorem translatedLocalTerms_hasSum (τ : ℝ≥0ˣ →ₜ* C𝔽) (hτ : RightInverse τ (ideleClassNorm F))
+    (ψ : PontryaginDual C𝔽) (hψ : ∀ t, ψ (τ t) = 1) (H : ℝ → ℂ)
+    (hs : ContDiff ℝ (∞) H) (hc : HasCompactSupport H) (y : ℝ)
+    (φ : BruhatCompactSupport C𝔽)
+    (hφ : ∀ x, φ.val x = (ψ x : ℂ) * H (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ) - y))
+    (a : archTest) (b : finiteTest) (ha : archRestricts(φ, a)) (hb : finiteRestricts(φ, b)) :
+    HasSum (fun z : characterZeros(ψ⁻¹) ↦
+      translatedCoeff(ψ⁻¹, H, z) * Complex.exp (((z : ℂ) - 1 / 2) * y)) (localTerms(φ, a, b)) := by
+  classical
+  obtain ⟨a', b', ha', hb', -, hall⟩ := traceFormula_of_half_le τ hτ φ (le_refl (1 / 2 : ℝ))
+  rw [exteriorZeros_localTerms_congr φ ha hb ha' hb']
+  have hinv (t) : ψ⁻¹ (τ t) = 1 := by change (ψ (τ t))⁻¹ = 1; rw [hψ, inv_one]
+  let e : characterZeros(ψ⁻¹) → interiorZeros(τ, 1 / 2) := fun z ↦
+    ⟨(⟨ψ⁻¹, hinv⟩, z.val), z.property, lt_of_not_ge fun he ↦
+      (exteriorZeros_isEmpty_of_half_le τ (le_refl (1 / 2 : ℝ))).false
+        ⟨(⟨ψ⁻¹, hinv⟩, z.val), z.property, he⟩⟩
+  have he : Injective e := fun i j hij ↦ Subtype.ext (congrArg (fun z : interiorZeros(τ, 1 / 2) ↦ z.val.2) hij)
+  have hsy : ContDiff ℝ (∞) (fun x ↦ H (x - y)) := hs.comp (contDiff_id.sub contDiff_const)
+  have hcy : HasCompactSupport (fun x ↦ H (x - y)) := hc.comp_homeomorph (Homeomorph.subRight y)
+  have hzero (z : interiorZeros(τ, 1 / 2)) (hz : z ∉ Set.range e) : zeroTerm(φ, z) = 0 := by
+    rw [characterNormTest_mellin _ hsy hcy ψ φ hφ]
+    have hoff : ¬ ∀ u : C₁, (z.val.1.val * ψ) u.val = 1 := by
+      intro hone
+      have hχ : z.val.1.val = ψ⁻¹ := grh_character_eq τ hτ z.val.1.property hinv (by simpa using hone)
+      have hm := z.property.1
+      rw [hχ] at hm
+      exact hz ⟨⟨z.val.2, hm⟩, Subtype.ext (Prod.ext (Subtype.ext hχ.symm) rfl)⟩
+    rw [ite_eq_right hoff, zero_mul, mul_zero]
+  have h := (he.hasSum_iff (f := fun z : interiorZeros(τ, 1 / 2) ↦ zeroTerm(φ, z)) hzero).mpr hall
+  apply traceFormula_of_exteriorZeros_hasSum_congr h
+  intro z
+  change ((ord(ψ⁻¹, z.val) : ℤ) : ℂ) * M(φ, twist(ψ⁻¹, z.val - 1 / 2)) = _
+  rw [characterNormTest_mellin _ hsy hcy ψ φ hφ]
+  have hone : (ψ⁻¹ : PontryaginDual C𝔽) * ψ = 1 := inv_mul_cancel _
+  rw [ite_eq_left (fun u ↦ by rw [hone]; rfl)]
+  beta_reduce
+  rw [grh_shift_integral H hs.continuous _ (fun t ↦ by rw [hone]; rfl) y]
+  ring
+
+open scoped ContDiff in
+private theorem translatedLocalTerms_coeff_summable (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (hτ : RightInverse τ (ideleClassNorm F)) (ψ : PontryaginDual C𝔽) (hψ : ∀ t, ψ (τ t) = 1)
+    (H : ℝ → ℂ) (hs : ContDiff ℝ (∞) H) (hc : HasCompactSupport H) :
+    Summable (fun z : characterZeros(ψ⁻¹) ↦ ‖translatedCoeff(ψ⁻¹, H, z)‖) := by
+  obtain ⟨f, hf⟩ := exists_characterNormTest (F := F) ψ H hs hc
+  obtain ⟨a, b, ha, hb, -, -⟩ := traceFormula_of_half_le τ hτ f (le_refl (1 / 2 : ℝ))
+  have h := translatedLocalTerms_hasSum τ hτ ψ hψ H hs hc 0 f (by simpa using hf) a b ha hb
+  simp only [Complex.ofReal_zero, mul_zero, Complex.exp_zero, mul_one] at h
+  exact h.summable.norm
+
+private theorem translatedLocalTerms_exp_bound (z : ℂ) (y A : ℝ) (hA : |z.re - 1 / 2| ≤ A) :
+    ‖Complex.exp ((z - 1 / 2) * y)‖ ≤ Real.exp (A * |y|) := by
+  rw [Complex.norm_exp]
+  apply Real.exp_le_exp.mpr
+  have he : ((z - 1 / 2) * y).re = (z.re - 1 / 2) * y := by simp [Complex.mul_re]
+  rw [he]
+  exact (le_abs_self _).trans ((abs_mul _ _).le.trans (mul_le_mul_of_nonneg_right hA (abs_nonneg y)))
+
+open scoped ContDiff in
+/-- If the zeros of the selected character lie in a closed vertical strip of half-width
+`A`, the signed local side grows at most as `exp (A * |y|)` on translates by `y`.
+The constant is the sum of the absolute zero coefficients of the untranslated test. -/
+theorem translatedLocalTerms_norm_le_of_zero_strip (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (hτ : RightInverse τ (ideleClassNorm F)) (ψ : PontryaginDual C𝔽) (hψ : ∀ t, ψ (τ t) = 1)
+    (H : ℝ → ℂ) (hs : ContDiff ℝ (∞) H) (hc : HasCompactSupport H)
+    (A : ℝ) (hA : ∀ z : characterZeros(ψ⁻¹), |z.val.re - 1 / 2| ≤ A)
+    (y : ℝ) (φ : BruhatCompactSupport C𝔽)
+    (hφ : ∀ x, φ.val x = (ψ x : ℂ) * H (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ) - y))
+    (a : archTest) (b : finiteTest) (ha : archRestricts(φ, a)) (hb : finiteRestricts(φ, b)) :
+    ‖localTerms(φ, a, b)‖ ≤
+      (∑' z : characterZeros(ψ⁻¹), ‖translatedCoeff(ψ⁻¹, H, z)‖) * Real.exp (A * |y|) := by
+  have hbase := translatedLocalTerms_coeff_summable τ hτ ψ hψ H hs hc
+  have hnow := translatedLocalTerms_hasSum τ hτ ψ hψ H hs hc y φ hφ a b ha hb
+  rw [← hnow.tsum_eq, ← tsum_mul_right]
+  refine (norm_tsum_le_tsum_norm hnow.summable.norm).trans (hnow.summable.norm.tsum_le_tsum
+    (fun z ↦ ?_) (hbase.mul_right _))
+  rw [norm_mul]
+  apply mul_le_mul_of_nonneg_left _ (norm_nonneg _)
+  exact translatedLocalTerms_exp_bound _ _ _ (hA z)
+
+open scoped ContDiff in
+/-- Finite exponential sums approximate the signed local terms uniformly in every real
+translation with error weighted by the spectral half-width. When all selected zeros lie
+on the critical line (`A = 0`), these are uniform trigonometric approximations on ℝ. -/
+theorem translatedLocalTerms_finite_approx (τ : ℝ≥0ˣ →ₜ* C𝔽)
+    (hτ : RightInverse τ (ideleClassNorm F)) (ψ : PontryaginDual C𝔽) (hψ : ∀ t, ψ (τ t) = 1)
+    (H : ℝ → ℂ) (hs : ContDiff ℝ (∞) H) (hc : HasCompactSupport H)
+    (A : ℝ) (hA : ∀ z : characterZeros(ψ⁻¹), |z.val.re - 1 / 2| ≤ A)
+    {ε : ℝ} (hε : 0 < ε) :
+    ∃ E : Finset characterZeros(ψ⁻¹), ∀ (y : ℝ) (φ : BruhatCompactSupport C𝔽),
+      (∀ x, φ.val x = (ψ x : ℂ) * H (Real.log ((ideleClassNorm F x : ℝ≥0) : ℝ) - y)) →
+      ∀ (a : archTest) (b : finiteTest), archRestricts(φ, a) → finiteRestricts(φ, b) →
+        ‖localTerms(φ, a, b) - ∑ z ∈ E,
+          translatedCoeff(ψ⁻¹, H, z) * Complex.exp (((z : ℂ) - 1 / 2) * y)‖ <
+          ε * Real.exp (A * |y|) := by
+  classical
+  let c := fun z : characterZeros(ψ⁻¹) ↦ translatedCoeff(ψ⁻¹, H, z)
+  have hc₀ := translatedLocalTerms_coeff_summable τ hτ ψ hψ H hs hc
+  obtain ⟨E, hE⟩ := ((tendsto_order.1 (tendsto_tsum_compl_atTop_zero
+    (fun z : characterZeros(ψ⁻¹) ↦ ‖c z‖))).2 ε hε).exists
+  refine ⟨E, fun y φ hφ a b ha hb ↦ ?_⟩
+  have hsum := translatedLocalTerms_hasSum τ hτ ψ hψ H hs hc y φ hφ a b ha hb
+  let term := fun z : characterZeros(ψ⁻¹) ↦ c z * Complex.exp (((z : ℂ) - 1 / 2) * y)
+  change ‖localTerms(φ, a, b) - ∑ z ∈ E, term z‖ < _
+  change HasSum term _ at hsum
+  rw [← hsum.tsum_eq, ← hsum.summable.sum_add_tsum_subtype_compl E, add_sub_cancel_left]
+  apply lt_of_le_of_lt _ (mul_lt_mul_of_pos_right hE (Real.exp_pos _))
+  rw [← tsum_mul_right]
+  refine (norm_tsum_le_tsum_norm (hsum.summable.norm.subtype _)).trans
+    ((hsum.summable.norm.subtype _).tsum_le_tsum (fun z ↦ ?_) ((hc₀.subtype _).mul_right _))
+  change ‖c z.val * _‖ ≤ _
+  rw [norm_mul]
+  exact mul_le_mul_of_nonneg_left (translatedLocalTerms_exp_bound _ _ _ (hA z.val)) (norm_nonneg _)
+
 /-- At a width whose edges carry no zeros of the characters trivial on a norm section, the strip
 trace is the sum over the zeros in the open strip (`spectralStripConvolution_trace`). -/
 private theorem exteriorZeros_hasSum_stripTrace (τ : ℝ≥0ˣ →ₜ* C𝔽)
