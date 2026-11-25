@@ -140,3 +140,30 @@ an absolutely and uniformly convergent trigonometric series supported on the fre
 Define \(F_m(u)=|\sum_{j=0}^m e^{iju}|^2/(m+1)\). For any two phases, \(P(y)=F_m(y-\phi_1)F_m(\sqrt2 y-\phi_2)\ge0\) has mean one, by irrationality of \(\sqrt2\). The coefficients at each of the two first harmonics have modulus \(m/(m+1)\). If the finite frequency set \(\{j+k\sqrt2: |j|,|k|\le m\}\) misses the shifted zero frequencies, then all true-zero terms have zero mean against \(P\). Absolute uniform convergence permits taking the mean termwise. Choose the phases to make both square terms contribute with the same requested sign so the weighted mean is exactly \(-D_\alpha\pm m V_\alpha/(m+1)\). Positivity and unit mean put each weighted mean between the ordinary liminf and limsup. The \(o(1)\) remainder is harmless because \(P\) is bounded for fixed \(m\). The unconditional square-cell comparison then yields the asserted prefix bounds.
 
 An analytic choice \(m=5\) already gives the same inequalities with \(5V_\alpha/6\), since \(5(1+\sqrt2)+\sqrt2<14\). For \(m=128\), possible collisions require a positive zeta ordinate below 310.434 to have the form \(j+k\sqrt2\) with arbitrary integer \(j\) and \(|k|\le129\). Conjugation handles negative ordinates. The verifier encloses all 144 positive ordinates to that height by index, including the following ordinate above 311 as the completeness check. It proves that in every test the distance to the nearest integer exceeds \(0.00002006\). The resulting two-sided constants include the printed margins. [FLINT's indexed zero enclosure](https://flintlib.org/doc/acb_dirichlet/zeta-zeros.html) · [Verifier](prefix-excursions.py) · [128-bit receipt](prefix-excursions-128.txt) · [192-bit receipt](prefix-excursions-192.txt).
+
+## Why the finite square-prefix majorant changes sign at arbitrarily large cutoffs
+
+For the actual \(E,I,B_{1/2}\) used above and integer \(K\), put \(X=K^2\), \(D=1+\sqrt2\), and
+\[
+ U(K)=B_{1/2}(X)+E(X)+\frac12 I(X)+\frac{8+4D}{8}(K-1).
+\]
+The million-cutoff proof uses the exact upper bound \(A(K)\le U(K)\), with an extra \(KD\log X\) permitted for the discrete compensator. This particular majorant changes sign unconditionally. More precisely,
+\[
+ \limsup_K U(K)/K^2\ge c,\qquad
+ \liminf_K U(K)/K^2\le-c,\qquad
+ c=\frac{128}{129}\Bigl(\frac{1}{\sqrt{10}}+\sqrt{\frac{2}{27}}\Bigr)>0.58383.
+\]
+The extra term for the discrete compensator vanishes after normalization. Thus increasing the precision of the endpoint measurements in this particular majorant cannot make it certify eventual negativity.
+
+Indeed \(E(X)=o(X)\) by the prime number theorem and \(I(X)=O(X)\). If RH fails, the signed Landau argument above and the square-cell comparison give infinite positive limsup and infinite negative liminf for \(B_{1/2}(K^2)/K^2\). If all zeros are critical, put \(y=\log X\). Half the density divided by \(X\) is
+\[
+ 1-\tfrac12\Re\sum_{t=1,\sqrt2}\frac{e^{ity}}{1+it}+O(1/X).
+\]
+Its constant cancels the \(-1\) from the integrated prime squares. Its coefficients combine with the two rotating square terms of \(B_{1/2}(X)/X\) to give
+\[
+ \frac{1}{2(1+2it)(1+it)}-\frac{1}{2(1+it)}
+     =\frac{-it}{(1+2it)(1+it)}.
+\]
+The remaining nontrivial-zero series has precisely the same absolutely summable coefficients and frequencies as before. The positive product of Fejér kernels of degree 128 therefore extracts either sign of \(c\), using the same certified finite separation. The normalized expression on real \(X\) is a uniformly almost periodic function of \(\log X\) plus \(o(1)\). Indeed the shifted-zero series is uniformly absolutely convergent, and both extra principal terms are individual frequencies. Consecutive values of \(\log K^2\) have gaps tending to zero. Uniform continuity therefore transfers both limiting bounds to these actual square cutoffs. The simpler degree-five version requires only the first zero above 14 and gives the factor \(5/6\) in place of \(128/129\).
+
+This is a limitation of the use of the absolute bound on the prime sawtooth inside the finite certificate. The arithmetic rounding term itself is \(o(K^2)\) by prime discrepancy, as proved in the square-prefix comparison above. This calculation leaves the eventual sign of the signed Riesz mean open. [Frequency verifier](prefix-excursions.py) · [192-bit frequency receipt](prefix-excursions-192.txt).
