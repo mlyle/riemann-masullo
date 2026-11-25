@@ -20,7 +20,7 @@ Use the bilateral transform \(\widehat f(z)=\int_{\mathbb R}f(v)e^{zv}dv\), and 
  \Phi(u)=\sum_{n\ge1}(4\pi^2n^4e^{9u/2}-6\pi n^2e^{5u/2})
                 e^{-\pi n^2e^{2u}} .
 \]
-The formula on the whole complex plane follows by analytic continuation from its Fourier form and the double-exponential decay of the even kernel. [D. Romik, equations (1.8), (1.11)](https://www.math.ucdavis.edu/~romik/data/uploads/papers/riemannxi.pdf).
+The formula on the whole complex plane follows by analytic continuation from its Fourier form and the double-exponential decay of the even kernel. [D. Romik, equations (1.8), (1.11)](https://arxiv.org/pdf/1902.06330).
 
 Set \(r(u)=\exp(9|u|/2-\pi e^{2|u|})\). Uniformly in \(u\),
 \[
