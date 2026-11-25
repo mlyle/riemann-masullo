@@ -1,0 +1,3 @@
+python-flint 0.9.0 precision 192 last K 512 sieved through 262144 prime count 23000
+upper bound for maximum A_integral(K)/K^2, 20<=K<=last [-1.15907264747856724271676542178516281591895176767386934081 +/- 3.38e-57]
+upper bound for maximum A_discrete(K)/K^2, 20<=K<=last [-1.16799132190306615594497326252652786064216889145237434459 +/- 4.71e-57]
