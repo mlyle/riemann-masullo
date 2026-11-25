@@ -49,3 +49,14 @@ The last term has finite variation. Any separately chosen overall normalization 
 Even if RH holds, the total variation of $\nu_s$ is infinite at infinity. The atomic prime measure and the continuous pole measure are mutually singular, and $\int_0^\infty e^{(1-s)x}dx=\infty$. More generally, if $\nu_s$ extended by zero to the negative half-line were a tempered distribution, its one-sided Laplace transform would be holomorphic on $\Re w>0$, which again excludes zeros of $\zeta(s+w)$ in that half-plane by the formula for $F$. Thus assigning continuous cosine moments through meromorphic continuation alone does not justify the growing-test limits in the Fourier barycenter construction. The obstruction above already applies to one predetermined nonnegative cosine compensator.
 
 The calculation leaves zeros exactly on $\Re z=s$ open. Extending the required subexponential bound to every $b>0$ tending to zero would exclude all zeros to the right of the critical line. All local convex cancellations proved for finite weighted variation remain available independently of this missing estimate. [Fourier barycenter and its hypotheses](fourier-barycenter-probes.md)
+
+## The exact exponential growth rate
+
+Let $\Theta=\sup_\rho\Re\rho$ over all nontrivial zeta zeros. Then
+
+$$
+ \limsup_{L\to\infty}\frac{\log(1+|M(L)|)}{L}
+   =\max(0,\Theta-s).
+$$
+
+For the lower bound, if the limsup is $c$, the holomorphic transform and the residue argument above apply throughout $\Re z>s+c$ by integration by parts, so $\Theta\le s+c$. For the upper bound, Theorem 1.9 of *The sequence of prime gaps is graphic* gives the truncated explicit formula at height $2X$ for all large real $X$ with error $O(\log X\log\log X)$. The standard order count $N(T)=O(T\log T)$, with multiplicity, gives $\sum_{|\Im\rho|<2X}|\rho|^{-1}=O(\log^2 X)$ by partial summation. Hence $\psi(X)-X=O(X^\Theta\log^2 X)$. Subtracting higher prime powers costs $O(\sqrt X\log^2 X)$ by the elementary sum over their exponents, and $\Theta\ge1/2$ by functional equation and existence of nontrivial zeros. Thus $E(x)=\vartheta(e^x)-e^x=O((1+x)^2e^{\Theta x})$. The function $B$ and its derivative are bounded. One integration by parts against $dE$ now gives $M(L)=O((1+L)^3e^{\max(0,\Theta-s)L})$, proving the other inequality. In particular the cubic bound $M(L)=O((1+L)^3)$ is equivalent to absence of zeros strictly to the right of $s$. [Primary truncated formula, Theorem 1.9](https://link.springer.com/article/10.1007/s00208-023-02574-1)
