@@ -2,6 +2,7 @@ module
 
 public import RiemannMasullo.Ch12_TraceGeometric.Sec5_PositiveEdgeProbes
 import all RiemannMasullo.Ch12_TraceGeometric.Sec5
+import all RiemannMasullo.Ch12_TraceGeometric.Sec5_Isolated
 import Mathlib.Analysis.SpecialFunctions.Trigonometric.Deriv
 import Mathlib.MeasureTheory.Integral.IntegralEqImproper
 
@@ -50,16 +51,16 @@ private theorem cosine_second (f : ℝ → ℝ) (hf : ContDiff ℝ ∞ f) (fc : 
   ring
 
 private theorem cosine_gap_filter (K : ℝ → ℝ) (hs : ContDiff ℝ ∞ K) (hc : HasCompactSupport K)
-    (h0 : 0 < K 0) (hpos : ∀ t, 0 < cosine K t) :
-    ∃ G : ℝ → ℝ, ContDiff ℝ ∞ G ∧ HasCompactSupport G ∧ G 0 = 0 ∧
+    (h0 : 0 < K 0) (hpos : ∀ t, 0 < cosine K t) (v : ℝ) :
+    ∃ G : ℝ → ℝ, ContDiff ℝ ∞ G ∧ HasCompactSupport G ∧ G 0 = v ∧
       ∃ R : ℝ, 0 < R ∧ ∀ t : ℝ, R < |t| → 0 < cosine G t := by
-  let c := deriv (deriv K) 0 / K 0
+  let c := (deriv (deriv K) 0 + v) / K 0
   let G := fun x ↦ c * K x - deriv (deriv K) x
   have hss := (contDiff_infty_iff_deriv.mp (contDiff_infty_iff_deriv.mp hs).2).2
   have hGs : ContDiff ℝ ∞ G := (contDiff_const.mul hs).sub hss
   refine ⟨G, hGs, (hc.mul_left (f := fun _ ↦ c)).sub hc.deriv.deriv, ?_, |c|+1, by positivity, ?_⟩
   · dsimp [G, c]
-    rw [div_mul_cancel₀ _ h0.ne', sub_self]
+    rw [div_mul_cancel₀ _ h0.ne', add_sub_cancel_left]
   intro t ht
   have hq : Continuous fun x : ℝ ↦ Real.cos (t*x) := by fun_prop
   have h1 : Integrable (fun x ↦ (c * K x) * Real.cos (t*x)) := (((continuous_const.mul hs.continuous).mul hq).integrable_of_hasCompactSupport
@@ -106,9 +107,9 @@ private theorem cosine_modulate (G : ℝ → ℝ) (hc : Continuous G) (hs : HasC
   ring
 
 private theorem cosine_positive_on_gap (G : ℝ → ℝ) (hGs : ContDiff ℝ ∞ G) (hGc : HasCompactSupport G)
-    (hG0 : G 0 = 0) {R T d : ℝ} (hR : 0 < R)
+    {v : ℝ} (hG0 : G 0 = v) {R T d : ℝ} (hR : 0 < R)
     (hg : ∀ t : ℝ, R < |t| → 0 < cosine G t) (hd : 0 < d) :
-    ∃ P : ℝ → ℝ, ContDiff ℝ ∞ P ∧ HasCompactSupport P ∧ P 0 = 0 ∧
+    ∃ P : ℝ → ℝ, ContDiff ℝ ∞ P ∧ HasCompactSupport P ∧ P 0 = v ∧
       ∀ t : ℝ, d ≤ |t - T| → d ≤ |t + T| → 0 < cosine P t := by
   let L := (R+1)/d
   have hL : 0 < L := div_pos (by positivity) hd
@@ -247,6 +248,51 @@ private theorem eventual_prescribed_gaps (D : Function.locallyFinsuppWithin (Set
   exact ⟨hsep.trans (by simpa only [abs_of_nonneg hT] using abs_abs_sub_abs_le_abs_sub z.im (1+v)),
     hsep.trans (by simpa only [abs_neg, abs_of_nonneg hT, sub_neg_eq_add] using abs_abs_sub_abs_le_abs_sub z.im (-(1+v)))⟩
 
+/-- A fixed strictly positive function of the ordinate gives a lower bound for the Mellin
+response of all sufficiently late admissible probes at every site, at both edges. This
+bound is independent of the divisor, width and index. -/
+theorem exists_universal_admissible_dominating_edge_profiles :
+    ∃ (H : ℕ → ℝ → ℝ → ℝ) (q : ℝ → ℝ), (∀ t, 0 < q t) ∧
+      (∀ n b, ContDiff ℝ ∞ (H n b) ∧ HasCompactSupport (H n b) ∧ H n b 0 = 0 ∧
+        ∀ x : ℝ, H n b (-x) = H n b x) ∧
+      ∀ D : Function.locallyFinsuppWithin (Set.univ : Set ℂ) ℤ, ∀ᶠ n in atTop,
+        ∀ b : ℝ, ∀ z : ℂ, D z ≠ 0 → z.re ∈ Icc 0 1 →
+          q z.im ≤ (bilateralLaplace (fun x ↦ (H n b x : ℂ))
+            ((b : ℂ) + (z.im : ℂ) * Complex.I)).re ∧
+          q z.im ≤ (bilateralLaplace (fun x ↦ (H n b x : ℂ))
+            ((-(b : ℝ) : ℂ) + (z.im : ℂ) * Complex.I)).re := by
+  obtain ⟨K, hs, hc, -, h0, hp⟩ := exists_compact_pos_cosineTransform
+  obtain ⟨G, hGs, hGc, hG0, R, hR, hGr⟩ := cosine_gap_filter K hs hc h0 hp (-(K 0))
+  let u := fun n : ℕ ↦ 1/((n:ℝ)+1)
+  have hu (n : ℕ) : 0 < u n / 2 := by dsimp [u]; positivity
+  choose U hUs hUc hU0 hU using fun n : ℕ ↦
+    cosine_positive_on_gap G hGs hGc hG0 (T := 1+u n) hR hGr (hu n)
+  let P := fun (n : ℕ) (x : ℝ) ↦ K x + U n x
+  have hPs (n : ℕ) : ContDiff ℝ ∞ (P n) := hs.add (hUs n)
+  have hPc (n : ℕ) : HasCompactSupport (P n) := hc.add (hUc n)
+  have hP0 (n : ℕ) : P n 0 = 0 := by simp [P,hU0]
+  refine ⟨fun n b ↦ balanced (P n) b, cosine K, hp, fun n b ↦
+    balanced_properties _ (hPs n) (hPc n) (hP0 n) b, ?_⟩
+  intro D
+  filter_upwards [eventual_prescribed_gaps D] with n hn
+  intro b z hz hr
+  obtain ⟨hm, hp⟩ := hn z hz hr
+  have hq : Continuous fun x : ℝ ↦ Real.cos (z.im*x) := by fun_prop
+  have hsum : cosine (P n) z.im = cosine K z.im + cosine (U n) z.im := by
+    unfold cosine P
+    simp_rw [add_mul]
+    exact integral_add
+      ((hs.continuous.mul hq).integrable_of_hasCompactSupport hc.mul_right)
+      (((hUs n).continuous.mul hq).integrable_of_hasCompactSupport (hUc n).mul_right)
+  have hle : cosine K z.im ≤ cosine (P n) z.im := by
+    rw [hsum]
+    exact le_add_of_nonneg_right (hU n z.im hm hp).le
+  obtain ⟨hHs, hHc, -, -⟩ := balanced_properties _ (hPs n) (hPc n) (hP0 n) b
+  rw [← Complex.ofReal_neg, laplace_realEdge _ hHs.continuous hHc b z.im,
+    laplace_realEdge _ hHs.continuous hHc (-b) z.im,
+    realEdge_balanced _ (hPs n).continuous (hPc n), realEdge_balanced_neg _ (hPs n).continuous (hPc n)]
+  exact ⟨hle,hle⟩
+
 /-- One sequence of compact real even profiles works for every locally finite divisor. For each
 divisor, all sufficiently late profiles are positive at both edges, at every ordinate of its
 support in the critical strip, simultaneously for every width. Each profile vanishes at zero. -/
@@ -260,24 +306,12 @@ theorem exists_universal_admissible_positive_edge_profiles :
             ((b : ℂ) + (z.im : ℂ) * Complex.I)).re ∧
           0 < (bilateralLaplace (fun x ↦ (H n b x : ℂ))
             ((-(b : ℝ) : ℂ) + (z.im : ℂ) * Complex.I)).re := by
-  obtain ⟨K, hs, hc, -, h0, hp⟩ := RiemannMasullo.exists_compact_pos_cosineTransform
-  obtain ⟨G, hGs, hGc, hG0, R, hR, hGr⟩ := cosine_gap_filter K hs hc h0 hp
-  let u := fun n : ℕ ↦ 1/((n:ℝ)+1)
-  have hu (n : ℕ) : 0 < u n / 2 := by dsimp [u]; positivity
-  choose P hPs hPc hP0 hP using fun n : ℕ ↦
-    cosine_positive_on_gap G hGs hGc hG0 (T := 1+u n) hR hGr (hu n)
-  refine ⟨fun n b ↦ balanced (P n) b, fun n b ↦ balanced_properties _ (hPs n) (hPc n) (hP0 n) b, ?_⟩
-  intro D
-  filter_upwards [eventual_prescribed_gaps D] with n hn
+  obtain ⟨H, q, hq, hH, hD⟩ := exists_universal_admissible_dominating_edge_profiles
+  refine ⟨H, hH, fun D ↦ ?_⟩
+  filter_upwards [hD D] with n hn
   intro b z hz hr
-  obtain ⟨hm, hp⟩ := hn z hz hr
-  have h := hP n z.im hm hp
-  obtain ⟨hHs, hHc, -, -⟩ := balanced_properties _ (hPs n) (hPc n) (hP0 n) b
-  rw [← Complex.ofReal_neg, laplace_realEdge _ hHs.continuous hHc b z.im,
-    laplace_realEdge _ hHs.continuous hHc (-b) z.im,
-    realEdge_balanced _ (hPs n).continuous (hPc n), realEdge_balanced_neg _ (hPs n).continuous (hPc n)]
-  exact ⟨h,h⟩
-
+  obtain ⟨hp, hm⟩ := hn b z hz hr
+  exact ⟨(hq _).trans_le hp, (hq _).trans_le hm⟩
 
 section NumberField
 
@@ -302,19 +336,22 @@ local notation "ord(" χ "," z ")" => MeromorphicOn.divisor (continuedCompletedH
 local notation "Sites(" χ ")" => {z : ℂ // 0 < ord(χ,z)}
 local notation "Off(" z ")" => ((z).val.re - 1/2)
 
-/-- At each character, all sufficiently late compact Bruhat tests vanish on the norm-one
-classes and have strictly positive real Mellin values at every completed zero on either
-edge. The threshold for the index works for all the widths simultaneously. -/
-theorem exists_eventually_admissible_hecke_edge_probes :
-    ∃ probe : ℕ → PontryaginDual C → ℝ → BruhatCompactSupport C,
+/-- Actual compact Bruhat probes vanish on norm-one classes and, eventually at every edge,
+dominate a fixed strictly positive function of the ordinate in the matching Hecke chart. -/
+theorem exists_eventually_dominating_hecke_edge_probes :
+    ∃ (probe : ℕ → PontryaginDual C → ℝ → BruhatCompactSupport C) (q : ℝ → ℝ),
+      (∀ t : ℝ, 0 < q t) ∧
       (∀ n χ b, ∀ g : C₁, (probe n χ b).val g = 0) ∧
       ∀ χ : PontryaginDual C, ∀ᶠ n : ℕ in atTop, ∀ b : ℝ, b < 1/2 →
-        ∀ z : Sites(χ), |Off(z)| = b → 0 < (M(probe n χ b, χ, z.val - 1/2)).re := by
-  obtain ⟨H, hs, hp⟩ := exists_universal_admissible_positive_edge_profiles
+        ∀ z : Sites(χ), |Off(z)| = b → q z.val.im ≤ (M(probe n χ b, χ, z.val - 1/2)).re := by
+  obtain ⟨H, q, hq, hs, hp⟩ := exists_universal_admissible_dominating_edge_profiles
   choose probe hprobe hM using fun (n : ℕ) (χ : PontryaginDual C) (b : ℝ) ↦
     exists_characterNormTest_laplace χ (fun x ↦ (H n b x : ℂ))
       (Complex.ofRealCLM.contDiff.comp (hs n b).1) ((hs n b).2.1.comp_left Complex.ofReal_zero)
-  refine ⟨probe, ?_, ?_⟩
+  let V := ((normOneIdeleClassTamagawaMeasure F) univ).toReal
+  have hV : 0 < V := lt_of_le_of_ne ENNReal.toReal_nonneg
+    (Complex.ofReal_ne_zero.mp (grh_classVolume_ne_zero (F := F))).symm
+  refine ⟨probe, fun t ↦ V*q t, fun t ↦ mul_pos hV (hq t), ?_, ?_⟩
   · intro n χ b g
     rw [hprobe, MonoidHom.mem_ker.mp g.property, Units.val_one, NNReal.coe_one,
       Real.log_one, (hs n b).2.2.1, Complex.ofReal_zero, mul_zero]
@@ -326,15 +363,26 @@ theorem exists_eventually_admissible_hecke_edge_probes :
   have hr : z.val.re ∈ Icc 0 1 := ⟨by linarith [hbounds.1], by linarith [hbounds.2]⟩
   have hpos := hn b z.val z.property.ne' hr
   rw [hM, Complex.re_ofReal_mul]
-  apply mul_pos
-  · exact lt_of_le_of_ne ENNReal.toReal_nonneg
-      (Complex.ofReal_ne_zero.mp (grh_classVolume_ne_zero (F := F))).symm
+  apply mul_le_mul_of_nonneg_left _ hV.le
   have heq : z.val - 1/2 = ((Off(z) : ℝ) : ℂ) + (z.val.im : ℂ)*Complex.I := by
     apply Complex.ext <;> norm_num [Complex.sub_re, Complex.sub_im]
   rw [heq]
   obtain he | he := abs_eq_abs.mp (hz.trans (abs_of_nonneg hb0).symm)
   · rw [he]; exact hpos.1
   · rw [he, Complex.ofReal_neg]; exact hpos.2
+
+/-- At each character, all sufficiently late compact Bruhat tests vanish on the norm-one
+classes and have strictly positive real Mellin values at every completed zero on either
+edge. The threshold for the index works for all the widths simultaneously. -/
+theorem exists_eventually_admissible_hecke_edge_probes :
+    ∃ probe : ℕ → PontryaginDual C → ℝ → BruhatCompactSupport C,
+      (∀ n χ b, ∀ g : C₁, (probe n χ b).val g = 0) ∧
+      ∀ χ : PontryaginDual C, ∀ᶠ n : ℕ in atTop, ∀ b : ℝ, b < 1/2 →
+        ∀ z : Sites(χ), |Off(z)| = b → 0 < (M(probe n χ b, χ, z.val - 1/2)).re := by
+  obtain ⟨probe, q, hq, hvan, hpos⟩ := exists_eventually_dominating_hecke_edge_probes (F := F)
+  refine ⟨probe, hvan, fun χ ↦ ?_⟩
+  filter_upwards [hpos χ] with n hn
+  exact fun b hb z hz ↦ (hq _).trans_le (hn b hb z hz)
 
 namespace Isolated
 
@@ -373,6 +421,84 @@ theorem exists_admissible_probe_exteriorZeros_of_frequentWidthComparison (τ : �
   exact traceFormula_exteriorZeros_of_signedWidthComparison τ hτ hα hs
     (fun χ b ↦ probe (k χ b) χ.val b) (fun χ b ha hb ↦ (hk χ b ha hb).1)
     (fun χ b ha hb ↦ (hk χ b ha hb).2)
+
+/-- The jump from below at a fixed width bounds each nonnegative boundary contribution
+with its actual Sobolev multiplicity. -/
+private theorem widthJump_single_lower {ι : Type*} (x v : ι → ℝ) (m : ι → ℕ)
+    (h : Summable (fun i ↦ (m i : ℝ) * |v i|)) {b s : ℝ} (hb : 0 < b)
+    (hv : ∀ i, |x i| = b → 0 ≤ v i) (i : ι) (hi : |x i| = b) :
+    (spectralBoundaryMultiplicity s (m i) : ℝ) * v i ≤
+      -(∑' j, if |x j| < b then (m j : ℝ) * v j else 0) -
+        (-(∑' j, (spectralStripMultiplicity b s (x j) (m j) : ℝ) * v j)) := by
+  let A (j : ι) : ℝ := if |x j| < b then (m j : ℝ) * v j else 0
+  let E (j : ι) : ℝ := if |x j| = b then (spectralBoundaryMultiplicity s (m j) : ℝ) * v j else 0
+  have hA : Summable A := widthJump_interior_summable x v m h b
+  have hE : Summable E := widthJump_boundary_summable x v m h b s
+  have hsplit (j : ι) : (spectralStripMultiplicity b s (x j) (m j) : ℝ) * v j = A j + E j := by
+    rcases lt_trichotomy |x j| b with hj | hj | hj
+    · simp [A,E,hj,hj.ne,spectralStripMultiplicity_interior (abs_lt.mp hj)]
+    · have hside : x j = -b ∨ x j = b :=
+        (abs_eq_abs.mp (hj.trans (abs_of_pos hb).symm)).symm
+      simp [A,E,hj,spectralStripMultiplicity_boundary hb.le hside]
+    · simp [A,E,hj.not_gt,hj.ne',widthJump_outside hb.le hj]
+  have hnon (j : ι) : 0 ≤ E j := by
+    by_cases hj : |x j| = b
+    · simpa [E,hj] using mul_nonneg (Nat.cast_nonneg (spectralBoundaryMultiplicity s (m j))) (hv j hj)
+    · simp [E,hj]
+  change _ ≤ -(∑' j, A j) - _
+  simp_rw [hsplit]
+  rw [hA.tsum_add hE]
+  calc
+    _ = E i := by simp [E,hi]
+    _ ≤ ∑' j, E j := hE.le_tsum i (fun j _ ↦ hnon j)
+    _ = _ := by ring
+
+/-- Paper: Theorem 12.5.1.1, pp. 519–520. For every field the norm-one-vanishing probes
+can tolerate an arbitrarily small additive error in the signed width comparison. The
+index witnessing a given error may depend on the character and width. An occupied edge
+would contribute a fixed positive lower bound along every sufficiently late index. -/
+theorem exists_admissible_probe_exteriorZeros_of_approximateWidthComparison (τ : ℝ≥0ˣ →ₜ* C)
+    (hτ : RightInverse τ (ideleClassNorm F)) {α s : ℝ} (hα : 0 < α) (hs : 1 < s) :
+    ∃ (probe : ℕ → Chars(τ) → ℝ → BruhatCompactSupport C) (q : ℝ → ℝ),
+      (∀ t, 0 < q t) ∧ (∀ n χ b, ∀ g : C₁, (probe n χ b).val g = 0) ∧
+      (∀ χ : Chars(τ), ∀ᶠ n : ℕ in atTop, ∀ b : ℝ, b < 1/2 → ∀ z : Sites(χ.val),
+        |Off(z)| = b → q z.val.im ≤ (M(probe n χ b, χ.val, z.val - 1/2)).re) ∧
+      ((∀ (χ : Chars(τ)) (b : ℝ), α ≤ b → b < 1/2 → ∀ ε : ℝ, 0 < ε →
+          ∃ᶠ n : ℕ in atTop,
+            -(∑' z : Sites(χ.val), if |Off(z)| < b then (m(χ.val,z) : ℝ) *
+              (M(probe n χ b, χ.val, z.val - 1/2)).re else 0) ≤
+            -(∑' z : Sites(χ.val), (spectralStripMultiplicity b s Off(z) m(χ.val,z) : ℝ) *
+              (M(probe n χ b, χ.val, z.val - 1/2)).re) + ε) →
+        ∀ φ : BruhatCompactSupport C, HasSum (fun p : Ext(τ, α) ↦
+          ((ord(p.val.1.val,p.val.2) : ℤ) : ℂ) * M(φ, p.val.1.val, p.val.2 - 1/2)) 0) := by
+  obtain ⟨probe, q, hq, hvan, hpos⟩ := exists_eventually_dominating_hecke_edge_probes (F := F)
+  refine ⟨fun n χ b ↦ probe n χ.val b, q, hq, fun n χ b ↦ hvan n χ.val b, fun χ ↦ hpos χ.val, ?_⟩
+  intro hcomp φ
+  let : IsEmpty Ext(τ, α) := ⟨fun p ↦ by
+    let χ := p.val.1
+    let z : Sites(χ.val) := ⟨p.val.2,p.property.1⟩
+    let b := |Off(z)|
+    have hsmall : b < 1/2 := widthJump_strict_critical τ hτ χ z
+    have hαb : α ≤ b := p.property.2
+    have hq0 := hq z.val.im
+    obtain ⟨n, hc, hn⟩ :=
+      ((hcomp χ b hαb hsmall (q z.val.im/2) (half_pos hq0)).and_eventually (hpos χ.val)).exists
+    let v (i : Sites(χ.val)) := (M(probe n χ.val b, χ.val, i.val - 1/2)).re
+    have hsite (i : Sites(χ.val)) (hi : |Off(i)| = b) : q i.val.im ≤ v i := hn b hsmall i hi
+    have hrow := widthJump_single_lower (fun i : Sites(χ.val) ↦ Off(i)) v (fun i ↦ m(χ.val,i))
+      (summable_heckeRealMoments_fullOrder τ hτ χ (probe n χ.val b)) (s := s) (hα.trans_le hαb)
+      (fun i hi ↦ (hq _).le.trans (hsite i hi)) z rfl
+    have horder : 0 < m(χ.val,z) := by have := z.property; omega
+    have hcap : 0 < spectralBoundaryMultiplicity s m(χ.val,z) :=
+      (lt_spectralBoundaryMultiplicity _ _ 0).mpr ⟨horder, by norm_num; linarith⟩
+    have hcap' : (1 : ℝ) ≤ (spectralBoundaryMultiplicity s m(χ.val,z) : ℝ) := by
+      exact_mod_cast hcap
+    have hlower : q z.val.im ≤ (spectralBoundaryMultiplicity s m(χ.val,z) : ℝ) * v z :=
+      (hsite z rfl).trans (le_mul_of_one_le_left (hq0.le.trans (hsite z rfl)) hcap')
+    change -(∑' i : Sites(χ.val), if |Off(i)| < b then (m(χ.val,i) : ℝ) * v i else 0) ≤
+      -(∑' i : Sites(χ.val), (spectralStripMultiplicity b s Off(i) m(χ.val,i) : ℝ) * v i) + _ at hc
+    linarith only [hlower.trans hrow,hc,hq0]⟩
+  exact hasSum_empty
 
 end Isolated
 
